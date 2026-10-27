@@ -1,6 +1,6 @@
 // Lets a worker log in with their phone number + password.
 // Looks up the email behind the phone on the server, so emails are never exposed to the browser.
-import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -25,8 +25,9 @@ Deno.serve(async (req) => {
     const { data: u } = await admin.auth.admin.getUserById(rows[0].user_id);
     if (!u?.user?.email) return wrong;
 
-    const anon = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { auth: { persistSession: false } });
-    const { data, error } = await anon.auth.signInWithPassword({ email: u.user.email, password });
+    // A separate client so the sign-in session doesn't replace the admin client's key.
+    const signer = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await signer.auth.signInWithPassword({ email: u.user.email, password });
     if (error || !data.session) return wrong;
     return json({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
   } catch {

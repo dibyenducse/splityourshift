@@ -1,7 +1,7 @@
 // Sends a worker their login invite (or a password-reset link if they already have a login).
 // Only the owner of the worker's business can call it.
 // Secrets (Supabase dashboard → Edge Functions → Secrets): SITE_URL, e.g. https://dibyenducse.github.io/splityourshift/
-import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -15,16 +15,15 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const url = Deno.env.get('SUPABASE_URL')!;
-    const anon = Deno.env.get('SUPABASE_ANON_KEY')!;
     const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const site = (Deno.env.get('SITE_URL') ?? '').replace(/\/?$/, '/');
 
-    const asUser = createClient(url, anon, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
-    const { data: { user } } = await asUser.auth.getUser();
+    const admin = createClient(url, service, { auth: { persistSession: false } });
+    const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const { data: { user } } = jwt ? await admin.auth.getUser(jwt) : { data: { user: null } };
     if (!user) return json({ error: 'Please log in again.' }, 401);
 
     const { employee_id } = await req.json();
-    const admin = createClient(url, service, { auth: { persistSession: false } });
     const { data: emp } = await admin
       .from('employees')
       .select('id, name, email, user_id, org_id, organizations!inner(owner_id, name)')
