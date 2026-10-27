@@ -170,7 +170,7 @@ export default function OwnerApp() {
             {staff.length ? staff.map((w) => { const n = countWeek(b, w.id, week); return (
               <div key={w.id} className={`wcard${picked === w.id ? ' picked' : ''}`} data-drag="" data-wid={w.id} style={{ ['--h' as string]: w.hue }}
                 onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) setPicked(picked === w.id ? null : w.id); }}>
-                <span className="dot" /><span className="wname">{w.name}</span>
+                <span className="dot" /><span className="wname">{w.name}</span>{b.entries.some((e) => e.employee_id === w.id && !e.clock_out) && <span className="lamp on" title={`${w.name} is on the clock`} aria-label="On the clock" />}
                 {w.status !== 'active' && <span className={`lstat ${w.status}`}>{w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'expired' : 'no login'}</span>}
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
                 <button className="mini" onClick={() => setSheet({ type: 'profile', id: w.id })} aria-label={`Open ${w.name}'s profile`}>Profile</button>
