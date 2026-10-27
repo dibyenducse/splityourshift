@@ -52,14 +52,15 @@ labor laws (Fair Workweek), manager role, worker-initiated swaps.
 
 ### F1. Owner sign-up & onboarding wizard
 1. Account: name, email, password (or magic link), business name.
-2. **"What do you run?" → Hotel/motel or Gas station.**
+2. **"What do you run?" → Hotel/motel, Gas station, or Shop/store.**
 3. **Shift setup with suggestions** based on the answer:
    - Hotel: **3 × 8h (7a–3p, 3p–11p, 11p–7a)** ← suggested; 2 × 12h (7a–7p, 7p–7a); Custom.
    - Gas station: **3 × 8h (6a–2p, 2p–10p, 10p–6a)** ← suggested; 3 × 10h overlapping
      (5a–3p, 1p–11p, 9p–7a); 2 × 12h (6a–6p, 6p–6a); Custom (not open 24h, etc.).
+   - Shop: **2 × 6h (9a–3p, 3p–9p)** ← suggested; 1 × 10h (10a–8p); 3 × 8h (24h store); Custom.
    - Every shift row is editable: start hour + length (2–16h); add/remove rows.
    - A **24-hour coverage bar** shows hours with nobody (closed/gap) and hours with 2+ people.
-4. Add workers: one name per line (+ optional phone), default max shifts/week.
+4. Add workers: one row per person with name, email or phone, **their own** max shifts/week and hourly rate.
 5. Lands on the week grid for the current week.
 - Owner can add more locations later with the same wizard (steps 2–4); a worker can
   belong to several locations.
@@ -157,6 +158,10 @@ Click a filled shift → **Swap or find cover** → pick a coworker → choose:
   owners can add, edit, delete hours and "Clock out now" from the **Time clock** tab, which also lists
   who is on the clock and finished shifts with no clock-in.
 - Business time zone (owner profile) is used for reminders and the clock-in window.
+
+### F15. Printing
+- Every schedule board has a **Print** button (owner and worker); owners with several locations also get **Print all locations**.
+- Prints landscape, one location per page, with the week dates, in light colors even when the app is in dark mode.
 
 ### F8. Admin panel ⭐
 - Visitors per day (last 14/30/90 days), unique visitors, top pages, referrers, devices.

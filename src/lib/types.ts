@@ -1,4 +1,4 @@
-export type LocType = 'hotel' | 'gas';
+export type LocType = 'hotel' | 'gas' | 'shop';
 export type LoginStatus = 'active' | 'invited' | 'expired' | 'none';
 
 export interface Org {

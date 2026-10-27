@@ -143,7 +143,7 @@ ol.how li::before { content: "Step " counter(s); font-family: var(--f-display); 
 ol.how h3 { font-size: 21px; margin: 4px 0 6px; }
 ol.how p { margin: 0; color: var(--muted); }
 .fit { display: grid; grid-template-columns: 1fr; gap: 14px; }
-@media (min-width: 820px) { .fit { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 820px) { .fit { grid-template-columns: repeat(3, 1fr); } }
 .fitcard { border: 1px solid color-mix(in srgb, var(--on-ink) 25%, transparent); border-radius: 12px; padding: 18px; }
 .fitcard h3 { font-size: 24px; }
 .fitcard .pat { font-family: var(--f-mono); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
@@ -421,3 +421,33 @@ button.clock-btn:active:not(:disabled) { transform: scale(.97); }
 .oncard .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .oncard .main span { font-size: 12.5px; color: var(--muted); }
 .field input[type=datetime-local], .field input[type=date] { border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-height: 40px; width: 100%; }
+
+/* board header tools, worker rows, bell */
+.board-head .board-tools { margin-left: auto; display: flex; gap: 2px; }
+.board-head .board-tools .mini { margin-left: 0; }
+.prow { display: grid; grid-template-columns: 1.2fr 1.5fr .8fr .8fr auto; gap: 8px; align-items: end; }
+@media (max-width: 640px) { .prow { grid-template-columns: 1fr 1fr; padding-bottom: 10px; border-bottom: 1px solid var(--line); } .prow .btn.icon { justify-self: start; } }
+.btn.bell { position: relative; }
+
+/* printing: owner/worker "Print" buttons; one board (print-one) or all */
+.print-only { display: none; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  :root:not(#print-x), :root { --bg: #fff; --surface: #fff; --surface-2: #f2f4f6; --line: #9aa3ad; --line-strong: #6b7580; --fg: #000; --muted: #333;
+    --accent: #1d5f8a; --accent-soft: #e2eef6; --ok: #217a4b; --ok-soft: #e1f3e8; --warn: #9a5b00; --warn-soft: #fbefd9; --bad: #b42335; --bad-soft: #fff;
+    --chip-s: 70%; --chip-l: 91%; --chip-tl: 24%; color-scheme: light; padding: 0; }
+  body { background: #fff !important; }
+  body::before, .topbar, .rail, .subtabs, .banner, .toasts, .pickbar, .sheet, .scrim, .trash, .ghost, .no-print, .board-tools, .board-head .open { display: none !important; }
+  .wrap { padding: 0 !important; }
+  .layout, .layout.two { display: block !important; padding: 0 !important; }
+  body.print-one .board:not(.print-me), body.print-one .boards > :not(.board), body.print-one .layout > :not(.boards), body.print-one .panel { display: none !important; }
+  .board { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; border-color: #6b7580; }
+  .board + .board { break-before: page; page-break-before: always; }
+  .print-only { display: inline !important; }
+  .table-wrap { overflow: visible !important; }
+  table.grid { min-width: 0 !important; }
+  td.cell { height: 44px; }
+  .chip, td.cell .ph, .grid thead th, .grid th.sh { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  td.cell .ph { color: #999; border-color: #bbb; }
+  .chip.dim { opacity: 1; }
+}

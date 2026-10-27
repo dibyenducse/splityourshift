@@ -110,7 +110,7 @@ export function payFor(b: Bundle, e: Emp, weeks: string[]) {
 
 // ---------- shift set-up ----------
 export interface Row { id?: string; start_hour: number; hours: number }
-export const PRESETS: Record<'hotel' | 'gas', { id: string; name: string; sub: string; rows: [number, number][] | null; rec?: boolean }[]> = {
+export const PRESETS: Record<'hotel' | 'gas' | 'shop', { id: string; name: string; sub: string; rows: [number, number][] | null; rec?: boolean }[]> = {
   hotel: [
     { id: 'h3', name: '3 shifts × 8 hours', sub: '7 am–3 pm · 3–11 pm · 11 pm–7 am. Most common for front desk.', rows: [[7, 8], [15, 8], [23, 8]], rec: true },
     { id: 'h2', name: '2 shifts × 12 hours', sub: '7 am–7 pm · 7 pm–7 am', rows: [[7, 12], [19, 12]] },
@@ -122,7 +122,14 @@ export const PRESETS: Record<'hotel' | 'gas', { id: string; name: string; sub: s
     { id: 'g2', name: '2 shifts × 12 hours', sub: '6 am–6 pm · 6 pm–6 am', rows: [[6, 12], [18, 12]] },
     { id: 'custom', name: 'Custom', sub: 'Not open 24 hours, or a different pattern.', rows: null },
   ],
+  shop: [
+    { id: 's2', name: '2 shifts × 6 hours', sub: '9 am–3 pm · 3–9 pm. Open 9 am to 9 pm.', rows: [[9, 6], [15, 6]], rec: true },
+    { id: 's1', name: '1 shift × 10 hours', sub: '10 am–8 pm. One person a day.', rows: [[10, 10]] },
+    { id: 's3', name: '3 shifts × 8 hours', sub: '6 am–2 pm · 2–10 pm · 10 pm–6 am. Open 24 hours.', rows: [[6, 8], [14, 8], [22, 8]] },
+    { id: 'custom', name: 'Custom', sub: 'Your own opening hours and shift lengths.', rows: null },
+  ],
 };
+export const TYPE_LABEL: Record<'hotel' | 'gas' | 'shop', string> = { hotel: 'Hotel', gas: 'Gas station', shop: 'Shop' };
 export function coverage(rows: Row[]) {
   const c = Array(24).fill(0) as number[];
   for (const r of rows) for (let t = 0; t < r.hours; t++) c[norm(r.start_hour + t)]++;

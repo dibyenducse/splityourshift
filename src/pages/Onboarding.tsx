@@ -3,11 +3,14 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { sendInvite } from '../lib/api';
 import { mondayOf, todayIso } from '../lib/time';
-import { HUES, PRESETS, type Row } from '../lib/rules';
+import { HUES, PRESETS, TYPE_LABEL, type Row } from '../lib/rules';
 import type { Emp, LocType } from '../lib/types';
 import { useToast } from '../components/ui';
 import { ShiftEditor } from '../components/ShiftEditor';
 import { SiteNav } from './Home';
+
+const DEFAULT_NAME = { hotel: 'My Hotel', gas: 'My Gas Station', shop: 'My Shop' } as const;
+interface Person { name: string; contact: string; max: number; rate: number }
 
 /** New owner: business type → shifts → workers. Existing owner ("add"): same steps for another location. */
 export default function Onboarding({ mode, orgId, existing = [], onDone, onCancel }: {
@@ -20,9 +23,8 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
   const [preset, setPreset] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [locName, setLocName] = useState('');
-  const [names, setNames] = useState('');
-  const [max, setMax] = useState(5);
-  const [rate, setRate] = useState(15);
+  const blank = (): Person => ({ name: '', contact: '', max: 5, rate: 15 });
+  const [people, setPeople] = useState<Person[]>([blank(), blank(), blank()]);
   const [also, setAlso] = useState<string[]>([]);
   const [invite, setInvite] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -31,7 +33,7 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     setType(t);
     const p = PRESETS[t].find((x) => x.rec)!;
     setPreset(p.id); setRows(p.rows!.map(([start_hour, hours]) => ({ start_hour, hours })));
-    if (!locName || /^My (Hotel|Gas Station)$/.test(locName)) setLocName(t === 'hotel' ? 'My Hotel' : 'My Gas Station');
+    if (!locName || /^My (Hotel|Gas Station|Shop)$/.test(locName)) setLocName(DEFAULT_NAME[t]);
   };
 
   const finish = async () => {
@@ -49,19 +51,19 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
         if (error) throw error;
         org = data.id;
       }
-      const { data: loc, error: e1 } = await supabase.from('locations').insert({ org_id: org, name: locName.trim() || (type === 'hotel' ? 'My Hotel' : 'My Gas Station'), type }).select('id').single();
+      const { data: loc, error: e1 } = await supabase.from('locations').insert({ org_id: org, name: locName.trim() || DEFAULT_NAME[type], type }).select('id').single();
       if (e1) throw e1;
       const { error: e2 } = await supabase.from('shift_slots').insert(rows.map((r, i) => ({ org_id: org, location_id: loc.id, start_hour: r.start_hour, hours: r.hours, sort: i })));
       if (e2) throw e2;
       if (also.length) await supabase.from('employee_locations').insert(also.map((employee_id) => ({ employee_id, location_id: loc.id })));
-      const lines = names.split('\n').map((s) => s.trim()).filter(Boolean);
-      if (lines.length) {
-        const people = lines.map((line, i) => {
-          const [name, contact = ''] = line.split(',').map((x) => x.trim());
-          const isEmail = /@/.test(contact);
-          return { org_id: org, name: name || 'Worker', email: isEmail ? contact : null, phone: !isEmail && contact ? contact : null, max_shifts: max, rate, hue: HUES[(existing.length + i) % HUES.length] };
+      const filled = people.filter((x) => x.name.trim());
+      if (filled.length) {
+        const rowsIn = filled.map((x, i) => {
+          const contact = x.contact.trim(), isEmail = /@/.test(contact);
+          return { org_id: org, name: x.name.trim(), email: isEmail ? contact : null, phone: !isEmail && contact ? contact : null,
+            max_shifts: Math.max(1, Math.min(21, x.max || 5)), rate: Math.max(0, x.rate || 0), hue: HUES[(existing.length + i) % HUES.length] };
         });
-        const { data: made, error: e3 } = await supabase.from('employees').insert(people).select('id, email');
+        const { data: made, error: e3 } = await supabase.from('employees').insert(rowsIn).select('id, email');
         if (e3) throw e3;
         await supabase.from('employee_locations').insert(made.map((m) => ({ employee_id: m.id, location_id: loc.id })));
         if (invite) {
@@ -88,12 +90,13 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     <div className="choices">
       <button className="choice" aria-pressed={type === 'hotel'} onClick={() => pickType('hotel')}><b>Hotel or motel</b><span>Front desk, night audit, housekeeping.</span></button>
       <button className="choice" aria-pressed={type === 'gas'} onClick={() => pickType('gas')}><b>Gas station</b><span>Cashiers, often open 24 hours.</span></button>
+      <button className="choice" aria-pressed={type === 'shop'} onClick={() => pickType('shop')}><b>Shop or store</b><span>Convenience store, grocery, retail, salon.</span></button>
     </div>
     <div className="wiz-foot">{back}<button className="btn primary" disabled={!type} onClick={() => setStep(2)}>Continue</button></div>
   </>);
   else if (step === 2 && type) body = (<>
-    <h2>Set up your shifts</h2><p className="lead">Pick a pattern for this {type === 'hotel' ? 'hotel' : 'gas station'}. Each shift becomes one row on your weekly schedule.</p>
-    <div className="field"><label htmlFor="wz-loc">{type === 'hotel' ? 'Hotel' : 'Gas station'} name</label><input type="text" id="wz-loc" value={locName} onChange={(e) => setLocName(e.target.value)} /></div>
+    <h2>Set up your shifts</h2><p className="lead">Pick a pattern for this {TYPE_LABEL[type].toLowerCase()}. Each shift becomes one row on your weekly schedule.</p>
+    <div className="field"><label htmlFor="wz-loc">{TYPE_LABEL[type]} name</label><input type="text" id="wz-loc" value={locName} onChange={(e) => setLocName(e.target.value)} /></div>
     <div className="choices">{PRESETS[type].map((p) => (
       <button key={p.id} className="choice" aria-pressed={preset === p.id} onClick={() => { setPreset(p.id); if (p.rows) setRows(p.rows.map(([start_hour, hours]) => ({ start_hour, hours }))); }}>
         <b>{p.name}</b><span>{p.sub}</span>{p.rec && <span className="tag ok">Suggested</span>}</button>))}</div>
@@ -102,13 +105,22 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     <div className="wiz-foot">{back}<button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button></div>
   </>);
   else body = (<>
-    <h2>Add your workers</h2><p className="lead">One worker per line: name, then email or phone. Workers with an email get an invite to set their password. They don't sign up themselves.</p>
+    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password; they don't sign up themselves. Leave a row empty to skip it.</p>
     {existing.length > 0 && <fieldset className="field"><legend>Workers you already have who also work at {locName}</legend><div className="checks">
       {existing.map((w) => <label key={w.id}><input type="checkbox" checked={also.includes(w.id)} onChange={(e) => setAlso(e.target.checked ? [...also, w.id] : also.filter((x) => x !== w.id))} /> {w.name}</label>)}</div></fieldset>}
-    <div className="field"><label htmlFor="wz-names">New workers</label><textarea id="wz-names" value={names} onChange={(e) => setNames(e.target.value)} placeholder={'Maria, maria@email.com\nJuan, juan@email.com\nPriya, (555) 201-3344'} /></div>
-    <div className="twocol">
-      <div className="field"><label htmlFor="wz-max">Max shifts per week (each)</label><input type="number" id="wz-max" min={1} max={21} value={max} onChange={(e) => setMax(Math.max(1, Math.min(21, +e.target.value || 5)))} /></div>
-      <div className="field"><label htmlFor="wz-rate">Hourly rate ($, each)</label><input type="number" id="wz-rate" min={0} step={0.25} value={rate} onChange={(e) => setRate(Math.max(0, +e.target.value || 0))} /></div>
+    <div className="stack">
+      {people.map((x, i) => {
+        const set = (patch: Partial<Person>) => setPeople(people.map((y, j) => (j === i ? { ...y, ...patch } : y)));
+        return (
+          <div key={i} className="prow">
+            <div className="field"><label htmlFor={`wp-name-${i}`}>Name</label><input type="text" id={`wp-name-${i}`} value={x.name} onChange={(e) => set({ name: e.target.value })} placeholder={['Maria', 'James', 'Priya'][i % 3]} /></div>
+            <div className="field"><label htmlFor={`wp-contact-${i}`}>Email or phone</label><input type="text" id={`wp-contact-${i}`} value={x.contact} onChange={(e) => set({ contact: e.target.value })} placeholder="name@email.com" /></div>
+            <div className="field"><label htmlFor={`wp-max-${i}`}>Max shifts / week</label><input type="number" id={`wp-max-${i}`} min={1} max={21} value={x.max} onChange={(e) => set({ max: +e.target.value })} /></div>
+            <div className="field"><label htmlFor={`wp-rate-${i}`}>Rate ($/hour)</label><input type="number" id={`wp-rate-${i}`} min={0} step={0.25} value={x.rate} onChange={(e) => set({ rate: +e.target.value })} /></div>
+            <button type="button" className="btn icon" aria-label={`Remove row ${i + 1}`} onClick={() => setPeople(people.length > 1 ? people.filter((_, j) => j !== i) : [blank()])}>×</button>
+          </div>);
+      })}
+      <div><button type="button" className="btn small" onClick={() => { const last = people[people.length - 1]; setPeople([...people, { name: '', contact: '', max: last?.max ?? 5, rate: last?.rate ?? 15 }]); }}>+ Add another worker</button></div>
     </div>
     <label className="checks"><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} /> Email login invites now</span></label>
     <p className="hint" style={{ margin: 0 }}>You can change limits, rates and invites per person later.</p>

@@ -1,11 +1,25 @@
 import { useEffect, useRef } from 'react';
-import { DAY_LONG, addDays, mmdd, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { absEnd, absStart, availFor, cellKey, empOf, parseCell, valid, type Changes, type Result } from '../lib/rules';
+import { DAY_LONG, addDays, mmdd, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
+import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
 
 interface GridProps {
   b: Bundle; week: string; editable: boolean; meId?: string; onlyLocs?: string[];
   onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void;
+}
+
+export const PrintIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}>
+    <path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M6 14h12v7H6z" /></svg>);
+
+/** Prints one location's week (or every location when no id is given), using the print styles in styles.css. */
+export function printBoards(locId?: string) {
+  document.querySelectorAll('.print-me').forEach((x) => x.classList.remove('print-me'));
+  if (locId) { document.querySelector(`.board[data-loc="${locId}"]`)?.classList.add('print-me'); document.body.classList.add('print-one'); }
+  const done = () => { document.body.classList.remove('print-one'); document.querySelectorAll('.print-me').forEach((x) => x.classList.remove('print-me')); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
+  setTimeout(done, 1000);
 }
 
 /** One board per location: shifts down the side, days across, like the paper schedule. */
@@ -24,12 +38,16 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc 
         const open = slots.length * 7 - filled;
         const lens = [...new Set(slots.map((s) => s.hours))];
         return (
-          <section className="board" key={l.id}>
+          <section className="board" key={l.id} data-loc={l.id}>
             <div className="board-head">
-              <h2>{l.name}</h2><span className="ltype">{l.type === 'hotel' ? 'Hotel' : 'Gas station'}</span>
+              <h2>{l.name}</h2><span className="ltype">{TYPE_LABEL[l.type] ?? 'Other'}</span>
+              <span className="print-only meta">Week of {rangeTitle(week, addDays(week, 6))}</span>
               <span className="meta">{lens.length === 1 ? `${slots.length} × ${lens[0]}-hour shifts` : `${slots.length} shifts`}</span>
               {open > 0 && <span className="open">{open} open</span>}
-              {editable && onEditLoc && <button className="mini" onClick={() => onEditLoc(l)}>Edit shifts</button>}
+              <span className="board-tools">
+                <button className="mini" onClick={() => printBoards(l.id)} aria-label={`Print ${l.name} schedule`}><PrintIcon /> Print</button>
+                {editable && onEditLoc && <button className="mini" onClick={() => onEditLoc(l)}>Edit shifts</button>}
+              </span>
             </div>
             <div className="table-wrap">
               <table className="grid">

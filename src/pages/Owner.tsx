@@ -4,12 +4,12 @@ import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, sendInvite } from '../lib/api';
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
-  HUES, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
+  HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
   slotLabel, slotOf, valid, type Changes, type Result, type Row,
 } from '../lib/rules';
 import type { Bundle, Emp, LedgerRow, Loc, Req } from '../lib/types';
 import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../components/ui';
-import { WeekGrid, useDragDrop } from '../components/WeekGrid';
+import { PrintIcon, WeekGrid, printBoards, useDragDrop } from '../components/WeekGrid';
 import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import Onboarding from './Onboarding';
@@ -202,7 +202,8 @@ export default function OwnerApp() {
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
         <WeekGrid b={b} week={week} editable onCell={onCell} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })} />
-        <div><button className="btn" onClick={() => setAdding(true)}>+ Add a hotel or gas station</button></div>
+        <div className="actions no-print"><button className="btn" onClick={() => setAdding(true)}>+ Add a hotel, gas station or shop</button>
+          {b.locs.length > 1 && <button className="btn" onClick={() => printBoards()}><PrintIcon /> Print all locations</button>}</div>
       </main>
     </div>
   );
@@ -463,7 +464,7 @@ function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: (
     } catch (e) { toast(errText(e), 'error', "Couldn't save"); }
   };
   return (
-    <Sheet eyebrow={loc.type === 'hotel' ? 'Hotel' : 'Gas station'} title={`Edit ${loc.name}`} onClose={onClose}>
+    <Sheet eyebrow={TYPE_LABEL[loc.type] ?? 'Location'} title={`Edit ${loc.name}`} onClose={onClose}>
       <div className="field"><label htmlFor="le-name">Name</label><input type="text" id="le-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
       <div className="sec"><h4>Shifts</h4><p>Changing a shift's time keeps the people already in it. Removing a shift clears its row.</p><ShiftEditor idPrefix="le" rows={rows} onChange={setRows} /></div>
       {lost > 0 && <div className="reason warn">Removing {removed.length} shift{removed.length > 1 ? 's' : ''} will clear {lost} scheduled shift{lost > 1 ? 's' : ''}.</div>}

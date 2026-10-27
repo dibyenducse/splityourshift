@@ -3,7 +3,7 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
 import { addDays, ago, mmdd, mondayOf, money, todayIso } from '../lib/time';
-import { countWeek, hoursWeek, payFor, periodOf } from '../lib/rules';
+import { TYPE_LABEL, countWeek, hoursWeek, payFor, periodOf } from '../lib/rules';
 import type { Bundle } from '../lib/types';
 import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
@@ -11,7 +11,7 @@ import { AppBar } from './AppShell';
 
 interface Overview {
   daily: { day: string; visitors: number }[]; visitors: number; signup_views: number; signups: number; owners: number;
-  hotels: number; gas: number; workers: number; workers_active: number; requests: number; requests_cancelled: number; published: number;
+  hotels: number; gas: number; shops?: number; workers: number; workers_active: number; requests: number; requests_cancelled: number; published: number;
   pages: { path: string; views: number }[];
 }
 interface Account { id: string; name: string; owner_name: string | null; owner_email: string | null; types: string | null; locations: number; workers: number; created_at: string; last_active_at: string | null; status: string }
@@ -75,7 +75,7 @@ function OverviewView({ ov, days, setDays }: { ov: Overview; days: number; setDa
     <div className="tiles">
       <div className="tile"><div className="k">Visitors, last {days} days</div><div className="v">{ov.visitors.toLocaleString()}</div><div className="s">unique per day, admins not counted</div></div>
       <div className="tile"><div className="k">New owner sign-ups</div><div className="v">{ov.signups}</div><div className="s">{ov.signup_views} opened the sign-up page</div></div>
-      <div className="tile"><div className="k">Owner accounts</div><div className="v">{ov.owners}</div><div className="s">{ov.hotels} hotel · {ov.gas} gas station locations</div></div>
+      <div className="tile"><div className="k">Owner accounts</div><div className="v">{ov.owners}</div><div className="s">{ov.hotels} hotel · {ov.gas} gas station · {ov.shops ?? 0} shop locations</div></div>
       <div className="tile"><div className="k">Workers</div><div className="v">{ov.workers}</div><div className="s">{ov.workers_active} with a login</div></div>
       <div className="tile"><div className="k">Time-off requests</div><div className="v">{ov.requests}</div><div className="s">{ov.requests_cancelled} cancelled by workers</div></div>
     </div>
@@ -115,7 +115,7 @@ function AccountView({ a, onBack, reload }: { a: Account; onBack: () => void; re
       {a.status === 'active' ? <ConfirmButton className="btn small danger" label="Suspend account" confirmLabel="Click again to suspend" onConfirm={() => setStatus('suspended')} />
         : <button className="btn small" onClick={() => setStatus('active')}>Reactivate</button>}</div>
       <div className="twocol"><div><b>{a.owner_name || '—'}</b><div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></div>
-        <div><b>{b.locs.length} location{b.locs.length === 1 ? '' : 's'} · {b.emps.length} workers</b><div className="hint" style={{ margin: 0 }}>{b.locs.map((l) => `${l.name} (${l.type === 'hotel' ? 'Hotel' : 'Gas station'})`).join(', ')}</div></div></div></section>
+        <div><b>{b.locs.length} location{b.locs.length === 1 ? '' : 's'} · {b.emps.length} workers</b><div className="hint" style={{ margin: 0 }}>{b.locs.map((l) => `${l.name} (${TYPE_LABEL[l.type] ?? 'Other'})`).join(', ')}</div></div></div></section>
     <section className="panel"><div className="panel-head"><h2>Workers</h2></div>
       <div className="table-wrap"><table className="data"><thead><tr><th>Name</th><th>Login</th><th>Email</th><th>Phone</th><th className="num">Shifts this week</th><th className="num">Hours</th><th className="num">Rate</th><th className="num">Pay this period</th></tr></thead>
         <tbody>{b.emps.map((w) => <tr key={w.id}><td>{w.name}</td><td><StatusTag s={w.status} /></td><td>{w.email || '—'}</td><td>{w.phone || '—'}</td>
