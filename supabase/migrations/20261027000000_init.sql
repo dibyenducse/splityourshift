@@ -262,7 +262,8 @@ begin
   end if;
   create temp table if not exists _aff (emp uuid, wk date, before int) on commit drop;
   create temp table if not exists _cells (slot uuid, d date, emp uuid) on commit drop;
-  delete from _aff; delete from _cells;
+  -- Supabase blocks DELETE without WHERE on API calls (pg_safeupdate), hence "where true".
+  delete from _aff where true; delete from _cells where true;
 
   for c in select * from jsonb_array_elements(p_changes) loop
     v_slot := (c ->> 'slot_id')::uuid;
