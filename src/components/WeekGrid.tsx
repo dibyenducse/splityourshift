@@ -76,7 +76,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                               {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
                               {(() => { const e = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
                                 return e ? (e.clock_out ? <span className="flag ok" title="Clocked in and out">✓</span> : <span className="flag on" title="On the clock now">● on</span>) : null; })()}
-                              {editable && !availFor(b, w, k) && <span className="flag" title="Outside their availability">n/a</span>}
+                              {editable && !availFor(b, w, k) && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
                             </div>);
                         } else inner = <span className="ph">Open</span>;
                         return (
