@@ -15,6 +15,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
   const [edit, setEdit] = useState<Edit>(null);
   const open = b.entries.filter((e) => !e.clock_out);
   const fixes = b.fixes.filter((f) => f.status === 'pending');
+  const claims = b.entries.filter((e) => e.claimed_in);
   const weekEntries = b.entries.filter((e) => e.work_date >= week && e.work_date < addDays(week, 7)).sort((x, y) => x.clock_in.localeCompare(y.clock_in));
   const now = Date.now();
   // Scheduled shifts this week that have ended with nobody clocked in.
@@ -56,6 +57,17 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
             <small>{clockTime(f.clock_in)} – {clockTime(f.clock_out)} · {entryHours(f)} h</small>{f.reason && <q>{f.reason}</q>}
             <div className="actions"><button className="btn small primary" onClick={() => decide(f.id, true)}>Approve</button><button className="btn small" onClick={() => decide(f.id, false)}>Deny</button></div></div>))}</div></section>}
 
+      {claims.length > 0 && <section className="panel"><div className="panel-head"><h2>Late clock-ins to confirm<span className="badge">{claims.length}</span></h2></div>
+        <p className="hint">These workers clocked in late but say they started on time. Until you approve, they're paid from when they actually clocked in.</p>
+        <div className="stack">{claims.map((e) => (
+          <div key={e.id} className="item"><div><b>{empOf(b, e.employee_id)?.name ?? '?'}</b> · {shiftOf(e)}</div>
+            <small>Clocked in {clockTime(e.clock_in)} · says started {clockTime(e.claimed_in!)} ({Math.round((new Date(e.clock_in).getTime() - new Date(e.claimed_in!).getTime()) / 60000)} min earlier)</small>
+            {e.note && <q>{e.note}</q>}
+            <div className="actions">
+              <button className="btn small primary" onClick={async () => { const { error } = await supabase.rpc('decide_claimed_start', { p_entry: e.id, p_approve: true }); if (error) toast(errText(error), 'error', 'Not saved'); else toast(`Approved: paid from ${clockTime(e.claimed_in!)}.`, 'ok', 'Approved'); reload(); }}>Approve {clockTime(e.claimed_in!)}</button>
+              <button className="btn small" onClick={async () => { const { error } = await supabase.rpc('decide_claimed_start', { p_entry: e.id, p_approve: false }); if (error) toast(errText(error), 'error', 'Not saved'); else toast(`Kept the real clock-in, ${clockTime(e.clock_in)}.`, 'ok', 'Saved'); reload(); }}>Keep {clockTime(e.clock_in)}</button>
+            </div></div>))}</div></section>}
+
       {missing.length > 0 && <section className="panel"><div className="panel-head"><h2>No clock-in</h2></div>
         <p className="hint">These shifts are over but nobody clocked in, so they aren't paid. Add the hours if the person worked.</p>
         <div className="stack">{missing.map((k) => (
@@ -66,7 +78,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
         <button className="btn small primary" onClick={() => setEdit({})}>+ Add hours</button></div>
         <p className="hint">{total} hours this week. Edit any row if the times are wrong; every change shows in the worker's hours.</p>
         <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Shift</th><th>In</th><th>Out</th><th className="num">Hours</th><th>Source</th><th /></tr></thead><tbody>
-          {weekEntries.map((e) => <tr key={e.id}><td>{empOf(b, e.employee_id)?.name ?? '?'}</td><td>{shiftOf(e)}</td><td>{clockTime(e.clock_in)}</td>
+          {weekEntries.map((e) => <tr key={e.id}><td>{empOf(b, e.employee_id)?.name ?? '?'}</td><td>{shiftOf(e)}{e.note && <div className="hint" style={{ margin: 0 }}>{e.note}</div>}</td><td>{clockTime(e.clock_in)}</td>
             <td>{e.clock_out ? clockTime(e.clock_out) : <span className="tag ok">On the clock</span>}</td><td className="num">{e.clock_out ? entryHours(e) : '—'}</td>
             <td>{e.source === 'clock' ? 'Phone' : e.source === 'owner' ? 'You' : 'Fix request'}</td>
             <td><button className="mini" onClick={() => setEdit({ entry: e })}>Edit</button></td></tr>)}

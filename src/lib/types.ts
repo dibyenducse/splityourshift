@@ -27,6 +27,8 @@ export interface Note { id: string; text: string; request_id: string | null; rea
 export interface TimeEntry {
   id: string; org_id: string; employee_id: string; slot_id: string | null; work_date: string;
   clock_in: string; clock_out: string | null; source: 'clock' | 'owner' | 'request'; note: string | null;
+  /** Start time the worker says they began (late clock-in), waiting for the owner. */
+  claimed_in?: string | null;
 }
 export interface TimeFix {
   id: string; org_id: string; employee_id: string; slot_id: string | null; work_date: string;

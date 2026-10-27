@@ -158,6 +158,11 @@ Click a filled shift → **Swap or find cover** → pick a coworker → choose:
   owners can add, edit, delete hours and "Clock out now" from the **Time clock** tab, which also lists
   who is on the clock and finished shifts with no clock-in.
 - Business time zone (owner profile) is used for reminders and the clock-in window.
+- **Emergency cover**: any worker can "Clock in for another shift" on a shift happening now (someone else's or open).
+  The shift moves to them, a ledger entry "X owes Y 1 shift" is created for a later trade, and the owner and the
+  original worker are notified. Blocked if someone already clocked in for that shift.
+- **Late clock-in**: more than 10 min after the start, the worker chooses "Start from now" or "I started at <scheduled>".
+  The second records a claimed start; pay uses the real clock-in until the owner approves it ("Late clock-ins to confirm").
 
 ### F15. Printing
 - Every schedule board has a **Print** button (owner and worker); owners with several locations also get **Print all locations**.
