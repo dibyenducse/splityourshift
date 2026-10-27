@@ -14,6 +14,7 @@ import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
+import WorkerApp from './Worker';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
@@ -33,6 +34,7 @@ export default function OwnerApp() {
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [previewEmp, setPreviewEmp] = useState<string | null>(null);
   const undo = useRef<{ changes: Changes; ledgerId?: string }[]>([]);
   const { notes, reload: reloadNotes } = useNotes();
   const orgId = me!.orgId!;
@@ -88,7 +90,7 @@ export default function OwnerApp() {
   };
 
   useDragDrop({
-    enabled: !!b && tab === 'schedule' && !adding,
+    enabled: !!b && tab === 'schedule' && !adding && !previewEmp,
     check: (ch) => (b ? evaluate(b, ch) : { errors: [], warnings: [] }),
     nameOf: (id) => empOf(b!, id)?.name ?? '',
     occupant: (k) => b?.assign[k],
@@ -105,6 +107,7 @@ export default function OwnerApp() {
   });
 
   if (!b) return <Loading />;
+  if (previewEmp) return <WorkerApp preview={{ orgId, empId: previewEmp, onExit: () => { setPreviewEmp(null); reload(); } }} />;
   if (adding) return (
     <><AppBar subtitle={b.org.name} onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>} />
       <div className="wrap"><Onboarding mode="add" orgId={orgId} existing={b.emps} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); reload(); }} /></div></>
@@ -211,7 +214,7 @@ export default function OwnerApp() {
         extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
-      {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} />}
+      {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} />}
     </>
   );
 }
@@ -260,10 +263,10 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
 
 // ---------------------------------------------------------------- sheets
 
-function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut }: {
+function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview }: {
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
   commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string }) => Promise<boolean>;
-  reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>;
+  reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void;
 }) {
   const toast = useToast();
   const close = () => set(null);
@@ -364,13 +367,13 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
       </Sheet>);
   }
 
-  if (s.type === 'profile') return <ProfileSheet b={b} week={week} id={s.id} onClose={close} reload={reload} />;
+  if (s.type === 'profile') return <ProfileSheet b={b} week={week} id={s.id} onClose={close} reload={reload} onPreview={() => preview(s.id)} />;
 
   if (s.type === 'loc') return <LocSheet b={b} loc={s.loc} onClose={close} reload={reload} />;
   return null;
 }
 
-function ProfileSheet({ b, week, id, onClose, reload }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void> }) {
+function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void>; onPreview: () => void }) {
   const toast = useToast();
   const w = empOf(b, id);
   const [f, setF] = useState(() => ({ name: w?.name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
@@ -429,7 +432,8 @@ function ProfileSheet({ b, week, id, onClose, reload }: { b: Bundle; week: strin
         {mine.length ? <><ul className="plain">{mine.map((k) => <li key={k}>{slotLabel(b, k)}</li>)}</ul><p style={{ marginTop: 6 }}>{hoursWeek(b, w.id, week)} hours</p></> : <p>No shifts this week.</p>}</div>
       <div className="sec"><h4>Pay this period</h4><p>{pay.hours} hours × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''} = <b>{money(pay.gross)}</b></p></div>
       <div className="sec"><h4>Availability <span className="hint">(set by {w.name})</span></h4><ul className="plain">{w.avail.map((a) => <li key={a.dow}>{DAY_LONG[a.dow].slice(0, 3)} · {availText(a)}</li>)}</ul></div>
-      <div className="actions"><ConfirmButton label="Delete worker" confirmLabel={`Click again to delete ${w.name}`} onConfirm={async () => {
+      <div className="actions"><button className="btn" onClick={onPreview}>See what {w.name} sees</button>
+        <ConfirmButton label="Delete worker" confirmLabel={`Click again to delete ${w.name}`} onConfirm={async () => {
         const { error } = await supabase.from('employees').delete().eq('id', w.id);
         if (error) return toast(errText(error), 'error', "Couldn't delete");
         toast(`${w.name} deleted. Their shifts are now open.`, 'warn', 'Deleted'); onClose(); reload();

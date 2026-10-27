@@ -15,17 +15,18 @@ const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">T
   : r.status === 'denied' ? <span className="tag bad">Request denied</span> : <span className="tag plain">Cancelled</span>;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
-export default function WorkerApp() {
+/** Worker app. With `preview`, an owner sees exactly what one worker sees, with every button turned off. */
+export default function WorkerApp({ preview }: { preview?: { orgId: string; empId: string; onExit: () => void } }) {
   const { me, signOut } = useAuth();
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
   const [sheet, setSheet] = useState<'request' | 'notes' | 'account' | null>(null);
   const { notes, reload: reloadNotes } = useNotes();
-  const orgId = me!.orgId!, empId = me!.empId!;
+  const orgId = preview?.orgId ?? me!.orgId!, empId = preview?.empId ?? me!.empId!;
 
   const reload = useCallback(async () => {
-    try { setB(await loadBundle(orgId, week, false, empId)); } catch (e) { toast(errText(e), 'error', "Couldn't load"); }
+    try { setB(await loadBundle(orgId, week, !!preview, empId)); } catch (e) { toast(errText(e), 'error', "Couldn't load"); }
   }, [orgId, empId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
@@ -61,8 +62,12 @@ export default function WorkerApp() {
 
   return (
     <>
-      <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet('notes')} onAccount={() => setSheet('account')} who={<>{w.name} · <b>Worker</b></>} />
+      <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={preview ? undefined : notes} onNotes={preview ? undefined : () => setSheet('notes')}
+        onAccount={preview ? preview.onExit : () => setSheet('account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>} />
       <div className="wrap"><div className="layout">
+        {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
+          <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
+        <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
 
         <section className="panel"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
@@ -108,6 +113,7 @@ export default function WorkerApp() {
             : <p className="empty-note">You haven't asked for any time off.</p>}</div></section>
 
         <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} /></div>
+        </fieldset>
       </div></div>
 
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
