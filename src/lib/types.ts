@@ -4,7 +4,7 @@ export type LoginStatus = 'active' | 'invited' | 'expired' | 'none';
 export interface Org {
   id: string; owner_id: string; name: string; owner_name: string | null;
   pay_period: 'weekly' | 'biweekly'; pay_anchor: string; overtime: boolean;
-  status: string; created_at: string; last_active_at: string | null;
+  status: string; created_at: string; last_active_at: string | null; time_zone: string;
 }
 export interface Loc { id: string; org_id: string; name: string; type: LocType; sort: number }
 export interface Slot { id: string; org_id: string; location_id: string; start_hour: number; hours: number; sort: number; active: boolean }
@@ -24,8 +24,18 @@ export interface LedgerRow {
 }
 export interface Note { id: string; text: string; request_id: string | null; read_at: string | null; created_at: string }
 
+export interface TimeEntry {
+  id: string; org_id: string; employee_id: string; slot_id: string | null; work_date: string;
+  clock_in: string; clock_out: string | null; source: 'clock' | 'owner' | 'request'; note: string | null;
+}
+export interface TimeFix {
+  id: string; org_id: string; employee_id: string; slot_id: string | null; work_date: string;
+  clock_in: string; clock_out: string; reason: string | null; status: 'pending' | 'approved' | 'denied' | 'cancelled'; created_at: string;
+}
+
 /** Everything needed to draw and check one business's schedule. assign maps "slotId|YYYY-MM-DD" → employee id. */
 export interface Bundle {
   org: Org; locs: Loc[]; slots: Slot[]; emps: Emp[];
   assign: Record<string, string>; reqs: Req[]; ledger: LedgerRow[];
+  entries: TimeEntry[]; fixes: TimeFix[];
 }

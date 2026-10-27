@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { DAY_LONG, addDays, mmdd, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { absEnd, absStart, availFor, cellKey, empOf, valid, type Changes, type Result } from '../lib/rules';
+import { absEnd, absStart, availFor, cellKey, empOf, parseCell, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
 
 interface GridProps {
@@ -54,6 +54,8 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc 
                               {w.name}
                               {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
                               {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
+                              {(() => { const e = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
+                                return e ? (e.clock_out ? <span className="flag ok" title="Clocked in and out">✓</span> : <span className="flag on" title="On the clock now">● on</span>) : null; })()}
                               {editable && !availFor(b, w, k) && <span className="flag" title="Outside their availability">n/a</span>}
                             </div>);
                         } else inner = <span className="ph">Open</span>;

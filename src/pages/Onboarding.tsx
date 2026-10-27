@@ -44,6 +44,7 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
         const meta = user?.user_metadata ?? {};
         const { data, error } = await supabase.from('organizations').insert({
           owner_id: me.userId, name: meta.business || 'My business', owner_name: meta.name || null, pay_anchor: mondayOf(todayIso()),
+          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago',
         }).select('id').single();
         if (error) throw error;
         org = data.id;

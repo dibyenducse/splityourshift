@@ -9,7 +9,7 @@ const emp = (id: string, name: string, extra: Partial<Emp> = {}): Emp => ({
 const days = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01'];
 function bundle(): Bundle {
   const b: Bundle = {
-    org: { id: 'o', owner_id: 'u', name: 'Test', owner_name: null, pay_period: 'weekly', pay_anchor: '2026-10-26', overtime: true, status: 'active', created_at: '', last_active_at: null },
+    org: { id: 'o', owner_id: 'u', name: 'Test', owner_name: null, pay_period: 'weekly', pay_anchor: '2026-10-26', overtime: true, status: 'active', created_at: '', last_active_at: null, time_zone: 'America/Chicago' },
     locs: [{ id: 'microtel', org_id: 'o', name: 'Microtel', type: 'hotel', sort: 0 }, { id: 'hojo', org_id: 'o', name: 'Hojo', type: 'hotel', sort: 1 }],
     slots: [
       { id: 'm7', org_id: 'o', location_id: 'microtel', start_hour: 7, hours: 8, sort: 0, active: true },
@@ -18,7 +18,7 @@ function bundle(): Bundle {
       { id: 'h3', org_id: 'o', location_id: 'hojo', start_hour: 15, hours: 8, sort: 0, active: true },
     ],
     emps: [emp('dibbo', 'Dibbo', { locs: ['microtel', 'hojo'] }), emp('obi', 'Obi', { rate: 15.5 })],
-    assign: {}, reqs: [], ledger: [],
+    assign: {}, reqs: [], ledger: [], entries: [], fixes: [],
   };
   // Obi: Mon, Thu, Sat x2, Sun = 5 shifts (paper schedule)
   for (const [s, d] of [['m3', 0], ['m3', 3], ['m7', 5], ['m3', 5], ['m3', 6]] as const) b.assign[cellKey(s, days[d])] = 'obi';
@@ -51,15 +51,24 @@ describe('evaluate', () => {
 });
 
 describe('pay', () => {
-  it('pays overtime after 40 hours and splits biweekly periods', () => {
+  const entry = (date: string, from: string, to: string | null) => ({ id: date + from, org_id: 'o', employee_id: 'obi', slot_id: null, work_date: date,
+    clock_in: `${date}T${from}:00Z`, clock_out: to ? `${date}T${to}:00Z` : null, source: 'clock' as const, note: null });
+  it('pays clocked hours only, with overtime after 40 hours', () => {
     const b = bundle();
-    b.emps[1].max_shifts = 7;
-    b.assign[cellKey('m7', days[0])] = 'obi'; // 6 shifts = 48 h
+    b.entries = [0, 1, 2, 3, 4, 5].map((d) => entry(days[d], '07:00', '15:00'));
+    b.entries.push(entry(days[6], '07:00', null)); // still clocked in: not paid yet
     const p = payFor(b, b.emps[1], ['2026-10-26']);
+    expect(p.sched).toBe(40);
     expect(p.hours).toBe(48);
     expect(p.ot).toBe(8);
+    expect(p.open).toBe(1);
     expect(p.gross).toBeCloseTo(40 * 15.5 + 8 * 15.5 * 1.5);
     expect(periodOf({ ...b.org, pay_period: 'biweekly' }, '2026-11-02')).toEqual(['2026-10-26', '2026-11-02']);
+  });
+  it('counts partial hours from real clock times', () => {
+    const b = bundle();
+    b.entries = [entry(days[0], '06:58', '15:13')];
+    expect(payFor(b, b.emps[1], ['2026-10-26']).hours).toBe(8.25);
   });
   it('coverage marks gaps and overlaps', () => {
     const c = coverage([{ start_hour: 5, hours: 10 }, { start_hour: 13, hours: 10 }]);

@@ -28,8 +28,22 @@ jobs:
           version: 2.20.5
       - run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
       - name: Create or update tables
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: |
+          # The reminder schedule needs this project's address.
+          sed -i "s/__PROJECT_REF__/$PROJECT_REF/g" supabase/migrations/*.sql
+          supabase db push --password "$SUPABASE_DB_PASSWORD"
       - name: Deploy functions
-        run: supabase functions deploy invite-worker phone-login --project-ref "$PROJECT_REF"
+        run: supabase functions deploy invite-worker phone-login send-reminders --project-ref "$PROJECT_REF"
+      - name: Push notification keys (created once, never shown)
+        run: |
+          if supabase secrets list --project-ref "$PROJECT_REF" | grep -q VAPID_PRIVATE_KEY; then
+            echo "Push keys already set."
+          else
+            KEYS=$(npx --yes web-push@3.6.7 generate-vapid-keys --json)
+            PRIV=$(echo "$KEYS" | jq -r .privateKey); PUB=$(echo "$KEYS" | jq -r .publicKey)
+            echo "::add-mask::$PRIV"
+            supabase secrets set VAPID_PUBLIC_KEY="$PUB" VAPID_PRIVATE_KEY="$PRIV" \
+              VAPID_SUBJECT="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" --project-ref "$PROJECT_REF"
+          fi
       - name: Tell the functions where the site lives
         run: supabase secrets set SITE_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" --project-ref "$PROJECT_REF"

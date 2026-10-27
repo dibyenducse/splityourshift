@@ -7,6 +7,7 @@ import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotLabel, slotOf 
 import type { Avail, Bundle, Req } from '../lib/types';
 import { Loading, Sheet, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
+import { ClockPanel, HoursList } from '../components/Clock';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 
 const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">Time off requested</span>
@@ -31,6 +32,7 @@ export default function WorkerApp() {
     const ch = supabase.channel(`w-${orgId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `org_id=eq.${orgId}` }, () => reload())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'time_off_requests', filter: `employee_id=eq.${empId}` }, () => reload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', filter: `employee_id=eq.${empId}` }, () => reload())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [orgId, empId, reload]);
@@ -61,6 +63,8 @@ export default function WorkerApp() {
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet('notes')} onAccount={() => setSheet('account')} who={<>{w.name} · <b>Worker</b></>} />
       <div className="wrap"><div className="layout">
+        <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
+
         <section className="panel"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
           <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts (set by your manager).</p>
           <div className="myshifts">{mine.length ? mine.map((k) => { const s = slotOf(b, k)!, d = parseCell(k).date, r = live[k];
@@ -71,13 +75,16 @@ export default function WorkerApp() {
             : <p className="empty-note">No shifts this week.</p>}</div></section>
 
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
-          <p className="hint">An estimate from your scheduled shifts, before taxes. Your manager sets your rate.</p>
+          <p className="hint">Pay counts the hours you clocked in and out, before taxes. Your manager sets your rate.</p>
           <div className="tiles">
-            <div className="tile"><div className="k">Estimated pay</div><div className="v">{money(p.gross)}</div><div className="s">for this pay period</div></div>
-            <div className="tile"><div className="k">Hours</div><div className="v">{p.hours}</div><div className="s">{weeks.length > 1 ? `${p.perWeek.join(' + ')} by week` : `${p.shifts} shifts`}</div></div>
+            <div className="tile"><div className="k">Earned so far</div><div className="v">{money(p.gross)}</div><div className="s">this pay period</div></div>
+            <div className="tile"><div className="k">Hours worked</div><div className="v">{p.hours}</div><div className="s">{p.sched} h scheduled{weeks.length > 1 ? ` · ${p.perWeek.join(' + ')} by week` : ''}</div></div>
             <div className="tile"><div className="k">Hourly rate</div><div className="v">{money(p.rate)}</div><div className="s">{p.ot ? `${p.ot} h overtime at ${money(p.rate * 1.5)}` : 'Overtime after 40 h a week'}</div></div>
-            <div className="tile"><div className="k">This week</div><div className="v">{money(wk.gross)}</div><div className="s">{wk.hours} hours{p.covers ? ` · ${p.covers} extra shift${p.covers > 1 ? 's' : ''} covered` : ''}</div></div>
-          </div></section>
+            <div className="tile"><div className="k">This week</div><div className="v">{money(wk.gross)}</div><div className="s">{wk.hours} h worked{p.covers ? ` · ${p.covers} extra shift${p.covers > 1 ? 's' : ''} covered` : ''}</div></div>
+          </div>
+          <h3 style={{ fontSize: 17, margin: '16px 0 8px' }}>My hours</h3>
+          <HoursList b={b} empId={w.id} weeks={weeks} onCancel={async (f) => { const { error } = await supabase.rpc('cancel_time_fix', { p_id: f.id }); if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled.', 'ok', 'Cancelled'); reload(); }} />
+        </section>
 
         <section className="panel"><div className="panel-head"><h2>My availability</h2></div>
           <p className="hint">Tell your manager when you can work each week. They see it while making the schedule. For a single day off, use Request time off instead.</p>

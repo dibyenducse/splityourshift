@@ -8,3 +8,7 @@ verify_jwt = false
 
 [functions.phone-login]
 verify_jwt = false
+
+# Called by pg_cron (no user) and by browsers to fetch the public push key.
+[functions.send-reminders]
+verify_jwt = false

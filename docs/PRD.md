@@ -145,6 +145,19 @@ Click a filled shift → **Swap or find cover** → pick a coworker → choose:
   Resend invite and Send password reset link in the profile. Owner is notified when a worker activates.
 - Optional later: log in with a 6-digit SMS code instead of a password.
 
+### F14. Time clock & shift reminders ⭐
+- **Reminders on the worker's phone** (web push; Android Chrome, desktop, and iPhone after "Add to Home Screen"):
+  "Time to clock in" from 10 min before a shift starts; "Time to clock out" when it ends (only if still clocked in).
+  Sent once each by a 5-minute server job; also shown in the in-app notification list.
+- **Big round Clock in button** in the worker app, active from 30 min before the shift until it ends.
+  While clocked in it turns into a glowing green light with a running timer, plus a **Clock out** button.
+- Only finished entries (clock in + clock out) count for **pay**. Payroll shows scheduled vs worked hours,
+  overtime on worked hours, and how many people are still clocked in.
+- **Manual fixes**: workers send "Fix my hours" (shift, in, out, reason) → owner approves/denies;
+  owners can add, edit, delete hours and "Clock out now" from the **Time clock** tab, which also lists
+  who is on the clock and finished shifts with no clock-in.
+- Business time zone (owner profile) is used for reminders and the clock-in window.
+
 ### F8. Admin panel ⭐
 - Visitors per day (last 14/30/90 days), unique visitors, top pages, referrers, devices.
 - Sign-up funnel: visited → started sign-up → finished shift setup → published first week.

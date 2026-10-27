@@ -82,20 +82,30 @@ export function periodOf(org: Org, week: string): string[] {
   const start = addDays(anchor, Math.floor(daysBetween(anchor, week) / 14) * 14);
   return [start, addDays(start, 7)];
 }
+/** Hours of a finished time entry (0 while still clocked in). */
+export const entryHours = (e: { clock_in: string; clock_out: string | null }) =>
+  e.clock_out ? Math.round(((new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime()) / 36e5) * 100) / 100 : 0;
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Pay for a period. Paid hours come from the time clock (finished entries); scheduled hours are shown for comparison. */
 export function payFor(b: Bundle, e: Emp, weeks: string[]) {
   const useOt = b.org.overtime !== false;
-  let shifts = 0, hours = 0, reg = 0, ot = 0;
+  let shifts = 0, sched = 0, hours = 0, reg = 0, ot = 0, open = 0;
   const perWeek = weeks.map((wk) => {
     const ks = keysOf(b, e.id).filter((k) => inWeek(k, wk));
-    const h = ks.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
-    shifts += ks.length; hours += h;
+    shifts += ks.length; sched += ks.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
+    const es = b.entries.filter((x) => x.employee_id === e.id && x.work_date >= wk && x.work_date < addDays(wk, 7));
+    open += es.filter((x) => !x.clock_out).length;
+    const h = round2(es.reduce((n, x) => n + entryHours(x), 0));
+    hours += h;
     reg += useOt ? Math.min(OT_LIMIT, h) : h; ot += useOt ? Math.max(0, h - OT_LIMIT) : 0;
     return h;
   });
   const rate = Number(e.rate) || 0;
-  const covers = b.ledger.filter((l) => l.creditor_id === e.id && l.slot_id && weeks.some((wk) => l.work_date >= wk && l.work_date < addDays(wk, 7)) && b.assign[cellKey(l.slot_id, l.work_date)] === e.id);
-  const coverHours = covers.reduce((n, l) => n + (b.slots.find((s) => s.id === l.slot_id)?.hours ?? 0), 0);
-  return { shifts, hours, reg, ot, rate, perWeek, gross: reg * rate + ot * rate * 1.5, covers: covers.length, coverPay: coverHours * rate };
+  const covers = b.ledger.filter((l) => l.creditor_id === e.id && l.slot_id && weeks.some((wk) => l.work_date >= wk && l.work_date < addDays(wk, 7)));
+  const coverHours = covers.reduce((n, l) => n + b.entries.filter((x) => x.employee_id === e.id && x.slot_id === l.slot_id && x.work_date === l.work_date).reduce((m, x) => m + entryHours(x), 0), 0);
+  hours = round2(hours); reg = round2(reg); ot = round2(ot);
+  return { shifts, sched, hours, reg, ot, rate, perWeek, open, gross: reg * rate + ot * rate * 1.5, covers: covers.length, coverPay: coverHours * rate };
 }
 
 // ---------- shift set-up ----------

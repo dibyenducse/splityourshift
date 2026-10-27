@@ -13,6 +13,7 @@ import { WeekGrid, useDragDrop } from '../components/WeekGrid';
 import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import Onboarding from './Onboarding';
+import TimeClock from './OwnerTime';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
@@ -28,7 +29,7 @@ export default function OwnerApp() {
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
-  const [tab, setTab] = useState<'schedule' | 'payroll'>('schedule');
+  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll'>('schedule');
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -46,6 +47,8 @@ export default function OwnerApp() {
     const ch = supabase.channel(`org-${orgId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `org_id=eq.${orgId}` }, soon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'time_off_requests', filter: `org_id=eq.${orgId}` }, soon)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', filter: `org_id=eq.${orgId}` }, soon)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_fix_requests', filter: `org_id=eq.${orgId}` }, soon)
       .subscribe();
     return () => { clearTimeout(t); supabase.removeChannel(ch); };
   }, [orgId, reload]);
@@ -150,7 +153,9 @@ export default function OwnerApp() {
 
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
-  const tabs = <div className="subtabs">{(['schedule', 'payroll'] as const).map((t) => <button key={t} className={`btn small${tab === t ? ' primary' : ''}`} onClick={() => setTab(t)}>{t === 'schedule' ? 'Schedule' : 'Payroll'}</button>)}</div>;
+  const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length;
+  const tabs = <div className="subtabs">{(['schedule', 'time', 'payroll'] as const).map((t) => <button key={t} className={`btn small${tab === t ? ' primary' : ''}`} onClick={() => setTab(t)}>
+    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : 'Payroll'}</button>)}</div>;
 
   const schedule = (
     <div className="layout two owner">
@@ -204,7 +209,7 @@ export default function OwnerApp() {
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
         onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>} />
-      <div className="wrap">{tab === 'schedule' ? schedule : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} />}
     </>
@@ -217,14 +222,14 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
   const toast = useToast();
   const weeks = periodOf(b.org, week);
   const rows = [...b.emps].sort((x, y) => x.name.localeCompare(y.name)).map((w) => ({ w, p: payFor(b, w, weeks) }));
-  const tot = rows.reduce((t, { p }) => ({ hours: t.hours + p.hours, ot: t.ot + p.ot, gross: t.gross + p.gross, covers: t.covers + p.covers, coverPay: t.coverPay + p.coverPay }), { hours: 0, ot: 0, gross: 0, covers: 0, coverPay: 0 });
+  const tot = rows.reduce((t, { p }) => ({ hours: t.hours + p.hours, sched: t.sched + p.sched, ot: t.ot + p.ot, gross: t.gross + p.gross, covers: t.covers + p.covers, coverPay: t.coverPay + p.coverPay, open: t.open + p.open }), { hours: 0, sched: 0, ot: 0, gross: 0, covers: 0, coverPay: 0, open: 0 });
   const saveOrg = async (patch: Record<string, unknown>) => { const { error } = await supabase.from('organizations').update(patch).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); };
   const saveRate = async (id: string, v: string) => { const n = Math.round(parseFloat(v) * 100) / 100; if (!(n >= 0 && n < 1000)) return; await supabase.from('employees').update({ rate: n }).eq('id', id); reload(); };
   return (
     <div className="layout">{tabs}
       <section className="panel">
         <div className="panel-head"><h2>Payroll · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">{b.org.pay_period === 'biweekly' ? 'Every 2 weeks' : 'Every week'}</span></div>
-        <p className="hint">Estimated gross pay from the schedule, before taxes and deductions. Change hourly rates right in the table. Use ‹ › at the top to move between pay periods.</p>
+        <p className="hint">Gross pay from clocked hours (clock in to clock out), before taxes and deductions. Shifts without a clock-out aren't paid until they're fixed in Time clock. Change hourly rates right in the table; use ‹ › at the top to move between pay periods.</p>
         <div className="twocol" style={{ marginBottom: 12 }}>
           <div className="field"><label htmlFor="pay-period">Pay schedule</label>
             <select id="pay-period" value={b.org.pay_period} onChange={(e) => saveOrg({ pay_period: e.target.value, pay_anchor: weeks[0] })}><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option></select></div>
@@ -233,19 +238,20 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
         </div>
         <div className="tiles" style={{ marginBottom: 14 }}>
           <div className="tile"><div className="k">Total gross pay</div><div className="v">{money(tot.gross)}</div><div className="s">{rows.length} workers</div></div>
-          <div className="tile"><div className="k">Hours scheduled</div><div className="v">{tot.hours}</div><div className="s">{tot.ot ? `${tot.ot} overtime hours` : 'No overtime'}</div></div>
+          <div className="tile"><div className="k">Hours worked</div><div className="v">{Math.round(tot.hours * 100) / 100}</div><div className="s">{tot.sched} scheduled · {tot.ot ? `${Math.round(tot.ot * 100) / 100} overtime` : 'no overtime'}</div></div>
+          <div className="tile"><div className="k">Still clocked in</div><div className="v">{tot.open}</div><div className="s">{tot.open ? 'not paid until they clock out' : 'everyone is clocked out'}</div></div>
           <div className="tile"><div className="k">Extra shifts (covers)</div><div className="v">{tot.covers}</div><div className="s">{money(tot.coverPay)} included in totals</div></div>
         </div>
-        <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Hourly rate</th><th className="num">Shifts</th><th className="num">Hours</th><th className="num">Overtime</th><th className="num">Covered for others</th><th className="num">Gross pay</th></tr></thead>
+        <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Hourly rate</th><th className="num">Scheduled</th><th className="num">Worked</th><th className="num">Overtime</th><th className="num">Covered for others</th><th className="num">Gross pay</th></tr></thead>
           <tbody>{rows.map(({ w, p }) => (
             <tr key={w.id}><td><span className="dot" style={{ ['--h' as string]: w.hue, display: 'inline-block', marginRight: 6 }} />{w.name}</td>
               <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>$<input type="number" min={0} max={999} step={0.25} defaultValue={w.rate} key={`${w.id}-${w.rate}`} aria-label={`${w.name} hourly rate`}
                 onBlur={(e) => { if (+e.target.value !== w.rate) saveRate(w.id, e.target.value); }}
                 style={{ width: 84, minHeight: 32, border: '1px solid var(--line-strong)', borderRadius: 6, padding: '4px 6px', background: 'var(--surface)' }} /></span></td>
-              <td className="num">{p.shifts}</td><td className="num">{p.hours}{weeks.length > 1 && <div className="hint" style={{ margin: 0 }}>{p.perWeek.join(' + ')}</div>}</td>
+              <td className="num">{p.sched} h<div className="hint" style={{ margin: 0 }}>{p.shifts} shifts</div></td><td className="num">{p.hours} h{weeks.length > 1 && <div className="hint" style={{ margin: 0 }}>{p.perWeek.join(' + ')}</div>}{p.open > 0 && <div><span className="tag warn">On the clock</span></div>}</td>
               <td className="num">{p.ot ? <span className="tag warn">{p.ot} h</span> : '—'}</td>
               <td className="num">{p.covers ? `${p.covers} · ${money(p.coverPay)}` : '—'}</td><td className="num"><b>{money(p.gross)}</b></td></tr>))}</tbody>
-          <tfoot><tr><td><b>Total</b></td><td /><td /><td className="num"><b>{tot.hours}</b></td><td className="num">{tot.ot || '—'}</td><td className="num">{tot.covers ? money(tot.coverPay) : '—'}</td><td className="num"><b>{money(tot.gross)}</b></td></tr></tfoot></table></div>
+          <tfoot><tr><td><b>Total</b></td><td /><td className="num">{tot.sched} h</td><td className="num"><b>{Math.round(tot.hours * 100) / 100} h</b></td><td className="num">{tot.ot || '—'}</td><td className="num">{tot.covers ? money(tot.coverPay) : '—'}</td><td className="num"><b>{money(tot.gross)}</b></td></tr></tfoot></table></div>
         <p className="hint" style={{ marginTop: 10 }}>"Covered for others" are shifts this person took for a coworker without a trade. They're already in the hours and pay. Trades don't change pay because both people keep the same hours.</p>
       </section>
     </div>
@@ -467,13 +473,17 @@ function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: (
   );
 }
 
+const TZS: [string, string][] = [['America/New_York', 'Eastern'], ['America/Chicago', 'Central'], ['America/Denver', 'Mountain'], ['America/Phoenix', 'Arizona'],
+  ['America/Los_Angeles', 'Pacific'], ['America/Anchorage', 'Alaska'], ['Pacific/Honolulu', 'Hawaii']];
+
 function AccountSheet({ b, onClose, reload, signOut }: { b: Bundle; onClose: () => void; reload: () => Promise<void>; signOut: () => Promise<void> }) {
   const toast = useToast();
   const [name, setName] = useState(b.org.owner_name ?? '');
   const [biz, setBiz] = useState(b.org.name);
+  const [tz, setTz] = useState(b.org.time_zone || 'America/Chicago');
   const [pw, setPw] = useState('');
   const save = async () => {
-    const { error } = await supabase.from('organizations').update({ owner_name: name.trim() || null, name: biz.trim() || b.org.name }).eq('id', b.org.id);
+    const { error } = await supabase.from('organizations').update({ owner_name: name.trim() || null, name: biz.trim() || b.org.name, time_zone: tz }).eq('id', b.org.id);
     if (error) return toast(errText(error), 'error', 'Not saved');
     toast('Saved.', 'ok', 'Saved'); reload();
   };
@@ -488,6 +498,8 @@ function AccountSheet({ b, onClose, reload, signOut }: { b: Bundle; onClose: () 
     <Sheet eyebrow="My account" title="Owner profile" onClose={onClose}>
       <div className="field"><label htmlFor="ac-name">Your name</label><input type="text" id="ac-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
       <div className="field"><label htmlFor="ac-biz">Business name</label><input type="text" id="ac-biz" value={biz} onChange={(e) => setBiz(e.target.value)} /></div>
+      <div className="field"><label htmlFor="ac-tz">Time zone (for shift reminders)</label>
+        <select id="ac-tz" value={tz} onChange={(e) => setTz(e.target.value)}>{TZS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}{!TZS.some(([v]) => v === tz) && <option value={tz}>{tz}</option>}</select></div>
       <div className="actions"><button className="btn primary" onClick={save}>Save</button></div>
       <div className="sec"><h4>Your business</h4><p>{locs} location{locs === 1 ? '' : 's'} · {workers} worker{workers === 1 ? '' : 's'} · since {new Date(b.org.created_at).toLocaleDateString()}</p></div>
       <div className="sec"><h4>Change password</h4><div className="field"><label htmlFor="ac-pass">New password</label><input type="password" id="ac-pass" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></div>

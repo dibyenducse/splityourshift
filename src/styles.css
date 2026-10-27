@@ -396,3 +396,28 @@ table.data { border-collapse: collapse; width: 100%; min-width: 640px; font-size
 .loading { padding: 60px 16px; text-align: center; color: var(--muted); }
 .lstat { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--warn); }
 .lstat.expired, .lstat.none { color: var(--bad); }
+
+/* time clock */
+.clock { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-block: 10px 14px; text-align: center; }
+.clock-btn { width: min(200px, 60vw); aspect-ratio: 1; max-width: 100%; border-radius: 50%; border: 6px solid var(--ok); background: var(--ok-soft); color: var(--ok);
+  font-family: var(--f-display); font-size: 32px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 10px 30px rgba(20, 32, 48, .18); transition: transform .12s; }
+button.clock-btn:hover:not(:disabled) { transform: scale(1.03); }
+button.clock-btn:active:not(:disabled) { transform: scale(.97); }
+.clock-btn span { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.clock-btn small { font-family: var(--f-body); font-size: 13px; font-weight: 600; opacity: .85; margin-top: 6px; }
+.clock-btn b { font-family: var(--f-mono); font-size: 30px; font-weight: 500; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.clock-btn.on { background: var(--ok); color: var(--surface); font-size: 22px; box-shadow: 0 0 0 10px color-mix(in srgb, var(--ok) 22%, transparent), 0 0 46px color-mix(in srgb, var(--ok) 70%, transparent); animation: glow 2.4s ease-in-out infinite; }
+.clock-btn.done { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-size: 28px; }
+.clock-btn.off { border-color: var(--line-strong); background: var(--surface-2); color: var(--muted); box-shadow: none; }
+.clock-sub { margin: 0; color: var(--muted); font-size: 14px; max-width: 34em; }
+.clock-out { min-width: 200px; }
+.lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--line-strong); display: inline-block; flex: none; }
+.lamp.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.flag.on { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.flag.ok { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--ok) 22%, transparent), 0 0 30px color-mix(in srgb, var(--ok) 50%, transparent); } 50% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--ok) 14%, transparent), 0 0 56px color-mix(in srgb, var(--ok) 80%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .clock-btn.on { animation: none; } }
+.oncard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.oncard .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.oncard .main span { font-size: 12.5px; color: var(--muted); }
+.field input[type=datetime-local], .field input[type=date] { border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-height: 40px; width: 100%; }
