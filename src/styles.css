@@ -451,3 +451,7 @@ button.clock-btn:active:not(:disabled) { transform: scale(.97); }
   td.cell .ph { color: #999; border-color: #bbb; }
   .chip.dim { opacity: 1; }
 }
+.tabsrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mini.danger-text { color: var(--bad); }
+.mini.danger-text.armed { background: var(--bad); color: var(--surface); }
+@media print { .tabsrow { display: none !important; } }

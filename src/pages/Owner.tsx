@@ -18,7 +18,7 @@ import WorkerApp from './Worker';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
-  | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc }
+  | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
   | { type: 'notes' } | { type: 'account' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
@@ -198,12 +198,15 @@ export default function OwnerApp() {
         </section>
       </aside>
       <main className="boards">
-        {tabs}
+        <div className="tabsrow">{tabs}
+          <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
-        <WeekGrid b={b} week={week} editable onCell={onCell} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })} />
+        <WeekGrid b={b} week={week} editable onCell={onCell} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
+          onClearWeek={(l) => { const ch: Changes = {}; for (const s of b.slots.filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
+            commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
         <div className="actions no-print"><button className="btn" onClick={() => setAdding(true)}>+ Add a hotel, gas station or shop</button>
-          {b.locs.length > 1 && <button className="btn" onClick={() => printBoards()}><PrintIcon /> Print all locations</button>}</div>
+          {b.locs.length > 0 && <button className="btn danger" onClick={() => setSheet({ type: 'delloc' })}>Delete a location</button>}</div>
       </main>
     </div>
   );
@@ -371,6 +374,17 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'profile') return <ProfileSheet b={b} week={week} id={s.id} onClose={close} reload={reload} onPreview={() => preview(s.id)} />;
 
   if (s.type === 'loc') return <LocSheet b={b} loc={s.loc} onClose={close} reload={reload} />;
+  if (s.type === 'delloc') return (
+    <Sheet eyebrow="Locations" title="Delete a location" onClose={close}>
+      <div className="sec"><p>Deleting a location removes its shifts and its whole schedule, including past weeks. Workers stay in your staff list. This can't be undone.</p></div>
+      <div className="list">{b.locs.map((l) => { const n = Object.keys(b.assign).filter((k) => b.slots.find((x) => x.id === parseCell(k).slot)?.location_id === l.id).length;
+        return (<div key={l.id} className="row"><span className="main"><b>{l.name}</b><span>{TYPE_LABEL[l.type] ?? 'Location'} · {n} shift{n === 1 ? '' : 's'} on the schedule</span></span>
+          <ConfirmButton className="btn small danger" label="Delete" confirmLabel={`Click again to delete ${l.name}`} onConfirm={async () => {
+            const { error } = await supabase.from('locations').delete().eq('id', l.id);
+            if (error) return toast(errText(error), 'error', "Couldn't delete");
+            toast(`${l.name} deleted.`, 'warn', 'Deleted'); close(); reload();
+          }} /></div>); })}</div>
+    </Sheet>);
   return null;
 }
 

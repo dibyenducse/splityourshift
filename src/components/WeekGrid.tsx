@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 import { DAY_LONG, addDays, mmdd, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
+import { ConfirmButton } from './ui';
 
 interface GridProps {
   b: Bundle; week: string; editable: boolean; meId?: string; onlyLocs?: string[];
-  onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void;
+  onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void; onClearWeek?: (l: Loc) => void;
 }
 
 export const PrintIcon = () => (
@@ -23,7 +24,7 @@ export function printBoards(locId?: string) {
 }
 
 /** One board per location: shifts down the side, days across, like the paper schedule. */
-export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc }: GridProps) {
+export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek }: GridProps) {
   const today = todayIso();
   const ranges: Record<string, [number, number][]> = {};
   for (const k in b.assign) if (valid(b, k)) (ranges[b.assign[k]] ||= []).push([absStart(b, k), absEnd(b, k)]);
@@ -47,6 +48,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc 
               <span className="board-tools">
                 <button className="mini" onClick={() => printBoards(l.id)} aria-label={`Print ${l.name} schedule`}><PrintIcon /> Print</button>
                 {editable && onEditLoc && <button className="mini" onClick={() => onEditLoc(l)}>Edit shifts</button>}
+                {editable && onClearWeek && filled > 0 && <ConfirmButton className="mini danger-text" label="Clear week" confirmLabel="Click again to clear" onConfirm={() => onClearWeek(l)} />}
               </span>
             </div>
             <div className="table-wrap">
