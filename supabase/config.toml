@@ -1,0 +1,10 @@
+# Minimal Supabase CLI config, used by .github/workflows/supabase.yml.
+project_id = "splityourshift"
+
+# Both functions check who is calling themselves, so the gateway JWT check is off
+# (this also keeps them working with Supabase's newer non-JWT publishable keys).
+[functions.invite-worker]
+verify_jwt = false
+
+[functions.phone-login]
+verify_jwt = false

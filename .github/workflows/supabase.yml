@@ -1,0 +1,35 @@
+# Sets up the Supabase backend: database tables + rules, and the two Edge Functions.
+# Run it from GitHub → Actions → "Set up database" → Run workflow (after adding the secrets in SETUP.md).
+name: Set up database
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['supabase/**']
+
+jobs:
+  supabase:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check settings
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$PROJECT_REF" ]; then
+            echo "::error::Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD secrets and the SUPABASE_PROJECT_REF variable (see SETUP.md)."
+            exit 1
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.20.5
+      - run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Create or update tables
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+      - name: Deploy functions
+        run: supabase functions deploy invite-worker phone-login --project-ref "$PROJECT_REF"
+      - name: Tell the functions where the site lives
+        run: supabase secrets set SITE_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" --project-ref "$PROJECT_REF"
