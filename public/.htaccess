@@ -1,0 +1,14 @@
+# Hostinger (Apache): always use https://splityourshift.com (no www), and cache built files.
+RewriteEngine On
+RewriteCond %{HTTPS} off [OR]
+RewriteCond %{HTTP_HOST} ^www\. [NC]
+RewriteRule ^ https://splityourshift.com%{REQUEST_URI} [L,R=301]
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|png|svg|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
