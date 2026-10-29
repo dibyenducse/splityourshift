@@ -13,10 +13,21 @@ export async function whoAmI(): Promise<Me | null> {
   const { data: adm } = await supabase.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
   if (adm) return { ...base, role: 'admin' };
   const { data: org } = await supabase.from('organizations').select('id').eq('owner_id', user.id).order('created_at').limit(1).maybeSingle();
-  if (org) return { ...base, role: 'owner', orgId: org.id };
+  if (org) {
+    // An owner who also works shifts has a worker profile linked to their own login.
+    const { data: own } = await supabase.from('employees').select('id').eq('org_id', org.id).eq('user_id', user.id).maybeSingle();
+    return { ...base, role: 'owner', orgId: org.id, empId: own?.id };
+  }
   const { data: emp } = await supabase.from('employees').select('id, org_id').eq('user_id', user.id).order('created_at').limit(1).maybeSingle();
   if (emp) return { ...base, role: 'worker', orgId: emp.org_id, empId: emp.id };
   return { ...base, role: 'new' };
+}
+
+/** Links (or creates) the owner's own worker profile. `empId` = an existing worker on the staff list who is the owner. */
+export async function myWorkerProfile(orgId: string, empId?: string): Promise<string> {
+  const { data, error } = await supabase.rpc('my_worker_profile', { p_org: orgId, p_emp: empId ?? null });
+  if (error) throw error;
+  return data as string;
 }
 
 function must<T>(res: { data: T | null; error: unknown }): T {

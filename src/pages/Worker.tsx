@@ -15,8 +15,11 @@ const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">T
   : r.status === 'denied' ? <span className="tag bad">Request denied</span> : <span className="tag plain">Cancelled</span>;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
-/** Worker app. With `preview`, an owner sees exactly what one worker sees, with every button turned off. */
-export default function WorkerApp({ preview }: { preview?: { orgId: string; empId: string; onExit: () => void } }) {
+/**
+ * Worker app. With `preview`, an owner sees exactly what one worker sees, with every button turned off.
+ * With `self`, an owner who also works shifts uses their own worker profile (fully working) and can switch back.
+ */
+export default function WorkerApp({ preview, self }: { preview?: { orgId: string; empId: string; onExit: () => void }; self?: { onExit: () => void } }) {
   const { me, signOut } = useAuth();
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
@@ -63,7 +66,8 @@ export default function WorkerApp({ preview }: { preview?: { orgId: string; empI
   return (
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={preview ? undefined : notes} onNotes={preview ? undefined : () => setSheet('notes')}
-        onAccount={preview ? preview.onExit : () => setSheet('account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>} />
+        onAccount={preview ? preview.onExit : () => setSheet('account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>}
+        extra={self && <button className="btn" onClick={self.onExit} title="Back to running the business: schedule, time clock, payroll">⇄ Owner view</button>} />
       <div className="wrap"><div className="layout">
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}

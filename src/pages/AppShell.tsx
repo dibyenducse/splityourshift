@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase } from '../lib/supabase';
@@ -43,14 +43,15 @@ export function useNotes() {
   const { me } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const reload = useCallback(async () => setNotes(await loadNotes()), []);
+  const uid = useId(); // owner and worker views can both be mounted; each needs its own channel
   useEffect(() => {
     if (!me) return;
     reload();
-    const ch = supabase.channel(`notes-${me.userId}`)
+    const ch = supabase.channel(`notes-${me.userId}-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient=eq.${me.userId}` }, () => reload())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [me, reload]);
+  }, [me, reload, uid]);
   return { notes, reload };
 }
 

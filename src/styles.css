@@ -201,6 +201,7 @@ footer.site .inner { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-con
 .wname { font-weight: 600; white-space: nowrap; }
 .lstat { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--warn); }
 .lstat.expired, .lstat.none { color: var(--bad); }
+.lstat.you { color: var(--accent); }
 .email { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .email-meta { background: var(--surface-2); padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 60px 1fr; gap: 2px 8px; }
 .email-meta span { color: var(--muted); }

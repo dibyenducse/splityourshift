@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
-import { applyChanges, loadBundle, markNotesRead, sendInvite } from '../lib/api';
+import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
   HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
@@ -19,17 +19,20 @@ import WorkerApp from './Worker';
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'account' } | null;
+  | { type: 'notes' } | { type: 'account' } | { type: 'whoami' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.errors[0].short}</span>
   : r.warnings.length ? <span className="tag warn">{r.warnings[0].short}</span> : <span className="tag ok">Works</span>;
 
 export default function OwnerApp() {
-  const { me, signOut } = useAuth();
+  const { me, signOut, refresh } = useAuth();
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
+  // Owner who also works shifts: the worker view of their own profile (remembered on this device).
+  const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
+  const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
   const [tab, setTab] = useState<'schedule' | 'time' | 'payroll'>('schedule');
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
@@ -43,6 +46,17 @@ export default function OwnerApp() {
     try { setB(await loadBundle(orgId, week, true)); } catch (e) { toast(errText(e), 'error', "Couldn't load"); }
   }, [orgId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
+
+  /** Opens the worker view, first linking or creating the owner's worker profile. */
+  const goWorker = async (empId?: string) => {
+    setSheet(null);
+    if (me!.empId && !empId) return setAsWorker(true);
+    const free = b?.emps.filter((e) => !e.user_id) ?? [];
+    const byEmail = free.some((e) => e.email && e.email.toLowerCase() === me!.email.toLowerCase());
+    if (!empId && !byEmail && free.length) return setSheet({ type: 'whoami' });
+    try { await myWorkerProfile(orgId, empId); await refresh(); setAsWorker(true); }
+    catch (e) { toast(errText(e), 'error', "Couldn't switch"); }
+  };
   useEffect(() => {
     let t: number | undefined;
     const soon = () => { clearTimeout(t); t = window.setTimeout(reload, 400); };
@@ -106,6 +120,7 @@ export default function OwnerApp() {
     },
   });
 
+  if (asWorker && me!.empId) return <WorkerApp self={{ onExit: () => { setAsWorker(false); reload(); } }} />;
   if (!b) return <Loading />;
   if (previewEmp) return <WorkerApp preview={{ orgId, empId: previewEmp, onExit: () => { setPreviewEmp(null); reload(); } }} />;
   if (adding) return (
@@ -171,7 +186,7 @@ export default function OwnerApp() {
               <div key={w.id} className={`wcard${picked === w.id ? ' picked' : ''}`} data-drag="" data-wid={w.id} style={{ ['--h' as string]: w.hue }}
                 onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) setPicked(picked === w.id ? null : w.id); }}>
                 <span className="dot" /><span className="wname">{w.name}</span>{b.entries.some((e) => e.employee_id === w.id && !e.clock_out) && <span className="lamp on" title={`${w.name} is on the clock`} aria-label="On the clock" />}
-                {w.status !== 'active' && <span className={`lstat ${w.status}`}>{w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'expired' : 'no login'}</span>}
+                {w.user_id === me!.userId ? <span className="lstat you">you</span> : w.status !== 'active' && <span className={`lstat ${w.status}`}>{w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'expired' : 'no login'}</span>}
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
                 <button className="mini" onClick={() => setSheet({ type: 'profile', id: w.id })} aria-label={`Open ${w.name}'s profile`}>Profile</button>
               </div>); }) : <p className="empty-note">No workers yet.</p>}
@@ -215,10 +230,21 @@ export default function OwnerApp() {
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
         onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
-        extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>} />
+        extra={<><button className="btn" onClick={() => goWorker()} title="Switch to your own worker view: your shifts, clock in and out, time off">⇄ Worker view</button>
+          <button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button></>} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
-      {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} />}
+      {sheet?.type === 'whoami' && <Sheet eyebrow="Worker view" title="Do you work shifts too?" onClose={() => setSheet(null)}>
+        <p>Your worker view shows your shifts and lets you clock in and out, ask for time off and see your pay. Your hours count in payroll like everyone else's.</p>
+        <div className="sec"><h4>Are you already on your staff list?</h4><p>Pick yourself so your shifts stay with you.</p><div className="list">
+          {b.emps.filter((e) => !e.user_id).map((e) => <button key={e.id} className="row" onClick={() => goWorker(e.id)}>
+            <span className="dot" style={{ ['--h' as string]: e.hue }} /><span className="main"><b>{e.name}</b><span>{e.email || e.phone || 'No login yet'}</span></span><span className="tag plain">That's me</span></button>)}
+        </div></div>
+        <div className="sec"><h4>Not on the list?</h4><div className="actions">
+          <button className="btn primary" onClick={async () => { try { await myWorkerProfile(orgId); await refresh(); setSheet(null); setAsWorker(true); } catch (e) { toast(errText(e), 'error', "Couldn't switch"); } }}>
+            Create my worker profile ({b.org.owner_name || me!.email})</button></div></div>
+      </Sheet>}
+      {sheet && sheet.type !== 'whoami' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
   );
 }
@@ -267,10 +293,10 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
 
 // ---------------------------------------------------------------- sheets
 
-function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview }: {
+function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker }: {
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
   commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string }) => Promise<boolean>;
-  reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void;
+  reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void; goWorker: () => void;
 }) {
   const toast = useToast();
   const close = () => set(null);
@@ -290,7 +316,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return <div><span className="tag plain">{r.status[0].toUpperCase() + r.status.slice(1)}</span></div>;
   }} />;
 
-  if (s.type === 'account') return <AccountSheet b={b} onClose={close} reload={reload} signOut={signOut} />;
+  if (s.type === 'account') return <AccountSheet b={b} onClose={close} reload={reload} signOut={signOut} goWorker={goWorker} />;
 
   if (s.type === 'shift') {
     if (!valid(b, s.key)) return null;
@@ -390,6 +416,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
 
 function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void>; onPreview: () => void }) {
   const toast = useToast();
+  const { me } = useAuth();
   const w = empOf(b, id);
   const [f, setF] = useState(() => ({ name: w?.name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
   const [busy, setBusy] = useState(false);
@@ -437,12 +464,14 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
       <div className="actions"><button className="btn primary" disabled={!dirty || busy} onClick={save}>Save changes</button></div>
       <fieldset className="field"><legend>Works at</legend><div className="checks">
         {b.locs.map((l) => <label key={l.id}><input type="checkbox" checked={w.locs.includes(l.id)} onChange={(e) => toggleLoc(l.id, e.target.checked)} /> {l.name}</label>)}</div></fieldset>
+      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap <b>⇄ Worker view</b> at the top to clock in and out.</p></div> : <>
       <div className="sec"><h4>Login <StatusTag s={w.status} /></h4>
         <p>{w.status === 'active' ? `${w.name} logs in with their email${w.phone ? ' or phone' : ''} and their own password.`
           : w.status === 'invited' ? `Invite sent ${w.invited_at ? ago(w.invited_at) : ''}. The link works for 24 hours.`
           : w.status === 'expired' ? 'The invite link expired. Send a new one.' : 'Send an invite so they can see their shifts and pay. They choose their own password.'}</p>
         <div className="actions"><button className={`btn small${w.status === 'active' ? '' : ' primary'}`} disabled={busy} onClick={invite}>
           {w.status === 'active' ? 'Send password reset link' : w.status === 'none' ? 'Send invite' : 'Resend invite'}</button></div></div>
+      </>}
       <div className="sec"><h4>Week of {rangeTitle(week, addDays(week, 6))} <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span></h4>
         {mine.length ? <><ul className="plain">{mine.map((k) => <li key={k}>{slotLabel(b, k)}</li>)}</ul><p style={{ marginTop: 6 }}>{hoursWeek(b, w.id, week)} hours</p></> : <p>No shifts this week.</p>}</div>
       <div className="sec"><h4>Pay this period</h4><p>{pay.hours} hours × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''} = <b>{money(pay.gross)}</b></p></div>
@@ -495,7 +524,7 @@ function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: (
 const TZS: [string, string][] = [['America/New_York', 'Eastern'], ['America/Chicago', 'Central'], ['America/Denver', 'Mountain'], ['America/Phoenix', 'Arizona'],
   ['America/Los_Angeles', 'Pacific'], ['America/Anchorage', 'Alaska'], ['Pacific/Honolulu', 'Hawaii']];
 
-function AccountSheet({ b, onClose, reload, signOut }: { b: Bundle; onClose: () => void; reload: () => Promise<void>; signOut: () => Promise<void> }) {
+function AccountSheet({ b, onClose, reload, signOut, goWorker }: { b: Bundle; onClose: () => void; reload: () => Promise<void>; signOut: () => Promise<void>; goWorker: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(b.org.owner_name ?? '');
   const [biz, setBiz] = useState(b.org.name);
@@ -520,6 +549,8 @@ function AccountSheet({ b, onClose, reload, signOut }: { b: Bundle; onClose: () 
       <div className="field"><label htmlFor="ac-tz">Time zone (for shift reminders)</label>
         <select id="ac-tz" value={tz} onChange={(e) => setTz(e.target.value)}>{TZS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}{!TZS.some(([v]) => v === tz) && <option value={tz}>{tz}</option>}</select></div>
       <div className="actions"><button className="btn primary" onClick={save}>Save</button></div>
+      <div className="sec"><h4>Work shifts yourself</h4><p>Switch to your worker view to see your own shifts, clock in and out, ask for time off and see your pay. No invite needed.</p>
+        <div className="actions"><button className="btn small primary" onClick={goWorker}>⇄ Switch to worker view</button></div></div>
       <div className="sec"><h4>Your business</h4><p>{locs} location{locs === 1 ? '' : 's'} · {workers} worker{workers === 1 ? '' : 's'} · since {new Date(b.org.created_at).toLocaleDateString()}</p></div>
       <div className="sec"><h4>Change password</h4><div className="field"><label htmlFor="ac-pass">New password</label><input type="password" id="ac-pass" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></div>
         <div style={{ marginTop: 8 }}><button className="btn small" onClick={changePw}>Save new password</button></div></div>
