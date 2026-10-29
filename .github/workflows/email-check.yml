@@ -1,0 +1,44 @@
+# Checks why emails aren't arriving: the mailbox login, Supabase's email settings and recent email errors.
+# Run it from GitHub → Actions → "Check email" → Run workflow. Results show as notes on the run.
+name: Check email
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}
+      SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.hostinger.com' }}
+    steps:
+      - name: Mailbox login and test email to support@
+        run: |
+          if [ -z "$SMTP_PASSWORD" ]; then echo "::error::SMTP_PASSWORD secret is empty."; exit 0; fi
+          printf 'From: SplitYourShift <%s>\r\nTo: support@splityourshift.com\r\nSubject: SplitYourShift email test\r\n\r\nIf you can read this, the no-reply mailbox can send email.\r\n' "$SMTP_USER" > msg.txt
+          if curl -sS --max-time 30 --url "smtps://$SMTP_HOST:465" --user "$SMTP_USER:$SMTP_PASSWORD" \
+               --mail-from "$SMTP_USER" --mail-rcpt support@splityourshift.com --upload-file msg.txt 2> err.txt; then
+            echo "::notice::Mailbox login OK: $SMTP_USER signed in to $SMTP_HOST and sent a test email to support@splityourshift.com."
+          else
+            echo "::error::Mailbox login FAILED for $SMTP_USER on $SMTP_HOST: $(tr '\n' ' ' < err.txt)"
+          fi
+      - name: Supabase email settings
+        run: |
+          curl -sS "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" > auth.json
+          echo "::notice::Supabase settings: $(jq -c '{site_url, uri_allow_list, smtp_host, smtp_port, smtp_user, smtp_admin_email, smtp_sender_name, smtp_pass_set: (.smtp_pass != null and .smtp_pass != ""), rate_limit_email_sent, mailer_autoconfirm, invite_subject: .mailer_subjects_invite}' auth.json)"
+      - name: Recent email errors in Supabase
+        run: |
+          sql="select timestamp, event_message from auth_logs where regexp_contains(lower(event_message), 'mail|smtp|rate limit') order by timestamp desc limit 8"
+          end=$(date -u +%Y-%m-%dT%H:%M:%SZ); start=$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)
+          curl -sS -G "https://api.supabase.com/v1/projects/$PROJECT_REF/analytics/endpoints/logs.all" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "sql=$sql" \
+            --data-urlencode "iso_timestamp_start=$start" --data-urlencode "iso_timestamp_end=$end" > logs.json
+          n=$(jq '.result | length // 0' logs.json 2>/dev/null || echo 0)
+          echo "::notice::Email log lines in the last 24 hours: $n"
+          jq -r '.result[]? | .event_message' logs.json | head -8 | while read -r line; do
+            echo "::warning::$(echo "$line" | jq -r '[.level, .msg, .error, .mail_to // empty] | map(select(. != null)) | join(" | ")' 2>/dev/null || echo "$line" | head -c 300)"
+          done
+          jq -r '.error? // empty' logs.json | head -c 300
