@@ -21,7 +21,9 @@ export function SiteNav() {
   );
 }
 
-const chip = (name: string, hue: number) => <div className="chip" style={{ ['--h' as string]: hue }}>{name}</div>;
+const chip = (name: string, hue: number, dbl = false) => (
+  <div className="chip" style={{ ['--h' as string]: hue }}>{name}{dbl && <span className="flag" title="Double shift: two shifts back to back">2×</span>}</div>);
+const T = 245, K = 330, S = 90, D = 15, C = 160;
 
 export default function Home() {
   return (
@@ -37,13 +39,14 @@ export default function Home() {
         </div>
         <div className="mock" aria-label="Example schedule">
           <div className="mock-head"><b>Sunrise Inn</b><span className="ltype">Hotel</span><span className="tag plain">Example week</span></div>
+          <p className="mock-key"><span className="flag">2×</span> double shift: the same person works two shifts back to back</p>
           <div className="tablewrap"><table><thead><tr><th className="sh" /><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th></tr></thead><tbody>
-            <tr><th className="sh">7–3</th><td>{chip('Maria', 12)}</td><td>{chip('Priya', 275)}</td><td>{chip('Priya', 275)}</td><td>{chip('Priya', 275)}</td></tr>
-            <tr><th className="sh">3–11</th><td>{chip('James', 205)}</td><td>{chip('Maria', 12)}</td><td>{chip('Maria', 12)}</td><td className="drop" /></tr>
-            <tr><th className="sh">11–7</th><td>{chip('Tom', 145)}</td><td>{chip('Aisha', 38)}</td><td>{chip('Carlos', 180)}</td><td>{chip('Aisha', 38)}</td></tr>
+            <tr><th className="sh">7–3</th><td>{chip('Tiffany', T)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Tammy K.', K)}</td><td>{chip('Shea', S, true)}</td></tr>
+            <tr><th className="sh">3–11</th><td>{chip('Dibbo', D, true)}</td><td>{chip('Dibbo', D)}</td><td>{chip('Corey', C, true)}</td><td>{chip('Shea', S, true)}</td></tr>
+            <tr><th className="sh">11–7</th><td>{chip('Dibbo', D, true)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Corey', C, true)}</td><td className="drop" /></tr>
           </tbody></table></div>
-          <div className="floating f1">James → Thu 3–11<small>James already has 5 of 5 shifts this week.</small></div>
-          <div className="floating f2">Traded<small>Carlos ↔ James, both stay at 5</small></div>
+          <div className="floating f1">Corey → Thu 11–7<small>Corey already has 5 of 5 shifts this week.</small></div>
+          <div className="floating f2">Traded<small>Tiffany ↔ Corey, both stay at 5</small></div>
         </div>
       </div></section>
 
@@ -61,13 +64,13 @@ export default function Home() {
         <p className="sub">Everything an owner needs to run 24-hour shifts, and nothing a 10-person team won't use.</p>
         <div className="feats">
           <div className="feat"><h3>Drag-and-drop week</h3><p>One grid per location. Shifts down the side, days across, same as your paper sheet. Works on a phone too.</p></div>
-          <div className="feat"><h3>Shift limits that hold</h3><p>Set each worker's weekly maximum. Trying to add one more shows an error instead of an overtime surprise.</p><div className="eg">James: 5/5 shifts. Can't add Thu 3–11.</div></div>
-          <div className="feat"><h3>Swap in two clicks</h3><p>Pick who takes the shift and see their week. Tap the shift to trade back and both schedules update.</p><div className="eg">Carlos Wed 11–7 ↔ James Thu 3–11</div></div>
-          <div className="feat"><h3>Shifts owed</h3><p>If someone covers without a trade, SplitYourShift remembers it and suggests the payback next week.</p><div className="eg">Carlos owes James 1 shift</div></div>
+          <div className="feat"><h3>Shift limits that hold</h3><p>Set each worker's weekly maximum. Trying to add one more shows an error instead of an overtime surprise.</p><div className="eg">Corey: 5/5 shifts. Can't add Thu 11–7.</div></div>
+          <div className="feat"><h3>Swap in two clicks</h3><p>Pick who takes the shift and see their week. Tap the shift to trade back and both schedules update.</p><div className="eg">Tiffany Tue 11–7 ↔ Corey Wed 11–7</div></div>
+          <div className="feat"><h3>Shifts owed</h3><p>If someone covers without a trade, SplitYourShift remembers it and suggests the payback next week.</p><div className="eg">Shea owes Dibbo 1 shift</div></div>
           <div className="feat"><h3>Time-off requests</h3><p>Workers ask from their phone. You approve and go straight to finding cover, or deny. They can cancel while it's pending.</p></div>
           <div className="feat"><h3>Your team sees their shifts</h3><p>Each worker gets their own login with their shifts, hours and estimated pay. They can look but can't change anything.</p></div>
-          <div className="feat"><h3>Pay worked out</h3><p>Set each person's hourly rate and pick weekly or every-2-weeks pay. See everyone's hours, overtime and gross pay, including extra shifts they covered.</p><div className="eg">James · 80 h × $15.50 = $1,240.00</div></div>
-          <div className="feat"><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Priya: 6 am – 4 pm only</div></div>
+          <div className="feat"><h3>Pay worked out</h3><p>Set each person's hourly rate and pick weekly or every-2-weeks pay. See everyone's hours, overtime and gross pay, including extra shifts they covered.</p><div className="eg">Tiffany · 80 h × $15.50 = $1,240.00</div></div>
+          <div className="feat"><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Tammy K.: 6 am – 4 pm only</div></div>
         </div>
       </div></section>
 

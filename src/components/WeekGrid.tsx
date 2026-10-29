@@ -93,6 +93,12 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
           </section>
         );
       })}
+      <p className="grid-key">
+        <span><span className="flag">2×</span> double shift (back to back)</span>
+        <span><span className="flag on">● on</span> on the clock now</span>
+        <span><span className="flag ok">✓</span> clocked in and out</span>
+        <span><span className="flag">off?</span> asked for this shift off</span>
+      </p>
     </>
   );
 }
