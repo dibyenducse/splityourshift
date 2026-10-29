@@ -43,13 +43,13 @@ jobs:
             PRIV=$(echo "$KEYS" | jq -r .privateKey); PUB=$(echo "$KEYS" | jq -r .publicKey)
             echo "::add-mask::$PRIV"
             supabase secrets set VAPID_PUBLIC_KEY="$PUB" VAPID_PRIVATE_KEY="$PRIV" \
-              VAPID_SUBJECT="${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}" --project-ref "$PROJECT_REF"
+              VAPID_SUBJECT="${{ vars.SITE_URL || 'https://splityourshift.com/' }}" --project-ref "$PROJECT_REF"
           fi
       - name: Tell the functions where the site lives
-        run: supabase secrets set SITE_URL="${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}" --project-ref "$PROJECT_REF"
+        run: supabase secrets set SITE_URL="${{ vars.SITE_URL || 'https://splityourshift.com/' }}" --project-ref "$PROJECT_REF"
       - name: Login links, email sender and email templates
         env:
-          SITE: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+          SITE: ${{ vars.SITE_URL || 'https://splityourshift.com/' }}
           PAGES: ${{ format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}

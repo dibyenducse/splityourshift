@@ -138,9 +138,9 @@ select id from auth.users where email = 'আপনার@ইমেইল.com';
    | Secrets | `FTP_USERNAME` | FTP username |
    | Secrets | `FTP_PASSWORD` | FTP পাসওয়ার্ড |
    | Secrets | `SMTP_PASSWORD` | `no-reply@splityourshift.com`-এর পাসওয়ার্ড |
-   | Variables | `SITE_URL` | `https://splityourshift.com/` |
 
-6. GitHub → **Actions → Deploy to Hostinger → Run workflow** → সবুজ হলে https://splityourshift.com খুলুন।
+6. সহজ বিকল্প: FTP-র বদলে hPanel-এর **GitHub থেকে deploy** (Vite preset, branch main) ব্যবহার করলে FTP-র তিনটা secret লাগে না; শুধু সেখানে Environment variables-এ `VITE_SUPABASE_URL` আর `VITE_SUPABASE_ANON_KEY` দিন।
+   FTP ব্যবহার করলে: GitHub → **Actions → Deploy to Hostinger → Run workflow** → সবুজ হলে https://splityourshift.com খুলুন।
    (ফাইল `public_html`-এর বাইরে চলে গেলে Variables-এ `FTP_DIR` = `./` বসিয়ে আবার চালান।)
 7. GitHub → **Actions → Set up database → Run workflow**। এটা Supabase-এ নতুন ঠিকানা বসায়, আর সব ইমেইল (ইনভাইট, পাসওয়ার্ড রিসেট, সাইন-আপ কনফার্ম) `no-reply@splityourshift.com` থেকে পাঠানো শুরু করে। ইমেইলের নিচে লেখা থাকে: প্রশ্ন থাকলে `support@splityourshift.com`।
 
