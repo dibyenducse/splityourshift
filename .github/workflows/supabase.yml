@@ -55,30 +55,32 @@ jobs:
           SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}
           SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.hostinger.com' }}
         run: |
+          patch() { # $1 = what, $2 = JSON body
+            code=$(curl -sS -o resp.json -w '%{http_code}' -X PATCH \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d "$2")
+            if [ "$code" -ge 300 ]; then echo "::error::$1: Supabase said $code $(head -c 400 resp.json)"; exit 1; fi
+            echo "$1: done"
+          }
           # Site URL + allowed redirect links, so invite and reset links open the right site.
-          body=$(jq -n --arg site "$SITE" --arg pages "$PAGES" \
+          patch "Login links" "$(jq -n --arg site "$SITE" --arg pages "$PAGES" \
+            '{site_url: $site, uri_allow_list: ([$site + "**", $pages + "**"] | unique | join(","))}')"
+          patch "Email templates" "$(jq -n \
             --rawfile invite supabase/templates/invite.html \
             --rawfile recovery supabase/templates/recovery.html \
             --rawfile confirm supabase/templates/confirmation.html '{
-              site_url: $site,
-              uri_allow_list: ([$site + "**", $pages + "**"] | unique | join(",")),
               mailer_subjects_invite: "You are invited to SplitYourShift",
               mailer_templates_invite_content: $invite,
               mailer_subjects_recovery: "Reset your SplitYourShift password",
               mailer_templates_recovery_content: $recovery,
               mailer_subjects_confirmation: "Confirm your SplitYourShift email",
               mailer_templates_confirmation_content: $confirm
-            }')
+            }')"
           # Send email from our own mailbox (e.g. Hostinger) instead of Supabase's limited test sender.
           if [ -n "$SMTP_PASSWORD" ]; then
-            body=$(echo "$body" | jq --arg host "$SMTP_HOST" --arg user "$SMTP_USER" --arg pass "$SMTP_PASSWORD" \
-              '. + {smtp_host: $host, smtp_port: "465", smtp_user: $user, smtp_pass: $pass,
-                    smtp_admin_email: $user, smtp_sender_name: "SplitYourShift", rate_limit_email_sent: 100}')
+            patch "Email sender" "$(jq -n --arg host "$SMTP_HOST" --arg user "$SMTP_USER" --arg pass "$SMTP_PASSWORD" \
+              '{smtp_host: $host, smtp_port: "465", smtp_user: $user, smtp_pass: $pass,
+                    smtp_admin_email: $user, smtp_sender_name: "SplitYourShift", rate_limit_email_sent: 100}')"
           else
             echo "::warning::SMTP_PASSWORD secret not set: emails still go through Supabase's limited sender."
           fi
-          code=$(curl -sS -o resp.json -w '%{http_code}' -X PATCH \
-            "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
-            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d "$body")
-          if [ "$code" -ge 300 ]; then echo "::error::Supabase said $code"; jq -r '.message // .' resp.json; exit 1; fi
-          jq '{site_url, uri_allow_list, smtp_host, smtp_user, rate_limit_email_sent}' resp.json
