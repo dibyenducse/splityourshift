@@ -44,7 +44,8 @@ export function availFor(b: Bundle, e: Emp, k: string) {
 }
 
 /** Checks a set of cell changes. Errors block the change; warnings are shown but allowed. Mirrors apply_changes() in the database. */
-export function evaluate(b: Bundle, changes: Changes): Result {
+/** `allowOver`: emergency cover or trade — going over the weekly limit is a warning (an extra shift), not an error. */
+export function evaluate(b: Bundle, changes: Changes, opts: { allowOver?: boolean } = {}): Result {
   const next = { ...b.assign };
   for (const k in changes) { const v = changes[k]; if (v) next[k] = v; else delete next[k]; }
   const errors: Issue[] = [], warnings: Issue[] = [];
@@ -53,7 +54,8 @@ export function evaluate(b: Bundle, changes: Changes): Result {
     const mine = keysOf(b, id, next), before = keysOf(b, id);
     for (const wk of new Set(mine.map((k) => mondayOf(parseCell(k).date)))) {
       const n = mine.filter((k) => inWeek(k, wk)).length, was = before.filter((k) => inWeek(k, wk)).length;
-      if (n > w.max_shifts && n > was) errors.push({ short: `At limit (${was}/${w.max_shifts})`, msg: `${w.name} already has ${was} of ${w.max_shifts} shifts that week. Remove one of their shifts or raise their limit in the profile.` });
+      if (n > w.max_shifts && n > was && opts.allowOver) warnings.push({ short: `Extra shift (${n}/${w.max_shifts})`, msg: `Extra shift: ${w.name} will work ${n} shifts that week (limit ${w.max_shifts}).` });
+      else if (n > w.max_shifts && n > was) errors.push({ short: `At limit (${was}/${w.max_shifts})`, msg: `${w.name} already has ${was} of ${w.max_shifts} shifts that week. Remove one of their shifts or raise their limit in the profile.` });
     }
     for (const k of Object.keys(changes).filter((x) => changes[x] === id)) {
       const s = absStart(b, k), e = absEnd(b, k), slot = slotOf(b, k)!;

@@ -67,9 +67,9 @@ export default function OwnerApp() {
   }, [orgId, reload]);
 
   // Apply schedule changes: check locally (instant), save through apply_changes (the database re-checks), roll back on error.
-  const commit = useCallback(async (changes: Changes, message: string, opts: { ledger?: Record<string, unknown>; settle?: string; skipUndo?: boolean; shakeKey?: string } = {}) => {
+  const commit = useCallback(async (changes: Changes, message: string, opts: { ledger?: Record<string, unknown>; settle?: string; skipUndo?: boolean; shakeKey?: string; allowOver?: boolean } = {}) => {
     if (!b) return false;
-    const r = evaluate(b, changes);
+    const r = evaluate(b, changes, { allowOver: opts.allowOver });
     if (r.errors.length) {
       toast(r.errors[0].msg, 'error', "Can't do that");
       if (opts.shakeKey) { const td = document.querySelector(`td[data-cell="${opts.shakeKey}"]`); td?.classList.remove('shake'); void (td as HTMLElement | null)?.offsetWidth; td?.classList.add('shake'); }
@@ -79,7 +79,7 @@ export default function OwnerApp() {
     for (const k in changes) inverse[k] = b.assign[k] ?? null;
     setB((prev) => { if (!prev) return prev; const a = { ...prev.assign }; for (const k in changes) { const v = changes[k]; if (v) a[k] = v; else delete a[k]; } return { ...prev, assign: a }; });
     try {
-      await applyChanges(orgId, changes);
+      await applyChanges(orgId, changes, opts.allowOver);
       let ledgerId: string | undefined;
       if (opts.ledger) { const { data } = await supabase.from('ledger').insert(opts.ledger).select('id').single(); ledgerId = data?.id; }
       if (opts.settle) await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', opts.settle);
@@ -200,7 +200,7 @@ export default function OwnerApp() {
         </section>
         <section className="panel">
           <div className="panel-head"><h2>Shifts owed</h2></div>
-          <p className="hint">When someone covers without trading back, it is kept here so it can be paid back later.</p>
+          <p className="hint">When someone covers in an emergency, it stays here until it's paid back, in any later week. Tap Pay back when you plan that week.</p>
           <div className="stack">{openOwed.length ? openOwed.map((l) => (
             <div key={l.id} className="item"><div><b>{empOf(b, l.debtor_id)?.name ?? '?'}</b> owes <b>{empOf(b, l.creditor_id)?.name ?? '?'}</b> 1 shift</div>
               <small>{empOf(b, l.creditor_id)?.name} covered {l.label}</small>
@@ -282,7 +282,7 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
 
 function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker }: {
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
-  commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string }) => Promise<boolean>;
+  commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string; allowOver?: boolean }) => Promise<boolean>;
   reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void; goWorker: () => void;
 }) {
   const toast = useToast();
@@ -291,9 +291,10 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     const dow = DAY_LONG[(new Date(date + 'T00:00:00Z').getUTCDay() + 6) % 7];
     return (<div className="slotcard">{w ? <div className="chip" style={{ ['--h' as string]: w.hue }}>{w.name}</div> : <span className="tag bad">Open</span>}
       <div className="info"><b>{locName(b, sl.location_id)} · {shiftShort(sl.start_hour, sl.hours)}</b><span>{dow} {date.slice(5).replace('-', '/')} · {shiftLong(sl.start_hour, sl.hours)}</span></div></div>); };
+  // Every upcoming shift of `other` that is loaded (about five weeks ahead); emergencies may go over the weekly limit.
   const tradeOptions = (k: string, other: string) => {
-    const orig = b.assign[k]; const from = week, until = addDays(week, 21);
-    return keysOf(b, other).filter((o) => o !== k && parseCell(o).date >= from && parseCell(o).date < until).map((o) => ({ o, r: evaluate(b, { [k]: other, [o]: orig }) }));
+    const orig = b.assign[k];
+    return keysOf(b, other).filter((o) => o !== k && parseCell(o).date >= todayIso()).map((o) => ({ o, r: evaluate(b, { [k]: other, [o]: orig }, { allowOver: true }) }));
   };
 
   if (s.type === 'notes') return <NotesSheet notes={notes} onClose={close} reload={reloadNotes} render={(n) => {
@@ -308,7 +309,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'shift') {
     if (!valid(b, s.key)) return null;
     const w = empOf(b, b.assign[s.key]);
-    const rows = w ? [] : b.emps.map((x) => ({ x, r: evaluate(b, { [s.key]: x.id }), n: countWeek(b, x.id, week) }))
+    const rows = w ? [] : b.emps.map((x) => ({ x, r: evaluate(b, { [s.key]: x.id }, { allowOver: true }), n: countWeek(b, x.id, week) }))
       .sort((p, q) => (p.r.errors.length - q.r.errors.length) || (p.r.warnings.length - q.r.warnings.length) || (p.n - q.n) || p.x.name.localeCompare(q.x.name));
     return (
       <Sheet eyebrow="Shift" title={w ? w.name : 'Open shift'} onClose={close}>
@@ -318,7 +319,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
             <button className="btn" onClick={() => set({ type: 'profile', id: w.id })}>{w.name}'s profile</button>
             <button className="btn danger" onClick={() => commit({ [s.key]: null }, `${w.name} removed from ${slotLabel(b, s.key)}. The shift is open.`)}>Leave shift open</button></div></div>
           : <div className="sec"><h4>Who can take it</h4><p>Best fits first: no conflicts, then fewest shifts this week.</p><div className="list">
-            {rows.length ? rows.map(({ x, r, n }) => <button key={x.id} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: x.id }, `${x.name} now works ${slotLabel(b, s.key)}.`)) close(); }}>
+            {rows.length ? rows.map(({ x, r, n }) => <button key={x.id} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: x.id }, `${x.name} now works ${slotLabel(b, s.key)}.`, { allowOver: true })) close(); }}>
               <span className="dot" style={{ ['--h' as string]: x.hue }} /><span className="main"><b>{x.name}</b><span>{n}/{x.max_shifts} shifts this week</span></span>{statusTag(r)}</button>) : <p className="empty-note">Add workers first.</p>}
           </div></div>}
       </Sheet>);
@@ -327,12 +328,12 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'swap') {
     const orig = b.assign[s.key], ow = empOf(b, orig);
     if (!ow) return null;
-    const rows = b.emps.filter((x) => x.id !== orig).map((x) => { const r = evaluate(b, { [s.key]: x.id }); return { x, r, t: tradeOptions(s.key, x.id).filter((o) => !o.r.errors.length).length, n: countWeek(b, x.id, week) }; })
+    const rows = b.emps.filter((x) => x.id !== orig).map((x) => { const r = evaluate(b, { [s.key]: x.id }, { allowOver: true }); return { x, r, t: tradeOptions(s.key, x.id).filter((o) => !o.r.errors.length).length, n: countWeek(b, x.id, week) }; })
       .sort((p, q) => (Number(!!q.t || !q.r.errors.length) - Number(!!p.t || !p.r.errors.length)) || (p.r.errors.length - q.r.errors.length) || p.x.name.localeCompare(q.x.name));
     return (
       <Sheet eyebrow="Swap or cover" title={`Replace ${ow.name}`} onClose={close}>
         {slotCard(s.key)}
-        <div className="sec"><h4>Who will take {ow.name}'s shift?</h4><p>"Can cover" means they can take it as an extra shift. The trade count is how many of their shifts {ow.name} could work in return.</p>
+        <div className="sec"><h4>Who will take {ow.name}'s shift?</h4><p>"Can cover" means they can take it now, even as an extra shift over their weekly limit; {ow.name} pays it back later. The trade count is how many of their shifts {ow.name} could work in return right away.</p>
           <div className="list">{rows.map(({ x, r, t, n }) => { const can = !r.errors.length; return (
             <button key={x.id} className="row" disabled={!can && !t} onClick={() => set({ type: 'swap-with', key: s.key, other: x.id })}>
               <span className="dot" style={{ ['--h' as string]: x.hue }} /><span className="main"><b>{x.name}</b><span>{n}/{x.max_shifts} this week · {t} shift{t === 1 ? '' : 's'} to trade</span></span>
@@ -343,28 +344,34 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'swap-with') {
     const orig = b.assign[s.key], ow = empOf(b, orig), xw = empOf(b, s.other);
     if (!ow || !xw) return null;
-    const cover = evaluate(b, { [s.key]: xw.id });
+    const cover = evaluate(b, { [s.key]: xw.id }, { allowOver: true });
     const opts = tradeOptions(s.key, xw.id);
     const bestTrade = cover.errors.length > 0;
     const sl = slotOf(b, s.key)!;
+    // If the coverer already owes this worker a shift, covering now pays that back instead of starting a new debt.
+    const evens = b.ledger.find((l) => l.status === 'open' && l.debtor_id === xw.id && l.creditor_id === ow.id);
+    const extra = cover.warnings.some((w) => w.short.startsWith('Extra shift'));
     return (
       <Sheet eyebrow={`Replace ${ow.name}`} title={`With ${xw.name}`} onClose={close}>
         {slotCard(s.key)}
-        <div className={`option${bestTrade ? '' : ' best'}`}><h4>{xw.name} covers, {ow.name} pays back later</h4>
-          <p>{xw.name} takes this as an extra shift. It is recorded as "{ow.name} owes {xw.name} 1 shift" so you can pay it back next week.</p>
+        <div className={`option${bestTrade ? '' : ' best'}`}><h4>{xw.name} covers now{evens ? `, and they're even` : `, ${ow.name} pays back later`}</h4>
+          <p>{evens ? `${xw.name} owed ${ow.name} a shift (${evens.label}). Covering this one pays it back.`
+            : <>{xw.name} takes this shift{extra ? ' as an extra shift' : ''}. It goes on the <b>Shifts owed</b> list as "{ow.name} owes {xw.name} 1 shift". You don't have to decide the payback now: when you plan a later week, tap <b>Pay back</b> and pick any of {xw.name}'s shifts for {ow.name} to work.</>}</p>
           {cover.errors.length ? <div className="reason bad">{cover.errors[0].msg}</div> : cover.warnings.map((w) => <div key={w.msg} className="reason warn">{w.msg}</div>)}
           <div><button className={`btn${bestTrade ? '' : ' primary'}`} disabled={cover.errors.length > 0} onClick={async () => {
-            const ok = await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${ow.name} owes ${xw.name} 1 shift.`,
-              { ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) } });
+            const ok = evens
+              ? await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${xw.name} and ${ow.name} are even now.`, { settle: evens.id, allowOver: true })
+              : await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${ow.name} owes ${xw.name} 1 shift.`,
+                { ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) }, allowOver: true });
             if (ok) close();
-          }}>{xw.name} covers this shift</button></div></div>
-        <div className={`option${bestTrade ? ' best' : ''}`}><h4>Trade: {ow.name} takes one of {xw.name}'s shifts</h4>
-          <p>Pick the shift {ow.name} will work instead. Both keep the same number of shifts.</p>
+          }}>{xw.name} covers this shift{extra ? ' (extra shift)' : ''}</button></div></div>
+        <div className={`option${bestTrade ? ' best' : ''}`}><h4>Or trade right away: {ow.name} takes one of {xw.name}'s shifts</h4>
+          <p>Pick the shift {ow.name} will work instead. Both keep the same number of shifts. Later weeks show up here once they're scheduled.</p>
           <div className="list">{opts.length ? opts.map(({ o, r }) => (
-            <button key={o} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: xw.id, [o]: ow.id }, `Traded. ${xw.name} works ${slotLabel(b, s.key)} and ${ow.name} works ${slotLabel(b, o)}.`)) close(); }}>
+            <button key={o} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: xw.id, [o]: ow.id }, `Traded. ${xw.name} works ${slotLabel(b, s.key)} and ${ow.name} works ${slotLabel(b, o)}.`, { allowOver: true })) close(); }}>
               <span className="main"><b>{slotLabel(b, o)}</b><span className={r.errors.length ? 'reason bad' : r.warnings.length ? 'reason warn' : ''}>{r.errors[0]?.msg ?? r.warnings[0]?.msg ?? `${ow.name} works this, ${xw.name} gets ${slotLabel(b, s.key)}`}</span></span>
               {r.errors.length ? <span className="tag bad">No</span> : <span className={`tag ${r.warnings.length ? 'warn' : 'ok'}`}>Trade</span>}</button>))
-            : <p className="empty-note">{xw.name} has no shifts in the next three weeks.</p>}</div></div>
+            : <p className="empty-note">{xw.name} has no upcoming shifts scheduled yet. Use "covers now" above and pay it back later.</p>}</div></div>
         <div><button className="btn" onClick={() => set({ type: 'swap', key: s.key })}>‹ Pick someone else</button></div>
       </Sheet>);
   }
@@ -372,12 +379,12 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'payback') {
     const l = b.ledger.find((x) => x.id === s.id); if (!l) return null;
     const d = empOf(b, l.debtor_id), c = empOf(b, l.creditor_id); if (!d || !c) return null;
-    const opts = keysOf(b, c.id).filter((k) => parseCell(k).date > l.work_date).map((k) => ({ k, r: evaluate(b, { [k]: d.id }) }));
+    const opts = keysOf(b, c.id).filter((k) => parseCell(k).date > l.work_date && parseCell(k).date >= todayIso()).map((k) => ({ k, r: evaluate(b, { [k]: d.id }, { allowOver: true }) }));
     return (
       <Sheet eyebrow="Pay back" title={`${d.name} owes ${c.name}`} onClose={close}>
-        <div className="sec"><p>{c.name} covered {d.name}'s {l.label}. Pick one of {c.name}'s upcoming shifts for {d.name} to work. If next week isn't scheduled yet, go to that week and copy last week first.</p></div>
+        <div className="sec"><p>{c.name} covered {d.name}'s {l.label}. Pick one of {c.name}'s upcoming shifts for {d.name} to work, in any week. Not scheduled yet? It stays on <b>Shifts owed</b> until you plan that week; come back then. If {d.name} later covers one of {c.name}'s shifts, that also settles it automatically.</p></div>
         <div className="list">{opts.length ? opts.map(({ k, r }) => (
-          <button key={k} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [k]: d.id }, `${d.name} works ${slotLabel(b, k)} for ${c.name}. They're even.`, { settle: l.id })) close(); }}>
+          <button key={k} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [k]: d.id }, `${d.name} works ${slotLabel(b, k)} for ${c.name}. They're even.`, { settle: l.id, allowOver: true })) close(); }}>
             <span className="main"><b>{slotLabel(b, k)}</b><span className={r.errors.length ? 'reason bad' : r.warnings.length ? 'reason warn' : ''}>{r.errors[0]?.msg ?? r.warnings[0]?.msg ?? `${d.name} works it, ${c.name} gets the shift off`}</span></span>{statusTag(r)}</button>))
           : <p className="empty-note">{c.name} has no upcoming shifts after that date.</p>}</div>
         <div className="actions"><button className="btn" onClick={async () => { await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', l.id); await reload(); close(); toast('Marked as settled.', 'ok', 'Done'); }}>Mark settled without a shift</button></div>

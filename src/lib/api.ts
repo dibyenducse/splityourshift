@@ -77,9 +77,9 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
   return { org, locs, slots, emps, assign, reqs, ledger, entries, fixes };
 }
 
-export async function applyChanges(orgId: string, changes: Changes) {
+export async function applyChanges(orgId: string, changes: Changes, allowOver = false) {
   const p_changes = Object.entries(changes).map(([k, v]) => { const [slot_id, work_date] = k.split('|'); return { slot_id, work_date, employee_id: v }; });
-  const { error } = await supabase.rpc('apply_changes', { p_org: orgId, p_changes });
+  const { error } = await supabase.rpc('apply_changes', { p_org: orgId, p_changes, p_allow_over: allowOver });
   if (error) throw error;
 }
 
