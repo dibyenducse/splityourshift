@@ -55,8 +55,10 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
       if (e1) throw e1;
       const { error: e2 } = await supabase.from('shift_slots').insert(rows.map((r, i) => ({ org_id: org, location_id: loc.id, start_hour: r.start_hour, hours: r.hours, sort: i })));
       if (e2) throw e2;
-      if (also.length) await supabase.from('employee_locations').insert(also.map((employee_id) => ({ employee_id, location_id: loc.id })));
-      const filled = people.filter((x) => x.name.trim());
+      // The owner's own worker profile is linked to new locations by the database already.
+      if (also.length) await supabase.from('employee_locations').upsert(also.map((employee_id) => ({ employee_id, location_id: loc.id })), { onConflict: 'employee_id,location_id', ignoreDuplicates: true });
+      // The owner is on the staff list automatically; skip a row with their own email.
+      const filled = people.filter((x) => x.name.trim() && x.contact.trim().toLowerCase() !== me.email.toLowerCase());
       if (filled.length) {
         const rowsIn = filled.map((x, i) => {
           const contact = x.contact.trim(), isEmail = /@/.test(contact);
@@ -105,7 +107,7 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     <div className="wiz-foot">{back}<button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button></div>
   </>);
   else body = (<>
-    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password; they don't sign up themselves. Leave a row empty to skip it.</p>
+    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password; they don't sign up themselves. Leave a row empty to skip it.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
     {existing.length > 0 && <fieldset className="field"><legend>Workers you already have who also work at {locName}</legend><div className="checks">
       {existing.map((w) => <label key={w.id}><input type="checkbox" checked={also.includes(w.id)} onChange={(e) => setAlso(e.target.checked ? [...also, w.id] : also.filter((x) => x !== w.id))} /> {w.name}</label>)}</div></fieldset>}
     <div className="stack">

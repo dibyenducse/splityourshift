@@ -19,7 +19,7 @@ import WorkerApp from './Worker';
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'account' } | { type: 'whoami' } | null;
+  | { type: 'notes' } | { type: 'account' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.errors[0].short}</span>
@@ -47,14 +47,11 @@ export default function OwnerApp() {
   }, [orgId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
 
-  /** Opens the worker view, first linking or creating the owner's worker profile. */
-  const goWorker = async (empId?: string) => {
+  /** Opens the owner's own worker view. Every owner has a worker profile (made with the business); this re-creates it if it was deleted. */
+  const goWorker = async () => {
     setSheet(null);
-    if (me!.empId && !empId) return setAsWorker(true);
-    const free = b?.emps.filter((e) => !e.user_id) ?? [];
-    const byEmail = free.some((e) => e.email && e.email.toLowerCase() === me!.email.toLowerCase());
-    if (!empId && !byEmail && free.length) return setSheet({ type: 'whoami' });
-    try { await myWorkerProfile(orgId, empId); await refresh(); setAsWorker(true); }
+    if (me!.empId) return setAsWorker(true);
+    try { await myWorkerProfile(orgId); await refresh(); setAsWorker(true); }
     catch (e) { toast(errText(e), 'error', "Couldn't switch"); }
   };
   useEffect(() => {
@@ -234,17 +231,7 @@ export default function OwnerApp() {
           <button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button></>} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
-      {sheet?.type === 'whoami' && <Sheet eyebrow="Worker view" title="Do you work shifts too?" onClose={() => setSheet(null)}>
-        <p>Your worker view shows your shifts and lets you clock in and out, ask for time off and see your pay. Your hours count in payroll like everyone else's.</p>
-        <div className="sec"><h4>Are you already on your staff list?</h4><p>Pick yourself so your shifts stay with you.</p><div className="list">
-          {b.emps.filter((e) => !e.user_id).map((e) => <button key={e.id} className="row" onClick={() => goWorker(e.id)}>
-            <span className="dot" style={{ ['--h' as string]: e.hue }} /><span className="main"><b>{e.name}</b><span>{e.email || e.phone || 'No login yet'}</span></span><span className="tag plain">That's me</span></button>)}
-        </div></div>
-        <div className="sec"><h4>Not on the list?</h4><div className="actions">
-          <button className="btn primary" onClick={async () => { try { await myWorkerProfile(orgId); await refresh(); setSheet(null); setAsWorker(true); } catch (e) { toast(errText(e), 'error', "Couldn't switch"); } }}>
-            Create my worker profile ({b.org.owner_name || me!.email})</button></div></div>
-      </Sheet>}
-      {sheet && sheet.type !== 'whoami' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
+      {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
   );
 }
@@ -416,8 +403,9 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
 
 function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void>; onPreview: () => void }) {
   const toast = useToast();
-  const { me } = useAuth();
+  const { me, refresh } = useAuth();
   const w = empOf(b, id);
+  const others = b.emps.filter((x) => !x.user_id);
   const [f, setF] = useState(() => ({ name: w?.name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
   const [busy, setBusy] = useState(false);
   const dirty = useMemo(() => w && (f.name !== w.name || f.email !== (w.email ?? '') || f.phone !== (w.phone ?? '') || f.max !== w.max_shifts || f.rate !== w.rate), [f, w]);
@@ -464,7 +452,12 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
       <div className="actions"><button className="btn primary" disabled={!dirty || busy} onClick={save}>Save changes</button></div>
       <fieldset className="field"><legend>Works at</legend><div className="checks">
         {b.locs.map((l) => <label key={l.id}><input type="checkbox" checked={w.locs.includes(l.id)} onChange={(e) => toggleLoc(l.id, e.target.checked)} /> {l.name}</label>)}</div></fieldset>
-      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap <b>⇄ Worker view</b> at the top to clock in and out.</p></div> : <>
+      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap <b>⇄ Worker view</b> at the top to clock in and out.</p>
+        {others.length > 0 && <details><summary>Already on the list under another name?</summary>
+          <p>Pick that worker and your worker view will use it (with its shifts) instead of this one.</p>
+          <div className="actions">{others.map((x) => <button key={x.id} className="btn small" disabled={busy} onClick={async () => {
+            setBusy(true); try { await myWorkerProfile(b.org.id, x.id); await refresh(); toast(`Your worker view now uses ${x.name}. You can delete ${w.name} if you don't need it.`, 'ok', 'Linked'); onClose(); reload(); } catch (e) { toast(errText(e), 'error', "Couldn't link"); } setBusy(false);
+          }}>That's me: {x.name}</button>)}</div></details>}</div> : <>
       <div className="sec"><h4>Login <StatusTag s={w.status} /></h4>
         <p>{w.status === 'active' ? `${w.name} logs in with their email${w.phone ? ' or phone' : ''} and their own password.`
           : w.status === 'invited' ? `Invite sent ${w.invited_at ? ago(w.invited_at) : ''}. The link works for 24 hours.`

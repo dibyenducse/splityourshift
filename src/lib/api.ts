@@ -15,7 +15,7 @@ export async function whoAmI(): Promise<Me | null> {
   const { data: org } = await supabase.from('organizations').select('id').eq('owner_id', user.id).order('created_at').limit(1).maybeSingle();
   if (org) {
     // An owner who also works shifts has a worker profile linked to their own login.
-    const { data: own } = await supabase.from('employees').select('id').eq('org_id', org.id).eq('user_id', user.id).maybeSingle();
+    const { data: own } = await supabase.from('employees').select('id').eq('org_id', org.id).eq('user_id', user.id).limit(1).maybeSingle();
     return { ...base, role: 'owner', orgId: org.id, empId: own?.id };
   }
   const { data: emp } = await supabase.from('employees').select('id, org_id').eq('user_id', user.id).order('created_at').limit(1).maybeSingle();
