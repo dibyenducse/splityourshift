@@ -124,22 +124,27 @@ select id from auth.users where email = 'আপনার@ইমেইল.com';
 
 ## Hostinger-এ splityourshift.com চালানো
 
-1. **hPanel → Websites → Add website** → `splityourshift.com` → **Empty website / Skip** (WordPress বা Builder নয়)।
-2. **hPanel → Security → SSL** → splityourshift.com-এর জন্য ফ্রি SSL **Install** (https চালু না হলে সাইট খুলবে না)।
-3. **hPanel → Files → FTP Accounts** → সেখানে লেখা **FTP IP/Hostname**, **FTP username** দেখুন; পাসওয়ার্ড জানা না থাকলে **Change password**।
-4. GitHub → Settings → Secrets and variables → Actions:
-   - **Secrets**: `FTP_SERVER` (FTP hostname/IP), `FTP_USERNAME`, `FTP_PASSWORD`
-   - **Variables**: `SITE_URL` = `https://splityourshift.com/`
-5. GitHub → **Actions → Deploy to Hostinger → Run workflow**। সবুজ হলে https://splityourshift.com খুলুন।
-   (FTP-তে ঢুকে ফাইল `public_html`-এর বাইরে চলে গেলে Variables-এ `FTP_DIR` = `./` বসিয়ে আবার চালান।)
-6. Supabase → **Authentication → URL Configuration**:
-   - Site URL: `https://splityourshift.com/`
-   - Redirect URLs-এ যোগ করুন: `https://splityourshift.com/**`
-7. GitHub → **Actions → Set up database → Run workflow** (ইনভাইট ইমেইলের লিংক নতুন ঠিকানায় যাবে)।
-8. **ইমেইল**: hPanel → Emails → `no-reply@splityourshift.com` বানান → Supabase → Authentication → Emails → SMTP:
-   Host `smtp.hostinger.com`, Port `465`, Username/ Sender = `no-reply@splityourshift.com`, Password = ওই ইমেইলের পাসওয়ার্ড।
+আপনাকে শুধু Hostinger থেকে তথ্য নিয়ে GitHub-এ বসাতে হবে। বাকি সব (ফাইল আপলোড, Supabase-এর লিংক, ইমেইল সেটিং, ইমেইলের ডিজাইন) GitHub নিজে করবে।
 
-এরপর থেকে কোড বদলালে সাইট নিজে থেকে Hostinger-এ আপডেট হবে।
+1. **hPanel → Websites → Add website** → `splityourshift.com` → **Empty website / Skip** (WordPress বা Builder নয়)।
+2. **hPanel → Security → SSL** → splityourshift.com-এর জন্য ফ্রি SSL **Install**।
+3. **hPanel → Files → FTP Accounts** → **FTP IP/Hostname** আর **FTP username** দেখুন; পাসওয়ার্ড না জানলে **Change password**।
+4. **hPanel → Emails**: `no-reply@splityourshift.com` আর `support@splityourshift.com` আছে কিনা দেখুন। no-reply-এর পাসওয়ার্ড জানা না থাকলে Change password।
+5. GitHub → Settings → Secrets and variables → Actions:
+
+   | কোথায় | Name | Value |
+   |---|---|---|
+   | Secrets | `FTP_SERVER` | FTP IP/Hostname |
+   | Secrets | `FTP_USERNAME` | FTP username |
+   | Secrets | `FTP_PASSWORD` | FTP পাসওয়ার্ড |
+   | Secrets | `SMTP_PASSWORD` | `no-reply@splityourshift.com`-এর পাসওয়ার্ড |
+   | Variables | `SITE_URL` | `https://splityourshift.com/` |
+
+6. GitHub → **Actions → Deploy to Hostinger → Run workflow** → সবুজ হলে https://splityourshift.com খুলুন।
+   (ফাইল `public_html`-এর বাইরে চলে গেলে Variables-এ `FTP_DIR` = `./` বসিয়ে আবার চালান।)
+7. GitHub → **Actions → Set up database → Run workflow**। এটা Supabase-এ নতুন ঠিকানা বসায়, আর সব ইমেইল (ইনভাইট, পাসওয়ার্ড রিসেট, সাইন-আপ কনফার্ম) `no-reply@splityourshift.com` থেকে পাঠানো শুরু করে। ইমেইলের নিচে লেখা থাকে: প্রশ্ন থাকলে `support@splityourshift.com`।
+
+এরপর থেকে: কোড বদলে GitHub-এ গেলেই (main-এ push) সাইট নিজে থেকে Hostinger-এ আপডেট হয়, ২–৩ মিনিটে।
 
 ## নিজের ডোমেইন (ঐচ্ছিক)
 

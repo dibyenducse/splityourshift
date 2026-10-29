@@ -1,4 +1,4 @@
-# Sets up the Supabase backend: database tables + rules, and the two Edge Functions.
+# Sets up the Supabase backend: database tables + rules, Edge Functions, login links and email sending.
 # Run it from GitHub → Actions → "Set up database" → Run workflow (after adding the secrets in SETUP.md).
 name: Set up database
 
@@ -47,3 +47,38 @@ jobs:
           fi
       - name: Tell the functions where the site lives
         run: supabase secrets set SITE_URL="${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}" --project-ref "$PROJECT_REF"
+      - name: Login links, email sender and email templates
+        env:
+          SITE: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+          PAGES: ${{ format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}
+          SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.hostinger.com' }}
+        run: |
+          # Site URL + allowed redirect links, so invite and reset links open the right site.
+          body=$(jq -n --arg site "$SITE" --arg pages "$PAGES" \
+            --rawfile invite supabase/templates/invite.html \
+            --rawfile recovery supabase/templates/recovery.html \
+            --rawfile confirm supabase/templates/confirmation.html '{
+              site_url: $site,
+              uri_allow_list: ([$site + "**", $pages + "**"] | unique | join(",")),
+              mailer_subjects_invite: "You are invited to SplitYourShift",
+              mailer_templates_invite_content: $invite,
+              mailer_subjects_recovery: "Reset your SplitYourShift password",
+              mailer_templates_recovery_content: $recovery,
+              mailer_subjects_confirmation: "Confirm your SplitYourShift email",
+              mailer_templates_confirmation_content: $confirm
+            }')
+          # Send email from our own mailbox (e.g. Hostinger) instead of Supabase's limited test sender.
+          if [ -n "$SMTP_PASSWORD" ]; then
+            body=$(echo "$body" | jq --arg host "$SMTP_HOST" --arg user "$SMTP_USER" --arg pass "$SMTP_PASSWORD" \
+              '. + {smtp_host: $host, smtp_port: "465", smtp_user: $user, smtp_pass: $pass,
+                    smtp_admin_email: $user, smtp_sender_name: "SplitYourShift", rate_limit_email_sent: 100}')
+          else
+            echo "::warning::SMTP_PASSWORD secret not set: emails still go through Supabase's limited sender."
+          fi
+          code=$(curl -sS -o resp.json -w '%{http_code}' -X PATCH \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d "$body")
+          if [ "$code" -ge 300 ]; then echo "::error::Supabase said $code"; jq -r '.message // .' resp.json; exit 1; fi
+          jq '{site_url, uri_allow_list, smtp_host, smtp_user, rate_limit_email_sent}' resp.json
