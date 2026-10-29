@@ -55,7 +55,7 @@ export function evaluate(b: Bundle, changes: Changes, opts: { allowOver?: boolea
     for (const wk of new Set(mine.map((k) => mondayOf(parseCell(k).date)))) {
       const n = mine.filter((k) => inWeek(k, wk)).length, was = before.filter((k) => inWeek(k, wk)).length;
       if (n > w.max_shifts && n > was && opts.allowOver) warnings.push({ short: `Extra shift (${n}/${w.max_shifts})`, msg: `Extra shift: ${w.name} will work ${n} shifts that week (limit ${w.max_shifts}).` });
-      else if (n > w.max_shifts && n > was) errors.push({ short: `At limit (${was}/${w.max_shifts})`, msg: `${w.name} already has ${was} of ${w.max_shifts} shifts that week. Remove one of their shifts or raise their limit in the profile.` });
+      else if (n > w.max_shifts && n > was) errors.push({ short: `At limit (${was}/${w.max_shifts})`, msg: `${w.name} already has ${was} of ${w.max_shifts} shifts that week. For an emergency, tap the shift and use Swap or find cover: they can take it as an extra shift.` });
     }
     for (const k of Object.keys(changes).filter((x) => changes[x] === id)) {
       const s = absStart(b, k), e = absEnd(b, k), slot = slotOf(b, k)!;

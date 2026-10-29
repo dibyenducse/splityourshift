@@ -365,6 +365,11 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
                 { ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) }, allowOver: true });
             if (ok) close();
           }}>{xw.name} covers this shift{extra ? ' (extra shift)' : ''}</button></div></div>
+        {!evens && <div className="option"><h4>Or {ow.name} gives it away: nothing owed</h4>
+          <p>{xw.name} keeps this shift for good and is paid for it{extra ? ' as an extra shift' : ''}. {ow.name} doesn't owe anything and works one shift less.</p>
+          <div><button className="btn" disabled={cover.errors.length > 0} onClick={async () => {
+            if (await commit({ [s.key]: xw.id }, `${xw.name} takes ${slotLabel(b, s.key)} for good. Nothing owed.`, { allowOver: true })) close();
+          }}>{xw.name} takes it, no payback</button></div></div>}
         <div className={`option${bestTrade ? ' best' : ''}`}><h4>Or trade right away: {ow.name} takes one of {xw.name}'s shifts</h4>
           <p>Pick the shift {ow.name} will work instead. Both keep the same number of shifts. Later weeks show up here once they're scheduled.</p>
           <div className="list">{opts.length ? opts.map(({ o, r }) => (
