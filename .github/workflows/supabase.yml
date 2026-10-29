@@ -65,22 +65,23 @@ jobs:
           # Site URL + allowed redirect links, so invite and reset links open the right site.
           patch "Login links" "$(jq -n --arg site "$SITE" --arg pages "$PAGES" \
             '{site_url: $site, uri_allow_list: ([$site + "**", $pages + "**"] | unique | join(","))}')"
-          patch "Email templates" "$(jq -n \
-            --rawfile invite supabase/templates/invite.html \
-            --rawfile recovery supabase/templates/recovery.html \
-            --rawfile confirm supabase/templates/confirmation.html '{
-              mailer_subjects_invite: "You are invited to SplitYourShift",
-              mailer_templates_invite_content: $invite,
-              mailer_subjects_recovery: "Reset your SplitYourShift password",
-              mailer_templates_recovery_content: $recovery,
-              mailer_subjects_confirmation: "Confirm your SplitYourShift email",
-              mailer_templates_confirmation_content: $confirm
-            }')"
           # Send email from our own mailbox (e.g. Hostinger) instead of Supabase's limited test sender.
           if [ -n "$SMTP_PASSWORD" ]; then
             patch "Email sender" "$(jq -n --arg host "$SMTP_HOST" --arg user "$SMTP_USER" --arg pass "$SMTP_PASSWORD" \
               '{smtp_host: $host, smtp_port: "465", smtp_user: $user, smtp_pass: $pass,
                     smtp_admin_email: $user, smtp_sender_name: "SplitYourShift", rate_limit_email_sent: 100}')"
+            # Supabase only allows custom email designs once our own sender is set.
+            patch "Email templates" "$(jq -n \
+              --rawfile invite supabase/templates/invite.html \
+              --rawfile recovery supabase/templates/recovery.html \
+              --rawfile confirm supabase/templates/confirmation.html '{
+                mailer_subjects_invite: "You are invited to SplitYourShift",
+                mailer_templates_invite_content: $invite,
+                mailer_subjects_recovery: "Reset your SplitYourShift password",
+                mailer_templates_recovery_content: $recovery,
+                mailer_subjects_confirmation: "Confirm your SplitYourShift email",
+                mailer_templates_confirmation_content: $confirm
+              }')"
           else
             echo "::warning::SMTP_PASSWORD secret not set: emails still go through Supabase's limited sender."
           fi
