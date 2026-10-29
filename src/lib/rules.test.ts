@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellKey, evaluate, payFor, periodOf, defAvail, coverage } from './rules';
+import { cellKey, evaluate, payFor, periodOf, paidPeriod, defAvail, coverage } from './rules';
 import type { Bundle, Emp } from './types';
 
 const emp = (id: string, name: string, extra: Partial<Emp> = {}): Emp => ({
@@ -74,5 +74,14 @@ describe('pay', () => {
     const c = coverage([{ start_hour: 5, hours: 10 }, { start_hour: 13, hours: 10 }]);
     expect(c[13]).toBe(2);
     expect(c[3]).toBe(0);
+  });
+
+  it('finds the period paid on the next payday', () => {
+    const org = { ...bundle().org, pay_period: 'biweekly' as const, pay_anchor: '2026-10-26', pay_weekday: 4 };
+    expect(paidPeriod(org, '2026-10-26')).toEqual({ weeks: ['2026-10-12', '2026-10-19'], payday: '2026-10-30' });
+    expect(paidPeriod(org, '2026-10-12')).toEqual({ weeks: ['2026-09-28', '2026-10-05'], payday: '2026-10-16' });
+    expect(paidPeriod(org, '2026-11-02')).toEqual({ weeks: ['2026-10-26', '2026-11-02'], payday: '2026-11-13' });
+    expect(paidPeriod({ ...org, pay_period: 'weekly' }, '2026-10-26')).toEqual({ weeks: ['2026-10-19'], payday: '2026-10-30' });
+    expect(paidPeriod({ ...org, pay_weekday: 0 }, '2026-10-26')).toEqual({ weeks: ['2026-10-12', '2026-10-19'], payday: '2026-10-26' });
   });
 });

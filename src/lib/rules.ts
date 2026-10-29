@@ -84,6 +84,21 @@ export function periodOf(org: Org, week: string): string[] {
   const start = addDays(anchor, Math.floor(daysBetween(anchor, week) / 14) * 14);
   return [start, addDays(start, 7)];
 }
+/**
+ * The pay period paid on the first payday on or after `week` (a Monday): periods run Monday–Sunday,
+ * and payday is the first `pay_weekday` (0 = Monday … 6 = Sunday) after the period ends.
+ * Example: every 2 weeks, payday Friday → Oct 12 – Oct 25 is paid Fri Oct 30.
+ */
+export function paidPeriod(org: Org, week: string): { weeks: string[]; payday: string } {
+  const len = org.pay_period === 'biweekly' ? 14 : 7;
+  const anchor = mondayOf(org.pay_anchor);
+  const lag = ((org.pay_weekday ?? 4) + 1) % 7 || 7; // days from the period's last Sunday to payday
+  // The period ending just before `week`, then step forward until its payday is on/after `week`.
+  let start = addDays(anchor, Math.floor(daysBetween(anchor, addDays(week, -len)) / len) * len);
+  while (addDays(start, len - 1 + lag) < week) start = addDays(start, len);
+  const weeks = len === 14 ? [start, addDays(start, 7)] : [start];
+  return { weeks, payday: addDays(start, len - 1 + lag) };
+}
 /** Hours of a finished time entry (0 while still clocked in). */
 export const entryHours = (e: { clock_in: string; clock_out: string | null }) =>
   e.clock_out ? Math.round(((new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime()) / 36e5) * 100) / 100 : 0;

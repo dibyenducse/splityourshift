@@ -3,7 +3,7 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
 import { DAY_LONG, addDays, ago, ampm, mmdd, mondayOf, money, rangeTitle, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotLabel, slotOf } from '../lib/rules';
+import { cellKey, empOf, keysOf, paidPeriod, parseCell, payFor, periodOf, slotLabel, slotOf } from '../lib/rules';
 import type { Avail, Bundle, Req } from '../lib/types';
 import { Loading, Sheet, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
@@ -50,6 +50,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   for (const r of [...b.reqs].reverse()) if (r.employee_id === w.id && r.status !== 'cancelled' && r.slot_id) live[cellKey(r.slot_id, r.work_date)] = r;
   const myReqs = b.reqs.filter((r) => r.employee_id === w.id);
   const weeks = periodOf(b.org, week), p = payFor(b, w, weeks), wk = payFor(b, w, [week]);
+  const next = paidPeriod(b.org, mondayOf(todayIso())), np = payFor(b, w, next.weeks);
   const hours = mine.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
 
   const cancel = async (r: Req) => {
@@ -86,6 +87,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
           <p className="hint">Pay counts the hours you clocked in and out, before taxes. Your manager sets your rate.</p>
           <div className="tiles">
+            <div className="tile"><div className="k">Next payday · {DAY_LONG[(new Date(next.payday + 'T00:00:00Z').getUTCDay() + 6) % 7].slice(0, 3)} {next.payday.slice(5).replace('-', '/')}</div><div className="v">{money(np.gross)}</div><div className="s">for {rangeTitle(next.weeks[0], addDays(next.weeks[next.weeks.length - 1], 6))} · {np.hours} h</div></div>
             <div className="tile"><div className="k">Earned so far</div><div className="v">{money(p.gross)}</div><div className="s">this pay period</div></div>
             <div className="tile"><div className="k">Hours worked</div><div className="v">{p.hours}</div><div className="s">{p.sched} h scheduled{weeks.length > 1 ? ` · ${p.perWeek.join(' + ')} by week` : ''}</div></div>
             <div className="tile"><div className="k">Hourly rate</div><div className="v">{money(p.rate)}</div><div className="s">{p.ot ? `${p.ot} h overtime at ${money(p.rate * 1.5)}` : 'Overtime after 40 h a week'}</div></div>

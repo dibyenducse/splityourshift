@@ -3,7 +3,7 @@ export type LoginStatus = 'active' | 'invited' | 'expired' | 'none';
 
 export interface Org {
   id: string; owner_id: string; name: string; owner_name: string | null;
-  pay_period: 'weekly' | 'biweekly'; pay_anchor: string; overtime: boolean;
+  pay_period: 'weekly' | 'biweekly'; pay_anchor: string; pay_weekday?: number; overtime: boolean;
   status: string; created_at: string; last_active_at: string | null; time_zone: string;
 }
 export interface Loc { id: string; org_id: string; name: string; type: LocType; sort: number }

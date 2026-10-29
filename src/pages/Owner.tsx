@@ -4,7 +4,7 @@ import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
-  HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
+  HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, paidPeriod, parseCell, payFor, periodOf,
   slotLabel, slotOf, valid, type Changes, type Result, type Row,
 } from '../lib/rules';
 import type { Bundle, Emp, LedgerRow, Loc, Req } from '../lib/types';
@@ -229,7 +229,7 @@ export default function OwnerApp() {
         onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         extra={<><button className="btn" onClick={() => goWorker()} title="Switch to your own worker view: your shifts, clock in and out, time off">⇄ Worker view</button>
           <button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button></>} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} tabs={tabs} reload={reload} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} setWeek={setWeek} tabs={tabs} reload={reload} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
@@ -238,9 +238,14 @@ export default function OwnerApp() {
 
 // ---------------------------------------------------------------- payroll
 
-function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: React.ReactNode; reload: () => void }) {
+const dayTitle = (d: string) => `${DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7].slice(0, 3)} ${d.slice(5).replace('-', '/')}`;
+
+function Payroll({ b, week, setWeek, tabs, reload }: { b: Bundle; week: string; setWeek: (w: string) => void; tabs: React.ReactNode; reload: () => void }) {
   const toast = useToast();
-  const weeks = periodOf(b.org, week);
+  // Payroll shows the pay period paid on the next payday from the week at the top (e.g. Oct 12 – 25, paid Fri Oct 30).
+  const { weeks, payday } = paidPeriod(b.org, week);
+  const len = weeks.length * 7, end = addDays(weeks[0], len - 1), paid = payday < todayIso();
+  const other = addDays(weeks[0], -7); // the other way to line up 2-week periods
   const rows = [...b.emps].sort((x, y) => x.name.localeCompare(y.name)).map((w) => ({ w, p: payFor(b, w, weeks) }));
   const tot = rows.reduce((t, { p }) => ({ hours: t.hours + p.hours, sched: t.sched + p.sched, ot: t.ot + p.ot, gross: t.gross + p.gross, covers: t.covers + p.covers, coverPay: t.coverPay + p.coverPay, open: t.open + p.open }), { hours: 0, sched: 0, ot: 0, gross: 0, covers: 0, coverPay: 0, open: 0 });
   const saveOrg = async (patch: Record<string, unknown>) => { const { error } = await supabase.from('organizations').update(patch).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); };
@@ -248,11 +253,21 @@ function Payroll({ b, week, tabs, reload }: { b: Bundle; week: string; tabs: Rea
   return (
     <div className="layout">{tabs}
       <section className="panel">
-        <div className="panel-head"><h2>Payroll · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">{b.org.pay_period === 'biweekly' ? 'Every 2 weeks' : 'Every week'}</span></div>
-        <p className="hint">Gross pay from clocked hours (clock in to clock out), before taxes and deductions. Shifts without a clock-out aren't paid until they're fixed in Time clock. Change hourly rates right in the table; use ‹ › at the top to move between pay periods.</p>
+        <div className="panel-head"><h2>Payroll · {rangeTitle(weeks[0], end)}</h2><span className={`tag ${paid ? 'plain' : 'ok'}`}>{paid ? 'Paid' : 'Payday'} {dayTitle(payday)}</span></div>
+        <div className="actions" style={{ marginBottom: 8 }}>
+          <button className="btn small" onClick={() => setWeek(mondayOf(addDays(payday, -len)))}>‹ Earlier payday</button>
+          <button className="btn small" onClick={() => setWeek(mondayOf(addDays(payday, len)))}>Next payday ›</button>
+          {mondayOf(todayIso()) !== week && <button className="btn small" onClick={() => setWeek(mondayOf(todayIso()))}>Upcoming payday</button>}</div>
+        <p className="hint">The hours worked {rangeTitle(weeks[0], end)}, paid on {dayTitle(payday)}. Gross pay from clocked hours (clock in to clock out), before taxes and deductions. Shifts without a clock-out aren't paid until they're fixed in Time clock. Change hourly rates right in the table.</p>
         <div className="twocol" style={{ marginBottom: 12 }}>
           <div className="field"><label htmlFor="pay-period">Pay schedule</label>
-            <select id="pay-period" value={b.org.pay_period} onChange={(e) => saveOrg({ pay_period: e.target.value, pay_anchor: weeks[0] })}><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option></select></div>
+            <select id="pay-period" value={b.org.pay_period} onChange={(e) => saveOrg({ pay_period: e.target.value, pay_anchor: e.target.value === 'biweekly' ? addDays(weeks[0], -7) : weeks[0] })}><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option></select></div>
+          <div className="field"><label htmlFor="pay-day">Payday (after the period ends)</label>
+            <select id="pay-day" value={b.org.pay_weekday ?? 4} onChange={(e) => saveOrg({ pay_weekday: +e.target.value })}>{DAY_LONG.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></div>
+          {b.org.pay_period === 'biweekly' && <div className="field"><label htmlFor="pay-align">Two-week periods</label>
+            <select id="pay-align" value={weeks[0]} onChange={(e) => saveOrg({ pay_anchor: e.target.value })}>
+              <option value={weeks[0]}>{rangeTitle(weeks[0], end)} · paid {dayTitle(payday)}</option>
+              <option value={other}>{rangeTitle(other, addDays(other, 13))} · paid {dayTitle(addDays(payday, -7))}</option></select></div>}
           <div className="field"><span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Overtime</span>
             <label className="checks" style={{ minHeight: 40, alignItems: 'center' }}><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={b.org.overtime} onChange={(e) => saveOrg({ overtime: e.target.checked })} /> Pay 1.5× after 40 hours in a week</span></label></div>
         </div>
