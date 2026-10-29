@@ -74,13 +74,22 @@ jobs:
             patch "Email templates" "$(jq -n \
               --rawfile invite supabase/templates/invite.html \
               --rawfile recovery supabase/templates/recovery.html \
-              --rawfile confirm supabase/templates/confirmation.html '{
+              --rawfile confirm supabase/templates/confirmation.html \
+              --rawfile magic supabase/templates/magic_link.html \
+              --rawfile change supabase/templates/email_change.html \
+              --rawfile reauth supabase/templates/reauthentication.html '{
                 mailer_subjects_invite: "You are invited to SplitYourShift",
                 mailer_templates_invite_content: $invite,
                 mailer_subjects_recovery: "Reset your SplitYourShift password",
                 mailer_templates_recovery_content: $recovery,
                 mailer_subjects_confirmation: "Confirm your SplitYourShift email",
-                mailer_templates_confirmation_content: $confirm
+                mailer_templates_confirmation_content: $confirm,
+                mailer_subjects_magic_link: "Your SplitYourShift login link",
+                mailer_templates_magic_link_content: $magic,
+                mailer_subjects_email_change: "Confirm your new SplitYourShift email",
+                mailer_templates_email_change_content: $change,
+                mailer_subjects_reauthentication: "Your SplitYourShift confirmation code",
+                mailer_templates_reauthentication_content: $reauth
               }')"
           else
             echo "::warning::SMTP_PASSWORD secret not set: emails still go through Supabase's limited sender."

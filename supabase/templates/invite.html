@@ -1,10 +1,48 @@
-<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1f2937">
-  <h2 style="margin:0 0 4px;color:#0f766e">SplitYourShift</h2>
-  <p style="margin:0 0 20px;color:#6b7280;font-size:13px">Shift schedules for hotels, gas stations and shops</p>
-  <h3 style="margin:0 0 12px">You're invited</h3>
-  <p style="line-height:1.5">Your manager added you to their team on SplitYourShift. Set a password to see your shifts, clock in and out, and request time off.</p>
-  <p style="margin:24px 0"><a href="{{ .ConfirmationURL }}" style="background:#0f766e;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:bold;display:inline-block">Set my password</a></p>
-  <p style="font-size:13px;color:#6b7280;line-height:1.5">After this you can log in with your email or phone number. The link works once and expires in 24 hours.</p>
-  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-  <p style="font-size:12px;color:#9ca3af">This is an automatic message, please don't reply. Questions? Write to <a href="mailto:support@splityourshift.com" style="color:#0f766e">support@splityourshift.com</a>.</p>
-</div>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<title>You're invited to SplitYourShift</title>
+</head>
+<body style="margin:0;padding:0;background:#eef1f4;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Set your password to see your shifts.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef1f4;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18202b;">
+    <tr><td style="padding:0 4px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="vertical-align:middle;"><img src="https://splityourshift.com/icon-192.png" width="36" height="36" alt="" style="display:block;border-radius:8px;"></td>
+        <td style="vertical-align:middle;padding-left:10px;font-size:18px;font-weight:700;color:#12324a;">SplitYourShift</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="background:#ffffff;border:1px solid #d5dbe2;border-radius:14px;padding:32px 28px;">
+      <h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#12324a;">You're on the team</h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#18202b;">{{ if .Data.name }}Hi {{ .Data.name }},{{ else }}Hi,{{ end }}</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#18202b;">{{ if .Data.org }}<b>{{ .Data.org }}</b> added{{ else }}Your manager added{{ end }} you to their team on SplitYourShift. Set a password to get started.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr>
+        <td style="background:#1d5f8a;border-radius:10px;"><a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 26px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Set my password</a></td>
+      </tr></table>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;background:#f6f8fa;border-radius:10px;padding:14px 14px 4px;width:100%;">
+        <tr><td style="width:28px;vertical-align:top;padding:0 0 10px;"><div style="width:22px;height:22px;line-height:22px;border-radius:11px;background:#e2eef6;color:#1d5f8a;font-size:12px;font-weight:700;text-align:center;">1</div></td>
+          <td style="vertical-align:top;padding:1px 0 10px;font-size:14px;line-height:1.5;color:#18202b;">See your shifts for the week, on any phone or computer.</td></tr>
+        <tr><td style="width:28px;vertical-align:top;padding:0 0 10px;"><div style="width:22px;height:22px;line-height:22px;border-radius:11px;background:#e2eef6;color:#1d5f8a;font-size:12px;font-weight:700;text-align:center;">2</div></td>
+          <td style="vertical-align:top;padding:1px 0 10px;font-size:14px;line-height:1.5;color:#18202b;">Clock in and out with one tap.</td></tr>
+        <tr><td style="width:28px;vertical-align:top;padding:0 0 10px;"><div style="width:22px;height:22px;line-height:22px;border-radius:11px;background:#e2eef6;color:#1d5f8a;font-size:12px;font-weight:700;text-align:center;">3</div></td>
+          <td style="vertical-align:top;padding:1px 0 10px;font-size:14px;line-height:1.5;color:#18202b;">Ask for time off and see your hours and pay.</td></tr>
+      </table>
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#5d6978;">After this, log in with your email or phone number and your password. On iPhone, open the site in Safari and tap Share &rarr; <b>Add to Home Screen</b> to get shift reminders.</p>
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#5d6978;">This link works once. If it has expired, ask your manager to send a new invite.</p>
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#5d6978;">Button not working? Copy this link into your browser:<br><a href="{{ .ConfirmationURL }}" style="color:#1d5f8a;word-break:break-all;">{{ .ConfirmationURL }}</a></p>
+    </td></tr>
+    <tr><td style="padding:20px 8px 0;font-size:12px;line-height:1.6;color:#5d6978;text-align:center;">
+      Shift schedules, time clock and payroll for hotels, gas stations and shops.<br>
+      This is an automatic email from no-reply, so replies aren't read.<br>
+      Need help? <a href="mailto:support@splityourshift.com" style="color:#1d5f8a;">support@splityourshift.com</a> &middot; <a href="https://splityourshift.com/" style="color:#1d5f8a;">splityourshift.com</a>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>
