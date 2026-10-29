@@ -12,7 +12,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-      SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}
+      SMTP_USER: ${{ vars.SMTP_USER || 'noreply@splityourshift.com' }}
       SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.hostinger.com' }}
     steps:
       - name: Mailbox login and test email to support@

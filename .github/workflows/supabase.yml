@@ -52,7 +52,7 @@ jobs:
           SITE: ${{ vars.SITE_URL || 'https://splityourshift.com/' }}
           PAGES: ${{ format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_USER: ${{ vars.SMTP_USER || 'no-reply@splityourshift.com' }}
+          SMTP_USER: ${{ vars.SMTP_USER || 'noreply@splityourshift.com' }}
           SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.hostinger.com' }}
         run: |
           patch() { # $1 = what, $2 = JSON body

@@ -129,7 +129,7 @@ select id from auth.users where email = 'আপনার@ইমেইল.com';
 1. **hPanel → Websites → Add website** → `splityourshift.com` → **Empty website / Skip** (WordPress বা Builder নয়)।
 2. **hPanel → Security → SSL** → splityourshift.com-এর জন্য ফ্রি SSL **Install**।
 3. **hPanel → Files → FTP Accounts** → **FTP IP/Hostname** আর **FTP username** দেখুন; পাসওয়ার্ড না জানলে **Change password**।
-4. **hPanel → Emails**: `no-reply@splityourshift.com` আর `support@splityourshift.com` আছে কিনা দেখুন। no-reply-এর পাসওয়ার্ড জানা না থাকলে Change password।
+4. **hPanel → Emails**: `noreply@splityourshift.com` আর `support@splityourshift.com` আছে কিনা দেখুন। no-reply-এর পাসওয়ার্ড জানা না থাকলে Change password।
 5. GitHub → Settings → Secrets and variables → Actions:
 
    | কোথায় | Name | Value |
@@ -137,12 +137,12 @@ select id from auth.users where email = 'আপনার@ইমেইল.com';
    | Secrets | `FTP_SERVER` | FTP IP/Hostname |
    | Secrets | `FTP_USERNAME` | FTP username |
    | Secrets | `FTP_PASSWORD` | FTP পাসওয়ার্ড |
-   | Secrets | `SMTP_PASSWORD` | `no-reply@splityourshift.com`-এর পাসওয়ার্ড |
+   | Secrets | `SMTP_PASSWORD` | `noreply@splityourshift.com`-এর পাসওয়ার্ড |
 
 6. সহজ বিকল্প: FTP-র বদলে hPanel-এর **GitHub থেকে deploy** (Vite preset, branch main) ব্যবহার করলে FTP-র তিনটা secret লাগে না; শুধু সেখানে Environment variables-এ `VITE_SUPABASE_URL` আর `VITE_SUPABASE_ANON_KEY` দিন।
    FTP ব্যবহার করলে: GitHub → **Actions → Deploy to Hostinger → Run workflow** → সবুজ হলে https://splityourshift.com খুলুন।
    (ফাইল `public_html`-এর বাইরে চলে গেলে Variables-এ `FTP_DIR` = `./` বসিয়ে আবার চালান।)
-7. GitHub → **Actions → Set up database → Run workflow**। এটা Supabase-এ নতুন ঠিকানা বসায়, আর সব ইমেইল (ইনভাইট, পাসওয়ার্ড রিসেট, সাইন-আপ কনফার্ম) `no-reply@splityourshift.com` থেকে পাঠানো শুরু করে। ইমেইলের নিচে লেখা থাকে: প্রশ্ন থাকলে `support@splityourshift.com`।
+7. GitHub → **Actions → Set up database → Run workflow**। এটা Supabase-এ নতুন ঠিকানা বসায়, আর সব ইমেইল (ইনভাইট, পাসওয়ার্ড রিসেট, সাইন-আপ কনফার্ম) `noreply@splityourshift.com` থেকে পাঠানো শুরু করে। ইমেইলের নিচে লেখা থাকে: প্রশ্ন থাকলে `support@splityourshift.com`।
 
 এরপর থেকে: কোড বদলে GitHub-এ গেলেই (main-এ push) সাইট নিজে থেকে Hostinger-এ আপডেট হয়, ২–৩ মিনিটে।
 
