@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
@@ -7,6 +7,7 @@ import { TYPE_LABEL, countWeek, hoursWeek, payFor, periodOf } from '../lib/rules
 import type { Bundle } from '../lib/types';
 import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
+import { dateShort, payRuns, periodTitle, reopenRun, type PayRun } from '../lib/payroll';
 import { AppBar } from './AppShell';
 
 interface Overview {
@@ -120,6 +121,7 @@ function AccountView({ a, onBack, reload }: { a: Account; onBack: () => void; re
       <div className="table-wrap"><table className="data"><thead><tr><th>Name</th><th>Login</th><th>Email</th><th>Phone</th><th className="num">Shifts this week</th><th className="num">Hours</th><th className="num">Rate</th><th className="num">Pay this period</th></tr></thead>
         <tbody>{b.emps.map((w) => <tr key={w.id}><td>{w.name}</td><td><StatusTag s={w.status} /></td><td>{w.email || '—'}</td><td>{w.phone || '—'}</td>
           <td className="num">{countWeek(b, w.id, week)}/{w.max_shifts}</td><td className="num">{hoursWeek(b, w.id, week)}</td><td className="num">{money(w.rate)}</td><td className="num">{money(payFor(b, w, weeks).gross)}</td></tr>)}</tbody></table></div></section>
+    <AdminPayroll orgId={a.id} />
     <section className="panel"><div className="panel-head"><h2>Time-off requests</h2></div>
       <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Shift</th><th>Reason</th><th>Status</th><th>Sent</th></tr></thead>
         <tbody>{b.reqs.map((r) => <tr key={r.id}><td>{b.emps.find((e) => e.id === r.employee_id)?.name ?? '?'}</td><td>{r.label}</td><td>{r.reason || '—'}</td><td>{r.status}</td><td>{ago(r.created_at)}</td></tr>)}
@@ -127,4 +129,33 @@ function AccountView({ a, onBack, reload }: { a: Account; onBack: () => void; re
     <div className="actions"><button className="btn icon" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week">‹</button><b>Week of {mmdd(week)}</b><button className="btn icon" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week">›</button></div>
     <div className="boards"><WeekGrid b={b} week={week} editable={false} /></div>
   </>);
+}
+
+/** Paid payrolls of one business. A paid payroll can only be reopened here, with a reason; both are logged. */
+function AdminPayroll({ orgId }: { orgId: string }) {
+  const toast = useToast();
+  const [runs, setRuns] = useState<PayRun[]>([]);
+  const [audit, setAudit] = useState<{ run_id: string; action: string; reason: string | null; at: string }[]>([]);
+  const [reason, setReason] = useState<Record<string, string>>({});
+  const load = useCallback(() => {
+    payRuns(orgId).then(setRuns, () => {});
+    supabase.from('payroll_audit').select('run_id, action, reason, at').eq('org_id', orgId).order('at', { ascending: false }).then(({ data }) => setAudit(data ?? []));
+  }, [orgId]);
+  useEffect(load, [load]);
+  const reopen = async (r: PayRun) => {
+    try { await reopenRun(r.id, reason[r.id] ?? ''); toast(`${r.location_name} ${periodTitle(r)} reopened. The owner was told.`, 'ok', 'Reopened'); load(); }
+    catch (e) { toast(errText(e), 'error', "Couldn't reopen"); }
+  };
+  return (
+    <section className="panel"><div className="panel-head"><h2>Payroll history</h2></div>
+      <p className="hint">Paid payrolls are locked for the owner. Reopen one only when the owner asks for a correction; write why. It is logged.</p>
+      <div className="table-wrap"><table className="data"><thead><tr><th>Business</th><th>Pay period</th><th>Pay date</th><th className="num">Total paid</th><th>Status</th><th>Log</th><th>Reopen</th></tr></thead>
+        <tbody>{runs.map((r) => <tr key={r.id}><td>{r.location_name}</td><td>{periodTitle(r)}</td><td>{dateShort(r.pay_date)}</td><td className="num">{money(r.total_net)}</td>
+          <td>{r.status === 'paid' ? <span className="tag ok">Paid</span> : <span className="tag warn">Reopened</span>}</td>
+          <td className="hint">{audit.filter((x) => x.run_id === r.id).map((x) => `${x.action} ${new Date(x.at).toLocaleString('en-US')}${x.reason ? `: ${x.reason}` : ''}`).join(' · ')}</td>
+          <td>{r.status === 'paid' && <div className="actions" style={{ margin: 0, flexWrap: 'nowrap' }}>
+            <input type="text" placeholder="Reason" value={reason[r.id] ?? ''} onChange={(e) => setReason({ ...reason, [r.id]: e.target.value })} aria-label="Reason for reopening" style={{ minHeight: 32, width: 160 }} />
+            <ConfirmButton className="btn small danger" label="Reopen" confirmLabel="Click again" onConfirm={() => reopen(r)} /></div>}</td></tr>)}
+          {!runs.length && <tr><td colSpan={7}>No payroll marked paid yet.</td></tr>}</tbody></table></div></section>
+  );
 }

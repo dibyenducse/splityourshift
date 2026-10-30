@@ -4,7 +4,7 @@ import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
-  HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, paidPeriod, parseCell, payFor, periodOf,
+  HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
   slotLabel, slotOf, valid, type Changes, type Result, type Row,
 } from '../lib/rules';
 import type { Bundle, Emp, LedgerRow, Loc, Req } from '../lib/types';
@@ -14,6 +14,8 @@ import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
+import Payroll from './Payroll';
+import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
 
 type SheetState =
@@ -38,6 +40,8 @@ export default function OwnerApp() {
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [previewEmp, setPreviewEmp] = useState<string | null>(null);
+  const [payLoc, setPayLoc] = useState<string | undefined>();
+  const [payDue, setPayDue] = useState<DashRow[]>([]);
   const undo = useRef<{ changes: Changes; ledgerId?: string }[]>([]);
   const { notes, reload: reloadNotes } = useNotes();
   const orgId = me!.orgId!;
@@ -46,6 +50,11 @@ export default function OwnerApp() {
     try { setB(await loadBundle(orgId, week, true)); } catch (e) { toast(errText(e), 'error', "Couldn't load"); }
   }, [orgId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
+  // Payroll reminder on the main screen: payday within 2 days (or past) and not marked paid yet.
+  useEffect(() => {
+    const soon = addDays(todayIso(), 2);
+    payDashboard(orgId).then((d) => setPayDue(d.filter((r) => r.pending > 0 || (!r.next_paid && r.next_pay_date <= soon))), () => {});
+  }, [orgId, tab]);
 
   /** Opens the owner's own worker view. Every owner has a worker profile (made with the business); this re-creates it if it was deleted. */
   const goWorker = async () => {
@@ -212,6 +221,10 @@ export default function OwnerApp() {
       <main className="boards">
         <div className="tabsrow">{tabs}
           <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
+        {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
+          <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
+            {!r.next_paid && <>{rangeTitle(r.next_start, r.next_end)}: {money(r.payable)} for {r.employees} employee{r.employees === 1 ? '' : 's'}.</>}</p>
+          <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); setTab('payroll'); }}>Open payroll</button></div>)}
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
         <WeekGrid b={b} week={week} editable onCell={onCell} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
@@ -229,7 +242,7 @@ export default function OwnerApp() {
         onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         extra={<><button className="btn" onClick={() => goWorker()} title="Switch to your own worker view: your shifts, clock in and out, time off">⇄ Worker view</button>
           <button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button></>} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} week={week} setWeek={setWeek} tabs={tabs} reload={reload} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} tabs={tabs} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
@@ -237,61 +250,6 @@ export default function OwnerApp() {
 }
 
 // ---------------------------------------------------------------- payroll
-
-const dayTitle = (d: string) => `${DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7].slice(0, 3)} ${d.slice(5).replace('-', '/')}`;
-
-function Payroll({ b, week, setWeek, tabs, reload }: { b: Bundle; week: string; setWeek: (w: string) => void; tabs: React.ReactNode; reload: () => void }) {
-  const toast = useToast();
-  // Payroll shows the pay period paid on the next payday from the week at the top (e.g. Oct 12 – 25, paid Fri Oct 30).
-  const { weeks, payday } = paidPeriod(b.org, week);
-  const len = weeks.length * 7, end = addDays(weeks[0], len - 1), paid = payday < todayIso();
-  const other = addDays(weeks[0], -7); // the other way to line up 2-week periods
-  const rows = [...b.emps].sort((x, y) => x.name.localeCompare(y.name)).map((w) => ({ w, p: payFor(b, w, weeks) }));
-  const tot = rows.reduce((t, { p }) => ({ hours: t.hours + p.hours, sched: t.sched + p.sched, ot: t.ot + p.ot, gross: t.gross + p.gross, covers: t.covers + p.covers, coverPay: t.coverPay + p.coverPay, open: t.open + p.open }), { hours: 0, sched: 0, ot: 0, gross: 0, covers: 0, coverPay: 0, open: 0 });
-  const saveOrg = async (patch: Record<string, unknown>) => { const { error } = await supabase.from('organizations').update(patch).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); };
-  const saveRate = async (id: string, v: string) => { const n = Math.round(parseFloat(v) * 100) / 100; if (!(n >= 0 && n < 1000)) return; await supabase.from('employees').update({ rate: n }).eq('id', id); reload(); };
-  return (
-    <div className="layout">{tabs}
-      <section className="panel">
-        <div className="panel-head"><h2>Payroll · {rangeTitle(weeks[0], end)}</h2><span className={`tag ${paid ? 'plain' : 'ok'}`}>{paid ? 'Paid' : 'Payday'} {dayTitle(payday)}</span></div>
-        <div className="actions" style={{ marginBottom: 8 }}>
-          <button className="btn small" onClick={() => setWeek(mondayOf(addDays(payday, -len)))}>‹ Earlier payday</button>
-          <button className="btn small" onClick={() => setWeek(mondayOf(addDays(payday, len)))}>Next payday ›</button>
-          {mondayOf(todayIso()) !== week && <button className="btn small" onClick={() => setWeek(mondayOf(todayIso()))}>Upcoming payday</button>}</div>
-        <p className="hint">The hours worked {rangeTitle(weeks[0], end)}, paid on {dayTitle(payday)}. Gross pay from clocked hours (clock in to clock out), before taxes and deductions. Shifts without a clock-out aren't paid until they're fixed in Time clock. Change hourly rates right in the table.</p>
-        <div className="twocol" style={{ marginBottom: 12 }}>
-          <div className="field"><label htmlFor="pay-period">Pay schedule</label>
-            <select id="pay-period" value={b.org.pay_period} onChange={(e) => saveOrg({ pay_period: e.target.value, pay_anchor: e.target.value === 'biweekly' ? addDays(weeks[0], -7) : weeks[0] })}><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option></select></div>
-          <div className="field"><label htmlFor="pay-day">Payday (after the period ends)</label>
-            <select id="pay-day" value={b.org.pay_weekday ?? 4} onChange={(e) => saveOrg({ pay_weekday: +e.target.value })}>{DAY_LONG.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></div>
-          {b.org.pay_period === 'biweekly' && <div className="field"><label htmlFor="pay-align">Two-week periods</label>
-            <select id="pay-align" value={weeks[0]} onChange={(e) => saveOrg({ pay_anchor: e.target.value })}>
-              <option value={weeks[0]}>{rangeTitle(weeks[0], end)} · paid {dayTitle(payday)}</option>
-              <option value={other}>{rangeTitle(other, addDays(other, 13))} · paid {dayTitle(addDays(payday, -7))}</option></select></div>}
-          <div className="field"><span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Overtime</span>
-            <label className="checks" style={{ minHeight: 40, alignItems: 'center' }}><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={b.org.overtime} onChange={(e) => saveOrg({ overtime: e.target.checked })} /> Pay 1.5× after 40 hours in a week</span></label></div>
-        </div>
-        <div className="tiles" style={{ marginBottom: 14 }}>
-          <div className="tile"><div className="k">Total gross pay</div><div className="v">{money(tot.gross)}</div><div className="s">{rows.length} workers</div></div>
-          <div className="tile"><div className="k">Hours worked</div><div className="v">{Math.round(tot.hours * 100) / 100}</div><div className="s">{tot.sched} scheduled · {tot.ot ? `${Math.round(tot.ot * 100) / 100} overtime` : 'no overtime'}</div></div>
-          <div className="tile"><div className="k">Still clocked in</div><div className="v">{tot.open}</div><div className="s">{tot.open ? 'not paid until they clock out' : 'everyone is clocked out'}</div></div>
-          <div className="tile"><div className="k">Extra shifts (covers)</div><div className="v">{tot.covers}</div><div className="s">{money(tot.coverPay)} included in totals</div></div>
-        </div>
-        <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Hourly rate</th><th className="num">Scheduled</th><th className="num">Worked</th><th className="num">Overtime</th><th className="num">Covered for others</th><th className="num">Gross pay</th></tr></thead>
-          <tbody>{rows.map(({ w, p }) => (
-            <tr key={w.id}><td><span className="dot" style={{ ['--h' as string]: w.hue, display: 'inline-block', marginRight: 6 }} />{w.name}</td>
-              <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>$<input type="number" min={0} max={999} step={0.25} defaultValue={w.rate} key={`${w.id}-${w.rate}`} aria-label={`${w.name} hourly rate`}
-                onBlur={(e) => { if (+e.target.value !== w.rate) saveRate(w.id, e.target.value); }}
-                style={{ width: 84, minHeight: 32, border: '1px solid var(--line-strong)', borderRadius: 6, padding: '4px 6px', background: 'var(--surface)' }} /></span></td>
-              <td className="num">{p.sched} h<div className="hint" style={{ margin: 0 }}>{p.shifts} shifts</div></td><td className="num">{p.hours} h{weeks.length > 1 && <div className="hint" style={{ margin: 0 }}>{p.perWeek.join(' + ')}</div>}{p.open > 0 && <div><span className="tag warn">On the clock</span></div>}</td>
-              <td className="num">{p.ot ? <span className="tag warn">{p.ot} h</span> : '—'}</td>
-              <td className="num">{p.covers ? `${p.covers} · ${money(p.coverPay)}` : '—'}</td><td className="num"><b>{money(p.gross)}</b></td></tr>))}</tbody>
-          <tfoot><tr><td><b>Total</b></td><td /><td className="num">{tot.sched} h</td><td className="num"><b>{Math.round(tot.hours * 100) / 100} h</b></td><td className="num">{tot.ot || '—'}</td><td className="num">{tot.covers ? money(tot.coverPay) : '—'}</td><td className="num"><b>{money(tot.gross)}</b></td></tr></tfoot></table></div>
-        <p className="hint" style={{ marginTop: 10 }}>"Covered for others" are shifts this person took for a coworker without a trade. They're already in the hours and pay. Trades don't change pay because both people keep the same hours.</p>
-      </section>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------- sheets
 

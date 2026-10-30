@@ -1,4 +1,4 @@
-// Clock-in / clock-out phone reminders.
+// Clock-in / clock-out phone reminders, and payday reminders for owners.
 // GET  → the public key browsers need to subscribe to push notifications.
 // POST → sends the reminders that are due now (called every 5 minutes by pg_cron; safe to call more often,
 //        because due_reminders() records each reminder so it is only sent once).
@@ -26,8 +26,12 @@ Deno.serve(async (req) => {
     const site = (Deno.env.get('SITE_URL') ?? '').replace(/\/?$/, '/');
 
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-    const { data: due, error } = await admin.rpc('due_reminders');
+    const { data: shifts, error } = await admin.rpc('due_reminders');
     if (error) throw error;
+    // Owners: payday in 2 days / today, until that payroll is marked paid.
+    const { data: payroll, error: e2 } = await admin.rpc('payroll_due_reminders');
+    if (e2) throw e2;
+    const due = [...(shifts ?? []), ...(payroll ?? [])];
 
     let sent = 0, removed = 0;
     for (const r of (due ?? []) as { user_id: string; kind: string; title: string; body: string }[]) {
@@ -36,7 +40,7 @@ Deno.serve(async (req) => {
         try {
           await webpush.sendNotification(
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-            JSON.stringify({ title: r.title, body: r.body, tag: `clock-${r.kind}`, url: `${site}#/app` }),
+            JSON.stringify({ title: r.title, body: r.body, tag: r.kind.startsWith('payroll') ? r.kind : `clock-${r.kind}`, url: `${site}#/app` }),
             { TTL: 60 * 60 },
           );
           sent++;
@@ -46,7 +50,7 @@ Deno.serve(async (req) => {
         }
       }
     }
-    return json({ due: due?.length ?? 0, sent, removed });
+    return json({ due: due.length, sent, removed });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }

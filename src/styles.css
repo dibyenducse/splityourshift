@@ -459,3 +459,22 @@ button.clock-btn:active:not(:disabled) { transform: scale(.97); }
 .mini.danger-text { color: var(--bad); }
 .mini.danger-text.armed { background: var(--bad); color: var(--surface); }
 @media print { .tabsrow { display: none !important; } }
+
+/* ---------------------------------------------------------------- payroll */
+.field .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }
+.banner.warn { border-color: var(--warn); background: var(--warn-soft); }
+.banner.bad { border-color: var(--bad); background: var(--bad-soft); }
+.panel > .banner { margin-bottom: 12px; }
+.paydash { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.paycard { text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; cursor: pointer; display: grid; gap: 6px; }
+.paycard.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.paycard .pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.paycard .pc-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.paycard .pc-row span:last-child { text-align: right; color: var(--fg); }
+.paycard .pc-big { font-family: var(--f-display); font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.paycard .pc-big small { display: block; font-family: inherit; font-size: 12px; font-weight: 500; color: var(--muted); }
+.payctl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-bottom: 12px; }
+.payctl .field { min-width: 0; flex: 0 1 auto; }
+.payctl select { max-width: 100%; }
+table.data.payroll { min-width: 980px; }
+.panel details > summary { cursor: pointer; list-style: revert; }
