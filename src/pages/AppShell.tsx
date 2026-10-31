@@ -12,9 +12,11 @@ import AdminApp from './Admin';
 import Onboarding from './Onboarding';
 
 /** Top bar shared by all three account types. */
-export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccount, who }: {
+export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccount, who, profile }: {
   subtitle: string; week?: string; setWeek?: (w: string) => void; extra?: ReactNode;
   notes?: Note[]; onNotes?: () => void; onAccount: () => void; who: ReactNode;
+  /** Profile photo menu (top-right); replaces the name button. */
+  profile?: ReactNode;
 }) {
   const unread = notes?.filter((n) => !n.read_at).length ?? 0;
   const step = (n: number) => { if (week && setWeek) { const d = new Date(week + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); setWeek(d.toISOString().slice(0, 10)); } };
@@ -32,7 +34,7 @@ export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccou
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
           {unread > 0 && <span className="pip">{unread}</span>}</button>}
-        <button className="btn" onClick={onAccount}><span className="who">{who}</span></button>
+        {profile ?? <button className="btn" onClick={onAccount}><span className="who">{who}</span></button>}
       </div>
     </div></header>
   );

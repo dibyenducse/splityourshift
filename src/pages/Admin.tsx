@@ -9,6 +9,7 @@ import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../component
 import { WeekGrid } from '../components/WeekGrid';
 import { dateShort, payRuns, periodTitle, reopenRun, type PayRun } from '../lib/payroll';
 import { AppBar } from './AppShell';
+import { ProfileMenu } from '../components/Avatar';
 
 interface Overview {
   daily: { day: string; visitors: number }[]; visitors: number; signup_views: number; signups: number; owners: number;
@@ -52,7 +53,8 @@ export default function AdminApp() {
 
   return (
     <>
-      <AppBar subtitle="Admin panel" onAccount={() => setAccount(true)} who={<b>Admin</b>} />
+      <AppBar subtitle="Admin panel" onAccount={() => setAccount(true)} who={<b>Admin</b>}
+        profile={<ProfileMenu name="Admin" role="SplitYourShift admin" items={[{ label: 'Account', onClick: () => setAccount(true) }]} />} />
       <div className="wrap"><div className="layout">{tabs}{body}</div></div>
       {account && <Sheet eyebrow="My account" title="Admin" onClose={() => setAccount(false)}>
         <div className="sec"><p>You can see every owner, worker and request, but you can't change anyone's schedule.</p></div>

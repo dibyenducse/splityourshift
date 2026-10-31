@@ -12,6 +12,8 @@ import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../component
 import { PrintIcon, WeekGrid, printBoards, useDragDrop } from '../components/WeekGrid';
 import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
+import { ProfileMenu } from '../components/Avatar';
+import { PayslipList } from '../components/Payslips';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
 import Payroll from './Payroll';
@@ -130,7 +132,8 @@ export default function OwnerApp() {
   if (!b) return <Loading />;
   if (previewEmp) return <WorkerApp preview={{ orgId, empId: previewEmp, onExit: () => { setPreviewEmp(null); reload(); } }} />;
   if (adding) return (
-    <><AppBar subtitle={b.org.name} onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>} />
+    <><AppBar subtitle={b.org.name} onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
+      profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[{ label: 'Account settings', onClick: () => setSheet({ type: 'account' }) }]} />} />
       <div className="wrap"><Onboarding mode="add" orgId={orgId} existing={b.emps} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); reload(); }} /></div></>
   );
 
@@ -240,8 +243,12 @@ export default function OwnerApp() {
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
         onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
-        extra={<><button className="btn" onClick={() => goWorker()} title="Switch to your own worker view: your shifts, clock in and out, time off">⇄ Worker view</button>
-          <button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button></>} />
+        extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>}
+        profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
+          { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
+          { label: 'Account settings', hint: 'Name, business, time zone, password', onClick: () => setSheet({ type: 'account' }) },
+          { label: 'Payroll', onClick: () => setTab('payroll') },
+        ]} />} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} tabs={tabs} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
@@ -437,7 +444,7 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
       <div className="actions"><button className="btn primary" disabled={!dirty || busy} onClick={save}>Save changes</button></div>
       <fieldset className="field"><legend>Works at</legend><div className="checks">
         {b.locs.map((l) => <label key={l.id}><input type="checkbox" checked={w.locs.includes(l.id)} onChange={(e) => toggleLoc(l.id, e.target.checked)} /> {l.name}</label>)}</div></fieldset>
-      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap <b>⇄ Worker view</b> at the top to clock in and out.</p>
+      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap your photo at the top right, then <b>Switch to worker view</b>, to clock in and out.</p>
         {others.length > 0 && <details><summary>Already on the list under another name?</summary>
           <p>Pick that worker and your worker view will use it (with its shifts) instead of this one.</p>
           <div className="actions">{others.map((x) => <button key={x.id} className="btn small" disabled={busy} onClick={async () => {
@@ -452,6 +459,7 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
       </>}
       <div className="sec"><h4>Week of {rangeTitle(week, addDays(week, 6))} <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span></h4>
         {mine.length ? <><ul className="plain">{mine.map((k) => <li key={k}>{slotLabel(b, k)}</li>)}</ul><p style={{ marginTop: 6 }}>{hoursWeek(b, w.id, week)} hours</p></> : <p>No shifts this week.</p>}</div>
+      <div className="sec"><h4>Pay history</h4><PayslipList business={b.org.name} empId={w.id} limit={4} /></div>
       <div className="sec"><h4>Pay this period</h4><p>{pay.hours} hours × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''} = <b>{money(pay.gross)}</b></p></div>
       <div className="sec"><h4>Availability <span className="hint">(set by {w.name})</span></h4><ul className="plain">{w.avail.map((a) => <li key={a.dow}>{DAY_LONG[a.dow].slice(0, 3)} · {availText(a)}</li>)}</ul></div>
       <div className="actions"><button className="btn" onClick={onPreview}>See what {w.name} sees</button>

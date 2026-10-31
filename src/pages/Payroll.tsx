@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { DAY_LONG, addDays, money, todayIso } from '../lib/time';
 import type { Bundle } from '../lib/types';
-import { ConfirmButton, useToast } from '../components/ui';
+import { ConfirmButton, Sheet, useToast } from '../components/ui';
+import { PayslipList } from '../components/Payslips';
 import {
-  FREQ_LABEL, dateLong, dateShort, downloadPdf, hrs, markPaid, payDashboard, payLines, payPeriods, payRuns, periodTitle, printReport,
+  FREQ_LABEL, dateLong, otText, dateShort, downloadPdf, hrs, markPaid, payDashboard, payLines, payPeriods, payRuns, periodTitle, printReport,
   scheduleText, setAdjustment, totals, type DashRow, type PayFrequency, type PayLine, type PayRun, type PaySettings, type Period, type Report,
 } from '../lib/payroll';
 
@@ -24,6 +25,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
   const [sel, setSel] = useState<string | null>(null);
   const [lines, setLines] = useState<PayLine[] | null>(null);
   const [tick, setTick] = useState(0);
+  const [history, setHistory] = useState<PayLine | null>(null);
   const refresh = () => setTick((t) => t + 1);
   useEffect(() => { if (initialLoc) setLocId(initialLoc); }, [initialLoc]);
 
@@ -113,7 +115,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
-        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. Pay comes from clocked hours (clock in to clock out). Overtime is 1.5× after 40 hours in a week{loc.overtime === false ? ' (turned off for this business)' : ''}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
+        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. Pay comes from clocked hours (clock in to clock out). {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
         {locked && <div className="banner"><p><b>Paid and locked.</b> Marked paid {new Date(row!.run!.paid_at).toLocaleString('en-US')}. These numbers won't change, even if rates or hours change later. To correct it, write to <a href="mailto:support@splityourshift.com">support@splityourshift.com</a>; support can reopen it, and that is logged.</p></div>}
         {!locked && open.length > 0 && <div className="banner warn"><p><b>{open.map((l) => l.name).join(', ')}</b> {open.length === 1 ? 'is' : 'are'} still clocked in for this period. Those hours count after they clock out (or after you fix them in Time clock).</p></div>}
 
@@ -132,7 +134,8 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
               <td>{locked ? <span className="tag ok">Paid</span> : <span className="tag warn">Pending</span>}</td>
               <td><div className="actions" style={{ margin: 0, flexWrap: 'nowrap' }}>
                 <button className="btn small" onClick={() => printReport(report()!, 'slips', l.employee_id)}>Print</button>
-                <button className="btn small" onClick={() => downloadPdf(report()!, 'slips', l.employee_id)}>PDF</button></div></td>
+                <button className="btn small" onClick={() => downloadPdf(report()!, 'slips', l.employee_id)}>PDF</button>
+                <button className="btn small" onClick={() => setHistory(l)} title={`Every payday ${l.name} was paid`}>History</button></div></td>
             </tr>))}</tbody>
           <tfoot><tr><td><b>Total</b></td><td className="num"><b>{hrs(t.hours)} h</b></td><td /><td className="num">{money(t.reg)}</td><td className="num">{t.otPay ? money(t.otPay) : '—'}</td><td>{money(t.bonus)}</td><td>{money(t.ded)}</td><td className="num">{money(t.gross)}</td><td className="num"><b>{money(t.net)}</b></td><td /><td /></tr></tfoot></table></div>
 
@@ -161,6 +164,11 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           : <p className="empty-note">No payroll marked paid yet. After payday, open the pay period above and tap Mark as paid; it is saved here.</p>}
       </section>
 
+      {history && <Sheet eyebrow="Pay history" title={history.name} onClose={() => setHistory(null)}>
+        <p className="hint">Every payday {history.name} was paid, at every business. Print or download any payslip.</p>
+        <PayslipList business={b.org.name} empId={history.employee_id} />
+      </Sheet>}
+
       <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onSaved={() => { reload(); refresh(); }} />
     </div>
   );
@@ -172,6 +180,7 @@ function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onS
   const [f, setF] = useState<PaySettings>({
     pay_frequency: loc.pay_frequency ?? 'weekly', pay_anchor: (loc.pay_anchor ?? todayIso()).slice(0, 10), pay_weekday: loc.pay_weekday ?? 4,
     pay_month_day: loc.pay_month_day ?? 31, pay_month_offset: loc.pay_month_offset ?? 1, overtime: loc.overtime ?? true,
+    ot_after: Number(loc.ot_after ?? 40), ot_mode: loc.ot_mode ?? 'multiplier', ot_multiplier: Number(loc.ot_multiplier ?? 1.5), ot_fixed_rate: Number(loc.ot_fixed_rate ?? 0),
   });
   const startDow = (new Date(f.pay_anchor + 'T00:00:00Z').getUTCDay() + 6) % 7;
   // Weekly: only the start weekday matters, so keep the anchor on that weekday near today.
@@ -190,8 +199,6 @@ function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onS
           <div className="field"><label htmlFor="ps-freq">How often you pay</label>
             <select id="ps-freq" value={f.pay_frequency} onChange={(e) => setF({ ...f, pay_frequency: e.target.value as PayFrequency })}>
               <option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option><option value="monthly">Monthly</option></select></div>
-          <div className="field"><span className="lbl">Overtime</span>
-            <label className="checks" style={{ minHeight: 40, alignItems: 'center' }}><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={f.overtime} onChange={(e) => setF({ ...f, overtime: e.target.checked })} /> Pay 1.5× after 40 hours in a week</span></label></div>
           {f.pay_frequency === 'weekly' && <div className="field"><label htmlFor="ps-start">Pay week starts on</label>
             <select id="ps-start" value={startDow} onChange={(e) => setStartDow(+e.target.value)}>{DAY_LONG.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></div>}
           {f.pay_frequency === 'biweekly' && <div className="field"><label htmlFor="ps-anchor">A two-week pay period starts on</label>
@@ -207,6 +214,18 @@ function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onS
               <select id="ps-moff" value={f.pay_month_offset} onChange={(e) => setF({ ...f, pay_month_offset: +e.target.value })}><option value={0}>The same month</option><option value={1}>The next month</option></select></div>
           </>}
         </div>
+        <fieldset className="field otset"><legend>Overtime (you decide how you pay it)</legend>
+          <label className="inline"><input type="checkbox" checked={f.overtime} onChange={(e) => setF({ ...f, overtime: e.target.checked })} /> Pay overtime</label>
+          {f.overtime && <div className="otrow">
+            <label>after <input type="number" min={1} max={168} step={0.5} value={f.ot_after} onChange={(e) => setF({ ...f, ot_after: +e.target.value || 40 })} aria-label="Overtime starts after hours" /> hours in a week, paid</label>
+            <select value={f.ot_mode} onChange={(e) => setF({ ...f, ot_mode: e.target.value as PaySettings['ot_mode'] })} aria-label="How overtime is paid">
+              <option value="multiplier">as a multiple of each worker's rate</option><option value="fixed">as a fixed amount per hour</option></select>
+            {f.ot_mode === 'multiplier'
+              ? <label><input type="number" min={1} max={5} step={0.05} value={f.ot_multiplier} onChange={(e) => setF({ ...f, ot_multiplier: +e.target.value || 1 })} aria-label="Overtime multiple" /> × the hourly rate</label>
+              : <label>$<input type="number" min={0} max={999} step={0.25} value={f.ot_fixed_rate} onChange={(e) => setF({ ...f, ot_fixed_rate: +e.target.value || 0 })} aria-label="Overtime dollars per hour" /> per overtime hour</label>}
+          </div>}
+          <span className="hint">{otText(f)}.</span>
+        </fieldset>
         <div className="actions"><button className="btn primary" onClick={save}>Save payroll settings</button></div>
       </details>
     </section>

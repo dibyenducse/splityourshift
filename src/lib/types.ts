@@ -10,6 +10,7 @@ export interface Loc {
   id: string; org_id: string; name: string; type: LocType; sort: number;
   // payroll schedule for this business (see src/lib/payroll.ts)
   pay_frequency?: 'weekly' | 'biweekly' | 'monthly'; pay_anchor?: string; pay_weekday?: number; pay_month_day?: number; pay_month_offset?: number; overtime?: boolean;
+  ot_after?: number; ot_mode?: 'multiplier' | 'fixed'; ot_multiplier?: number; ot_fixed_rate?: number;
 }
 export interface Slot { id: string; org_id: string; location_id: string; start_hour: number; hours: number; sort: number; active: boolean }
 export interface Avail { dow: number; mode: 'any' | 'hours' | 'off'; from_hour: number; to_hour: number }

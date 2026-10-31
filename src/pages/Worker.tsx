@@ -10,6 +10,8 @@ import { Loading, Sheet, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
 import { ClockPanel, HoursList } from '../components/Clock';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
+import { ProfileMenu } from '../components/Avatar';
+import { PayslipList } from '../components/Payslips';
 
 const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">Time off requested</span>
   : r.status === 'approved' ? <span className="tag ok">Time off approved</span>
@@ -70,7 +72,11 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={preview ? undefined : notes} onNotes={preview ? undefined : () => setSheet('notes')}
         onAccount={preview ? preview.onExit : () => setSheet('account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>}
-        extra={self && <button className="btn" onClick={self.onExit} title="Back to running the business: schedule, time clock, payroll">⇄ Owner view</button>} />
+        profile={preview ? undefined : <ProfileMenu name={w.name} role={`${self ? 'Owner, working as a worker' : 'Worker'} · ${b.org.name}`} items={[
+          ...(self ? [{ label: '⇄ Switch to owner view', hint: 'Schedule, time clock, payroll', onClick: self.onExit, primary: true }] : []),
+          { label: 'My account', hint: 'Phone, language, password', onClick: () => setSheet('account') },
+          { label: 'My payslips', hint: 'Every paid payday', onClick: () => document.getElementById('my-payslips')?.scrollIntoView({ behavior: 'smooth' }) },
+        ]} />} />
       <div className="wrap"><div className="layout">
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
@@ -96,6 +102,8 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
             <div className="tile"><div className="k">Hourly rate</div><div className="v">{money(p.rate)}</div><div className="s">{p.ot ? `${p.ot} h overtime at ${money(p.rate * 1.5)}` : 'Overtime after 40 h a week'}</div></div>
             <div className="tile"><div className="k">This week</div><div className="v">{money(wk.gross)}</div><div className="s">{wk.hours} h worked{p.covers ? ` · ${p.covers} extra shift${p.covers > 1 ? 's' : ''} covered` : ''}</div></div>
           </div>
+          <h3 id="my-payslips" style={{ fontSize: 17, margin: '16px 0 8px' }}>My payslips</h3>
+          <PayslipList business={b.org.name} empId={w.id} limit={6} />
           <h3 style={{ fontSize: 17, margin: '16px 0 8px' }}>My hours</h3>
           <HoursList b={b} empId={w.id} weeks={weeks} onCancel={async (f) => { const { error } = await supabase.rpc('cancel_time_fix', { p_id: f.id }); if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled.', 'ok', 'Cancelled'); reload(); }} />
         </section>

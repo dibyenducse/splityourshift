@@ -6,10 +6,11 @@ import { DAY_LONG, money, rangeTitle } from './time';
 export type PayFrequency = 'weekly' | 'biweekly' | 'monthly';
 export interface PaySettings {
   pay_frequency: PayFrequency; pay_anchor: string; pay_weekday: number; pay_month_day: number; pay_month_offset: number; overtime: boolean;
+  ot_after: number; ot_mode: 'multiplier' | 'fixed'; ot_multiplier: number; ot_fixed_rate: number;
 }
 export interface Period { period_start: string; period_end: string; pay_date: string }
 export interface PayLine {
-  employee_id: string; name: string; rate: number; hours: number; regular_hours: number; overtime_hours: number;
+  employee_id: string; name: string; rate: number; overtime_rate?: number; hours: number; regular_hours: number; overtime_hours: number;
   regular_pay: number; overtime_pay: number; bonus: number; deduction: number; gross: number; net: number; open_entries?: number;
 }
 export interface PayRun {
@@ -28,7 +29,7 @@ export interface MyPay {
 }
 
 const num = <T,>(rows: T[], keys: (keyof T)[]) => rows.map((r) => { const o = { ...r }; for (const k of keys) (o[k] as unknown) = Number(r[k] ?? 0); return o; });
-const LINE_NUMS: (keyof PayLine)[] = ['rate', 'hours', 'regular_hours', 'overtime_hours', 'regular_pay', 'overtime_pay', 'bonus', 'deduction', 'gross', 'net', 'open_entries'];
+const LINE_NUMS: (keyof PayLine)[] = ['rate', 'overtime_rate', 'hours', 'regular_hours', 'overtime_hours', 'regular_pay', 'overtime_pay', 'bonus', 'deduction', 'gross', 'net', 'open_entries'];
 const day = (d: string) => String(d).slice(0, 10);
 const fixDates = <T extends object>(r: T) => { const o = { ...r } as Record<string, unknown>; for (const k in o) if (/(_start|_end|_date)$/.test(k) && o[k]) o[k] = day(o[k] as string); return o as T; };
 
@@ -89,6 +90,13 @@ export function scheduleText(s: PaySettings) {
   const start = DAY_LONG[(new Date(s.pay_anchor + 'T00:00:00Z').getUTCDay() + 6) % 7];
   return `${FREQ_LABEL[s.pay_frequency]} · ${start} to ${DAY_LONG[(new Date(s.pay_anchor + 'T00:00:00Z').getUTCDay() + 5) % 7]} · paid the next ${DAY_LONG[s.pay_weekday]}`;
 }
+/** Dollars per overtime hour on a line (older paid records only stored the total). */
+export const otRate = (l: PayLine) => l.overtime_rate || (l.overtime_hours ? Math.round((l.overtime_pay / l.overtime_hours) * 100) / 100 : 0);
+export function otText(s: Pick<PaySettings, 'overtime' | 'ot_after' | 'ot_mode' | 'ot_multiplier' | 'ot_fixed_rate'>) {
+  if (!s.overtime) return 'No overtime pay';
+  const after = Number(s.ot_after ?? 40), mult = Number(s.ot_multiplier ?? 1.5);
+  return `Overtime after ${hrs(after)} h a week at ${s.ot_mode === 'fixed' ? `${money(Number(s.ot_fixed_rate ?? 0))} an hour` : `${mult}× the hourly rate`}`;
+}
 export const totals = (lines: PayLine[]) => lines.reduce((t, l) => ({
   hours: t.hours + l.hours, ot: t.ot + l.overtime_hours, reg: t.reg + l.regular_pay, otPay: t.otPay + l.overtime_pay,
   bonus: t.bonus + l.bonus, ded: t.ded + l.deduction, gross: t.gross + l.gross, net: t.net + l.net,
@@ -123,7 +131,7 @@ function slipHtml(r: Report, l: PayLine) {
   return `<div class="slip"><h1>Payslip</h1><div class="sub">${esc(r.business)} · ${esc(r.location)}</div>
   <div class="meta"><div><b>Employee</b>${esc(l.name)}</div><div><b>Pay period</b>${periodTitle(r.period)}</div><div><b>Pay date</b>${dateLong(r.period.pay_date)}</div><div><b>Status</b>${r.status}</div></div>
   <table><tbody>${row('Regular hours', hrs(l.regular_hours))}${row('Overtime hours', hrs(l.overtime_hours))}${row('Hourly rate', money(l.rate))}
-  ${row('Regular pay', money(l.regular_pay))}${row('Overtime pay (1.5×)', money(l.overtime_pay))}${row('Bonus', money(l.bonus))}
+  ${row('Regular pay', money(l.regular_pay))}${row(`Overtime pay (${money(otRate(l))}/h)`, money(l.overtime_pay))}${row('Bonus', money(l.bonus))}
   ${row('Gross pay', `<b>${money(l.gross)}</b>`)}${row('Deductions', money(l.deduction))}<tr><td class="net">Net pay</td><td class="net">${money(l.net)}</td></tr></tbody></table>
   <div class="foot">Gross pay from clocked hours. Taxes are not included unless entered as deductions. Made with SplitYourShift.</div></div>`;
 }
@@ -185,7 +193,7 @@ export async function downloadPdf(r: Report, kind: 'summary' | 'slips', only?: s
       head('Payslip');
       meta([['Employee', l.name], ['Pay period', periodTitle(r.period)], ['Pay date', dateLong(r.period.pay_date)], ['Status', r.status]], M + 42);
       const items: [string, string, boolean?][] = [['Regular hours', hrs(l.regular_hours)], ['Overtime hours', hrs(l.overtime_hours)], ['Hourly rate', money(l.rate)],
-        ['Regular pay', money(l.regular_pay)], ['Overtime pay (1.5×)', money(l.overtime_pay)], ['Bonus', money(l.bonus)], ['Gross pay', money(l.gross), true],
+        ['Regular pay', money(l.regular_pay)], [`Overtime pay (${money(otRate(l))}/h)`, money(l.overtime_pay)], ['Bonus', money(l.bonus)], ['Gross pay', money(l.gross), true],
         ['Deductions', money(l.deduction)], ['Net pay', money(l.net), true]];
       let y = M + 104; doc.setFontSize(11); doc.setDrawColor('#d5dbe2');
       for (const [k, v, b] of items) { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.text(k, M, y); doc.text(v, W - M, y, { align: 'right' }); doc.line(M, y + 7, W - M, y + 7); y += 24; }
@@ -195,3 +203,14 @@ export async function downloadPdf(r: Report, kind: 'summary' | 'slips', only?: s
   const who = kind === 'slips' && only ? `-${r.lines.find((l) => l.employee_id === only)?.name.replace(/\W+/g, '-')}` : '';
   doc.save(`${kind === 'summary' ? 'payroll' : 'payslip'}-${r.location.replace(/\W+/g, '-')}-${r.period.period_start}${who}.pdf`);
 }
+
+// ---------------------------------------------------------------- one worker's paid payslips
+
+export interface Payslip { run_id: string; location_id: string; location_name: string; period_start: string; period_end: string; pay_date: string; paid_at: string; line: PayLine }
+export async function myPayslips(empId: string): Promise<Payslip[]> {
+  const { data, error } = await supabase.rpc('my_payslips', { p_emp: empId });
+  if (error) throw error;
+  return (data as Payslip[]).map((p) => ({ ...fixDates(p), line: num([p.line], LINE_NUMS)[0] }));
+}
+export const slipReport = (business: string, p: Payslip): Report =>
+  ({ business, location: p.location_name, period: p, status: 'Paid', paidAt: p.paid_at, lines: [p.line] });

@@ -4,12 +4,12 @@ import { cellKey, defAvail, type Changes } from './rules';
 import type { Avail, Bundle, Emp, LedgerRow, Loc, LoginStatus, Note, Org, Req, Slot, TimeEntry, TimeFix } from './types';
 
 export type Role = 'admin' | 'owner' | 'worker' | 'new';
-export interface Me { role: Role; userId: string; email: string; orgId?: string; empId?: string }
+export interface Me { role: Role; userId: string; email: string; avatarUrl?: string | null; orgId?: string; empId?: string }
 
 export async function whoAmI(): Promise<Me | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const base = { userId: user.id, email: user.email ?? '' };
+  const base = { userId: user.id, email: user.email ?? '', avatarUrl: (user.user_metadata?.avatar_url as string | undefined) ?? null };
   const { data: adm } = await supabase.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
   if (adm) return { ...base, role: 'admin' };
   const { data: org } = await supabase.from('organizations').select('id').eq('owner_id', user.id).order('created_at').limit(1).maybeSingle();

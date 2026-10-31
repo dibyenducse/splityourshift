@@ -478,3 +478,29 @@ button.clock-btn:active:not(:disabled) { transform: scale(.97); }
 .payctl select { max-width: 100%; }
 table.data.payroll { min-width: 980px; }
 .panel details > summary { cursor: pointer; list-style: revert; }
+.otset { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; display: grid; gap: 8px; }
+.otset .inline { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; color: var(--fg); }
+.otrow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; }
+.otrow label { display: inline-flex; gap: 6px; align-items: center; color: var(--fg); font-weight: 500; }
+.field.otset .otrow input { width: 80px; flex: none; min-height: 34px; }
+.field.otset .otrow select { width: auto; max-width: 100%; min-height: 34px; }
+.field.otset .otrow label { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- profile photo menu */
+.avatar { display: inline-grid; place-items: center; border-radius: 50%; object-fit: cover; font-weight: 700; flex: none;
+  background: hsl(var(--h, 210) 45% 88%); color: hsl(var(--h, 210) 45% 26%); border: 1px solid var(--line); }
+.pmenu { position: relative; }
+.pm-btn { padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; }
+.pm-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pm-pop { position: absolute; right: 0; top: calc(100% + 8px); width: min(300px, calc(100vw - 24px)); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 12px; box-shadow: var(--shadow); padding: 8px; display: grid; gap: 2px; z-index: 40; }
+.pm-head { display: flex; gap: 12px; align-items: center; padding: 6px 6px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.pm-head div { display: grid; min-width: 0; } .pm-head b { font-size: 15px; } .pm-head span { font-size: 12.5px; color: var(--muted); }
+.pm-head small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-photo { position: relative; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 50%; }
+.pm-photo .pm-edit { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 5px; }
+.pm-item { text-align: left; font: inherit; font-size: 14px; color: var(--fg); background: none; border: 0; border-radius: 8px; padding: 9px 10px; cursor: pointer; display: grid; }
+.pm-item small { font-size: 12px; color: var(--muted); }
+.pm-item:hover, .pm-item:focus-visible { background: var(--surface-2); outline: none; }
+.pm-item.primary { color: var(--accent); font-weight: 700; }
+.pm-item.danger-text { color: var(--bad); }
