@@ -15,32 +15,56 @@ export function shiftWindow(b: Bundle, k: string) {
 export const clockTime = (t: string | Date) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const elapsed = (from: string, now: number) => { const m = Math.max(0, Math.floor((now - new Date(from).getTime()) / 60000)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
 
-/** Worker's big clock in / clock out button. */
+/** What clock_in_now() answered: which follow-up question to ask. */
+type ClockResult =
+  | { mode: 'scheduled'; entry_id: string; label: string; late_minutes: number }
+  | { mode: 'late'; entry_id: string; label: string; late_minutes: number; grace: number; covered_by: string | null; covered_name: string | null; covered_minutes: number }
+  | { mode: 'unscheduled'; entry_id: string };
+
+const BellIcon = ({ on }: { on: boolean }) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />{!on && <path d="M3 3l18 18" />}</svg>
+);
+
+/**
+ * Worker's big round clock button. Tapping anywhere on the circle clocks in at once; then, depending on the
+ * schedule, it asks a follow-up: late beyond the grace period (and who stayed on), or no shift right now
+ * (covering someone? takeover / swap / extra shift).
+ */
 export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: string; userId: string; reload: () => void }) {
   const toast = useToast();
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [push, setPush] = useState(pushIsOn());
-  const [fix, setFix] = useState(false);
-  const [late, setLate] = useState<string | null>(null);
-  const [cover, setCover] = useState(false);
+  const [missed, setMissed] = useState(false);
+  const [ask, setAsk] = useState<ClockResult | null>(null);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(t); }, []);
 
   const mine = keysOf(b, empId).filter((k) => { const d = parseCell(k).date; return d >= addDays(todayIso(), -1) && d <= addDays(todayIso(), 14); });
   const entryFor = (k: string) => b.entries.find((e) => e.employee_id === empId && e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date);
   const open = b.entries.find((e) => e.employee_id === empId && !e.clock_out);
   const current = mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime() && !entryFor(k); });
-  const doneNow = mine.find((k) => { const w = shiftWindow(b, k); const e = entryFor(k); return e?.clock_out && now <= w.end.getTime() + 2 * 36e5 && now >= w.start.getTime() - 30 * 60000; });
   const next = mine.find((k) => shiftWindow(b, k).start.getTime() > now && !entryFor(k));
   const openKey = open?.slot_id ? cellKey(open.slot_id, open.work_date) : null;
 
-  const act = async (fn: () => PromiseLike<{ error: unknown }>, ok: string) => {
+  const clockIn = async () => {
     setBusy(true);
-    const { error } = await fn();
+    const { data, error } = await supabase.rpc('clock_in_now', {});
     setBusy(false);
-    if (error) toast(errText(error), 'error', "Didn't work"); else { toast(ok, 'ok', 'Done'); reload(); }
+    if (error) return toast(errText(error), 'error', "Didn't clock in");
+    const r = data as ClockResult;
+    reload();
+    if (r.mode === 'scheduled') toast(`Clocked in for ${r.label}. Have a good shift!`, 'ok', 'Clocked in');
+    else setAsk(r);
+  };
+  const clockOut = async () => {
+    setBusy(true);
+    const { error } = await supabase.rpc('clock_out');
+    setBusy(false);
+    if (error) toast(errText(error), 'error', "Didn't clock out"); else { toast('Clocked out. Your hours are saved.', 'ok', 'Done'); reload(); }
   };
   const turnOn = async () => {
+    if (push) return toast("Shift reminders are on for this phone. To turn them off, block notifications for this site in your phone's settings.", 'ok', 'Reminders on');
     try { await enablePush(userId); setPush(true); toast("Reminders are on. You'll get a notification when it's time to clock in and out.", 'ok', 'Reminders on'); }
     catch (e) { toast(errText(e), 'error', "Couldn't turn on"); }
   };
@@ -49,132 +73,163 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   if (open) {
     face = (<>
       <div className="clock-btn on" role="status" aria-live="polite"><span>On the clock<b>{elapsed(open.clock_in, now)}</b></span></div>
-      <p className="clock-sub">Since {clockTime(open.clock_in)}{openKey && slotOf(b, openKey) ? ` · ${slotLabel(b, openKey)}` : ''}</p>
-      <button className="btn big danger clock-out" disabled={busy} onClick={() => act(() => supabase.rpc('clock_out'), 'Clocked out. Your hours are saved.')}>Clock out</button>
-    </>);
-  } else if (current) {
-    const w = shiftWindow(b, current);
-    face = (<>
-      <button className="clock-btn" disabled={busy} onClick={() => (now > w.start.getTime() + 10 * 60000 ? setLate(current)
-        : act(() => supabase.rpc('clock_in', { p_slot: parseCell(current).slot, p_date: parseCell(current).date, p_from_scheduled: false }), 'Clocked in. Have a good shift!'))}>
-        <span>Clock in<small>{clockTime(w.start)} shift</small></span></button>
-      <p className="clock-sub">{slotLabel(b, current)}{now > w.start.getTime() + 5 * 60000 ? ` · started ${Math.round((now - w.start.getTime()) / 60000)} min ago` : ''}</p>
-    </>);
-  } else if (doneNow) {
-    const e = entryFor(doneNow)!;
-    face = (<>
-      <div className="clock-btn done"><span>Done ✓<small>{entryHours(e)} h</small></span></div>
-      <p className="clock-sub">{slotLabel(b, doneNow)} · {clockTime(e.clock_in)} – {clockTime(e.clock_out!)}</p>
+      <p className="clock-sub">Since {clockTime(open.clock_in)}{openKey && slotOf(b, openKey) ? ` · ${slotLabel(b, openKey)}` : open.note ? ` · ${open.note}` : ''}</p>
+      {!open.slot_id && open.note === 'No scheduled shift' && <button className="btn small" onClick={() => setAsk({ mode: 'unscheduled', entry_id: open.id })}>Covering someone? Tell us</button>}
+      <button className="btn big danger clock-out" disabled={busy} onClick={clockOut}>Clock out</button>
     </>);
   } else {
+    const w = current ? shiftWindow(b, current) : null;
     face = (<>
-      <div className="clock-btn off"><span>Off<small>no shift now</small></span></div>
-      <p className="clock-sub">{next ? `Next shift: ${slotLabel(b, next)}. You can clock in 30 minutes before it starts.` : 'No upcoming shifts in the next two weeks.'}</p>
+      <button className="clock-btn" disabled={busy} onClick={clockIn} aria-label="Clock in now">
+        <span>{busy ? '…' : 'Clock in'}<small>{w ? `${clockTime(w.start)} shift` : 'tap to start'}</small></span></button>
+      <p className="clock-sub">{current ? `${slotLabel(b, current)}${now > w!.start.getTime() + 5 * 60000 ? ` · started ${Math.round((now - w!.start.getTime()) / 60000)} min ago` : ''}`
+        : next ? `No shift right now. Next: ${slotLabel(b, next)}. You can still clock in to cover someone or work an extra shift.`
+        : 'No shift right now. You can still clock in to cover someone or work an extra shift.'}</p>
     </>);
   }
 
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Time clock</h2><span className={`lamp${open ? ' on' : ''}`} title={open ? 'On the clock' : 'Not clocked in'} /></div>
+      <div className="panel-head"><h2>Time clock</h2>
+        <span className="clock-tools">
+          {(pushSupported() || isIOS()) && <button className={`btn icon bellbtn${push ? ' on' : ''}`} onClick={turnOn}
+            title={push ? 'Shift reminders are on' : 'Turn on shift reminders'} aria-label={push ? 'Shift reminders are on' : 'Turn on shift reminders'}><BellIcon on={push} /></button>}
+          <span className={`lamp${open ? ' on' : ''}`} title={open ? 'On the clock' : 'Not clocked in'} /></span></div>
       <div className="clock">{face}</div>
       <div className="actions" style={{ justifyContent: 'center' }}>
-        {pushSupported() || isIOS() ? (push ? <span className="tag ok">Shift reminders on</span>
-          : <button className="btn small primary" onClick={turnOn}>Turn on shift reminders</button>) : null}
-        <button className="btn small" onClick={() => setFix(true)}>Fix my hours</button>
-        {!open && <button className="btn small" onClick={() => setCover(true)}>Clock in for another shift</button>}
+        <button className="linkish" onClick={() => setMissed(true)}>Forgot to clock in or out?</button>
       </div>
       {!push && isIOS() && !isStandalone() && <p className="hint" style={{ textAlign: 'center', margin: '8px 0 0' }}>iPhone: tap Share → Add to Home Screen, then open SplitYourShift from your home screen to get reminders.</p>}
-      {fix && <FixSheet b={b} empId={empId} onClose={() => setFix(false)} reload={reload} />}
-      {late && <StartChoice b={b} cell={late} title="You're clocking in late" onClose={() => setLate(null)}
-        go={(fromScheduled) => { setLate(null); act(() => supabase.rpc('clock_in', { p_slot: parseCell(late).slot, p_date: parseCell(late).date, p_from_scheduled: fromScheduled }),
-          fromScheduled ? 'Clocked in. Your manager will confirm your start time.' : 'Clocked in. Have a good shift!'); }} />}
-      {cover && <CoverSheet b={b} empId={empId} now={now} onClose={() => setCover(false)}
-        go={(k, fromScheduled) => { setCover(false); act(() => supabase.rpc('clock_in_cover', { p_slot: parseCell(k).slot, p_date: parseCell(k).date, p_from_scheduled: fromScheduled }),
-          'Clocked in. You are covering this shift; your manager was told.'); }} />}
+      {missed && <MissedPunchSheet b={b} empId={empId} onClose={() => setMissed(false)} reload={reload} />}
+      {ask?.mode === 'late' && <LateSheet r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {ask?.mode === 'unscheduled' && <CoverAsk b={b} empId={empId} entryId={ask.entry_id} onClose={() => setAsk(null)} reload={reload} />}
     </section>
   );
 }
 
-/** Late clock-in: start from now, or claim the scheduled start (the owner approves it). */
-function StartChoice({ b, cell, title, onClose, go, extra }: { b: Bundle; cell: string; title: string; onClose: () => void; go: (fromScheduled: boolean) => void; extra?: React.ReactNode }) {
-  const w = shiftWindow(b, cell); const mins = Math.round((Date.now() - w.start.getTime()) / 60000);
+/** Late beyond the grace period. If the previous worker stayed on: ignore (they approve), swap later (they accept) or payroll. */
+function LateSheet({ r, onClose, reload }: { r: Extract<ClockResult, { mode: 'late' }>; onClose: () => void; reload: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const choose = async (c: 'ignore' | 'swap' | 'payroll') => {
+    setBusy(true);
+    const { error } = await supabase.rpc('late_choice', { p_entry: r.entry_id, p_choice: c });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(c === 'payroll' ? 'Saved. Your real clock-in time is used for pay.' : `Sent to ${r.covered_name}. You'll get a notification when they answer.`, 'ok', 'Saved');
+    onClose(); reload();
+  };
+  const who = r.covered_name, m = r.covered_minutes;
   return (
-    <Sheet eyebrow="Time clock" title={title} onClose={onClose}>
-      {extra}
-      <div className="sec"><p>{slotLabel(b, cell)} started at {clockTime(w.start)}, {mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`} ago. When did you start working?</p></div>
-      <div className="option best"><h4>Start from now ({clockTime(new Date())})</h4><p>You're paid from the moment you clock in.</p>
-        <div><button className="btn primary" onClick={() => go(false)}>Clock in now</button></div></div>
-      <div className="option"><h4>I started at {clockTime(w.start)}</h4><p>You forgot to clock in. Your manager gets a request to confirm the earlier start; until then you're paid from now.</p>
-        <div><button className="btn" onClick={() => go(true)}>Clock in from {clockTime(w.start)}</button></div></div>
+    <Sheet eyebrow="Clocked in" title={`You clocked in ${r.late_minutes} minutes late`} onClose={onClose}>
+      <div className="sec"><p>{r.label}. Your real clock-in time ({clockTime(new Date())}) is saved. {who ? <><b>{who}</b> stayed {m} minutes to cover your shift. How would you like to handle this?</> : `Nobody needed to stay for you, so there is nothing to agree on.`}</p></div>
+      {who ? <>
+        <div className="option"><h4>Ignore</h4><p>Ask {who} to call it even. When they approve, it's recorded that you both agreed to ignore it.</p>
+          <div><button className="btn" disabled={busy} onClick={() => choose('ignore')}>Ask {who} to ignore it</button></div></div>
+        <div className="option best"><h4>Request a swap</h4><p>Another day you come {m} minutes early so {who} can leave {m} minutes early. {who} accepts or declines.</p>
+          <div><button className="btn primary" disabled={busy} onClick={() => choose('swap')}>Offer {m} minutes back</button></div></div>
+        <div className="option"><h4>Use normal payroll</h4><p>No swap. {who}'s extra minutes and your shorter shift are paid as your manager's payroll settings say.</p>
+          <div><button className="btn" disabled={busy} onClick={() => choose('payroll')}>Use normal payroll</button></div></div>
+      </> : <div className="actions"><button className="btn primary" onClick={() => { choose('payroll'); }}>OK</button></div>}
     </Sheet>
   );
 }
 
-/** Emergency cover: clock in on any shift happening right now (someone else's or an open one). */
-function CoverSheet({ b, empId, now, onClose, go }: { b: Bundle; empId: string; now: number; onClose: () => void; go: (cell: string, fromScheduled: boolean) => void }) {
+/** Clocked in with no shift on now: covering someone? takeover / swap / extra paid shift. */
+function CoverAsk({ b, empId, entryId, onClose, reload }: { b: Bundle; empId: string; entryId: string; onClose: () => void; reload: () => void }) {
+  const toast = useToast();
+  const now = Date.now();
   const [pick, setPick] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const me = empOf(b, empId);
+  const myLocs = b.locs.filter((l) => me?.locs.includes(l.id));
+  const [loc, setLoc] = useState(myLocs[0]?.id ?? b.locs[0]?.id ?? '');
   const days = [addDays(todayIso(), -1), todayIso()];
   const cells = b.slots.flatMap((s) => days.map((d) => cellKey(s.id, d)))
     .filter((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime() && b.assign[k] !== empId; })
     .sort((x, y) => shiftWindow(b, x).start.getTime() - shiftWindow(b, y).start.getTime());
-  const whoIn = (k: string) => b.entries.find((e) => e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date);
+  const taken = (k: string) => b.entries.find((e) => e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date);
+  const go = async (kind: 'takeover' | 'swap' | 'extra', k: string | null) => {
+    setBusy(true);
+    const args = k ? { p_entry: entryId, p_kind: kind, p_slot: parseCell(k).slot, p_date: parseCell(k).date } : { p_entry: entryId, p_kind: 'extra', p_loc: loc || null };
+    const { error } = await supabase.rpc('resolve_unscheduled', args);
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    const other = k ? empOf(b, b.assign[k])?.name : null;
+    toast(kind === 'swap' ? `Saved. ${other} gets a swap request; your manager is told.` : kind === 'takeover' ? `Saved. The shift is yours now; nothing is owed.` : 'Saved as an extra paid shift. Your manager is told.', 'ok', 'Saved');
+    onClose(); reload();
+  };
   if (pick) {
-    const owner = empOf(b, b.assign[pick]);
-    const note = <div className="banner"><p>{owner ? <>You'll take over <b>{owner.name}</b>'s shift. {owner.name} will owe you 1 shift, and your manager is told so they can set up the trade.</> : <>This shift is open. You'll be added to it and your manager is told.</>}</p></div>;
-    const w = shiftWindow(b, pick);
-    if (now > w.start.getTime() + 10 * 60000) return <StartChoice b={b} cell={pick} title="Cover this shift" onClose={onClose} go={(f) => go(pick, f)} extra={note} />;
+    const other = empOf(b, b.assign[pick]);
     return (
-      <Sheet eyebrow="Emergency cover" title="Cover this shift" onClose={onClose}>
-        <div className="sec"><p><b>{slotLabel(b, pick)}</b></p></div>{note}
-        <div className="actions"><button className="btn primary" onClick={() => go(pick, false)}>Clock in and cover</button><button className="btn" onClick={() => setPick(null)}>‹ Pick another shift</button></div>
+      <Sheet eyebrow="Covering a shift" title={slotLabel(b, pick)} onClose={onClose}>
+        <div className="sec"><p>{other ? <>You're working <b>{other.name}</b>'s shift. How was it arranged?</> : 'This shift is open. It moves to you.'}</p></div>
+        {other && <div className="option"><h4>Shift takeover</h4><p>{other.name} gave you the whole shift. Nobody owes anything later.</p>
+          <div><button className="btn" disabled={busy} onClick={() => go('takeover', pick)}>{other.name} gave it to me</button></div></div>}
+        {other && <div className="option best"><h4>Shift swap</h4><p>You cover today; {other.name} covers one of your shifts later. {other.name} gets a request to accept.</p>
+          <div><button className="btn primary" disabled={busy} onClick={() => go('swap', pick)}>Ask {other.name} for a swap</button></div></div>}
+        <div className="option"><h4>Extra paid shift</h4><p>You're working an extra shift. No swap later; your real hours are paid.</p>
+          <div><button className="btn" disabled={busy} onClick={() => go('extra', pick)}>It's an extra shift</button></div></div>
+        <div><button className="btn" onClick={() => setPick(null)}>‹ Pick another shift</button></div>
       </Sheet>);
   }
   return (
-    <Sheet eyebrow="Emergency cover" title="Clock in for another shift" onClose={onClose}>
-      <div className="sec"><p>Filling in for someone who couldn't come, or working an open shift? Pick the shift that's happening now. The shift moves to you and the hours count for your pay.</p></div>
+    <Sheet eyebrow="Clocked in" title="You don't have a scheduled shift right now" onClose={onClose}>
+      <div className="sec"><p>You're clocked in from {clockTime(new Date())}. <b>Are you covering someone else's shift?</b> Pick it below.</p></div>
       <div className="list">{cells.length ? cells.map((k) => {
-        const owner = empOf(b, b.assign[k]); const busy = whoIn(k);
-        return (<button key={k} className="row" disabled={!!busy} onClick={() => setPick(k)}>
-          <span className="main"><b>{slotLabel(b, k)}</b><span>{busy ? `${empOf(b, busy.employee_id)?.name ?? 'Someone'} already clocked in` : owner ? `${owner.name}'s shift` : 'Open shift'}</span></span>
-          {busy ? <span className="tag plain">Taken</span> : <span className="tag ok">Cover</span>}</button>);
-      }) : <p className="empty-note">No shifts are happening right now.</p>}</div>
+        const o = empOf(b, b.assign[k]); const t = taken(k);
+        return (<button key={k} className="row" disabled={!!t} onClick={() => setPick(k)}>
+          <span className="main"><b>{slotLabel(b, k)}</b><span>{t ? `${empOf(b, t.employee_id)?.name ?? 'Someone'} already clocked in` : o ? `${o.name}'s shift` : 'Open shift'}</span></span>
+          {t ? <span className="tag plain">Taken</span> : <span className="tag ok">I'm covering</span>}</button>);
+      }) : <p className="empty-note">No other shifts are happening right now.</p>}</div>
+      <div className="option"><h4>No, I'm working an extra shift</h4><p>Not covering anyone. Your real hours are paid as an extra shift.</p>
+        {b.locs.length > 1 && <div className="field" style={{ maxWidth: 320 }}><label htmlFor="cv-loc">Where</label>
+          <select id="cv-loc" value={loc} onChange={(e) => setLoc(e.target.value)}>{(myLocs.length ? myLocs : b.locs).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+        <div><button className="btn" disabled={busy} onClick={() => go('extra', null)}>Extra shift{b.locs.length > 1 ? ` at ${b.locs.find((l) => l.id === loc)?.name ?? ''}` : ''}</button></div></div>
     </Sheet>
   );
 }
 
 const toLocalInput = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
-/** Worker asks the owner to add or correct clock times (forgot to clock in/out, phone died...). */
-function FixSheet({ b, empId, onClose, reload }: { b: Bundle; empId: string; onClose: () => void; reload: () => void }) {
+/** Missed punch: a shift the worker forgot to clock in or out of. The manager approves the times. */
+function MissedPunchSheet({ b, empId, onClose, reload }: { b: Bundle; empId: string; onClose: () => void; reload: () => void }) {
   const toast = useToast();
-  const recent = keysOf(b, empId).filter((k) => { const d = parseCell(k).date; return d >= addDays(todayIso(), -14) && d <= todayIso(); }).reverse();
-  const [cell, setCell] = useState(recent[0] ?? '');
-  const w = cell ? shiftWindow(b, cell) : null;
-  const [inT, setIn] = useState(w ? toLocalInput(w.start) : '');
-  const [outT, setOut] = useState(w ? toLocalInput(w.end) : '');
+  const now = Date.now();
+  const entryOf = (k: string) => b.entries.find((t) => t.employee_id === empId && t.slot_id === parseCell(k).slot && t.work_date === parseCell(k).date);
+  const pendingFix = (k: string) => b.fixes.some((f) => f.employee_id === empId && f.slot_id === parseCell(k).slot && f.work_date === parseCell(k).date && f.status === 'pending');
+  // Shifts that are over and have no clock-in, or a clock-in still open long after the shift ended.
+  const missed = keysOf(b, empId).filter((k) => {
+    const d = parseCell(k).date; if (d < addDays(todayIso(), -14) || d > todayIso()) return false;
+    const w = shiftWindow(b, k), e = entryOf(k);
+    return w.end.getTime() < now && !pendingFix(k) && (!e || (!e.clock_out && now > w.end.getTime() + 2 * 36e5));
+  }).reverse();
+  const [cell, setCell] = useState(missed[0] ?? '');
+  const init = (k: string) => { const x = shiftWindow(b, k), e = entryOf(k); return { a: toLocalInput(e ? new Date(e.clock_in) : x.start), z: toLocalInput(x.end) }; };
+  const [t, setT] = useState(cell ? init(cell) : { a: '', z: '' });
   const [reason, setReason] = useState('');
-  const pick = (k: string) => { setCell(k); const x = shiftWindow(b, k); const e = b.entries.find((t) => t.employee_id === empId && t.slot_id === parseCell(k).slot && t.work_date === parseCell(k).date);
-    setIn(toLocalInput(e ? new Date(e.clock_in) : x.start)); setOut(toLocalInput(e?.clock_out ? new Date(e.clock_out) : x.end)); };
   const send = async () => {
-    if (!cell) return toast('Pick the shift first.', 'error', 'Missing');
-    const a = new Date(inT), z = new Date(outT);
+    if (!cell) return;
+    const a = new Date(t.a), z = new Date(t.z);
     if (!(z > a)) return toast('Clock-out has to be after clock-in.', 'error', 'Check the times');
     const { error } = await supabase.rpc('request_time_fix', { p_slot: parseCell(cell).slot, p_date: parseCell(cell).date, p_in: a.toISOString(), p_out: z.toISOString(), p_reason: reason });
     if (error) return toast(errText(error), 'error', 'Not sent');
-    toast('Sent to your manager. Your hours count once they approve.', 'ok', 'Sent'); onClose(); reload();
+    toast('Sent to your manager. Those hours count once they approve.', 'ok', 'Sent'); onClose(); reload();
   };
   return (
-    <Sheet eyebrow="Time clock" title="Fix my hours" onClose={onClose}>
-      <div className="sec"><p>Forgot to clock in or out, or the times are wrong? Send the right times to your manager. Hours only count for pay after they approve.</p></div>
-      <div className="field"><label htmlFor="fx-shift">Shift</label>
-        <select id="fx-shift" value={cell} onChange={(e) => pick(e.target.value)}>
-          {recent.length ? recent.map((k) => <option key={k} value={k}>{slotLabel(b, k)}</option>) : <option value="">No shifts in the last 2 weeks</option>}</select></div>
-      <div className="twocol">
-        <div className="field"><label htmlFor="fx-in">Clock in</label><input type="datetime-local" id="fx-in" value={inT} onChange={(e) => setIn(e.target.value)} /></div>
-        <div className="field"><label htmlFor="fx-out">Clock out</label><input type="datetime-local" id="fx-out" value={outT} onChange={(e) => setOut(e.target.value)} /></div>
-      </div>
-      <div className="field"><label htmlFor="fx-why">Reason</label><input type="text" id="fx-why" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Phone died, forgot to clock out…" /></div>
-      <div><button className="btn primary" onClick={send} disabled={!recent.length}>Send to manager</button></div>
+    <Sheet eyebrow="Time clock" title="Missed punch" onClose={onClose}>
+      {missed.length ? <>
+        <div className="sec"><p>Forgot to clock in or out? Pick the shift and send the times you really worked. Your manager approves them.</p></div>
+        <div className="field"><label htmlFor="mp-shift">Shift</label>
+          <select id="mp-shift" value={cell} onChange={(e) => { setCell(e.target.value); setT(init(e.target.value)); }}>
+            {missed.map((k) => <option key={k} value={k}>{slotLabel(b, k)} · {entryOf(k) ? 'no clock-out' : 'no clock-in'}</option>)}</select></div>
+        <div className="twocol">
+          <div className="field"><label htmlFor="mp-in">Started</label><input type="datetime-local" id="mp-in" value={t.a} onChange={(e) => setT({ ...t, a: e.target.value })} /></div>
+          <div className="field"><label htmlFor="mp-out">Finished</label><input type="datetime-local" id="mp-out" value={t.z} onChange={(e) => setT({ ...t, z: e.target.value })} /></div>
+        </div>
+        <div className="field"><label htmlFor="mp-why">Reason (optional)</label><input type="text" id="mp-why" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Phone died, forgot to clock out…" /></div>
+        <div><button className="btn primary" onClick={send}>Send to manager</button></div>
+      </> : <div className="sec"><p>No missed punches in the last two weeks: every finished shift has a clock-in and a clock-out. If a time is wrong, ask your manager to fix it.</p></div>}
     </Sheet>
   );
 }

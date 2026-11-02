@@ -541,3 +541,15 @@ table.data.payroll { min-width: 980px; }
 .bizpill small { font-size: 12px; color: var(--muted); }
 .bizpill.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .bizpill.on b { color: var(--accent); }
+
+/* ---------------------------------------------------------------- time clock tools */
+.clock-tools { display: inline-flex; align-items: center; gap: 10px; }
+.bellbtn { color: var(--muted); }
+.bellbtn.on { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.linkish { font: inherit; font-size: 13.5px; color: var(--accent); background: none; border: 0; padding: 8px 6px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+button.clock-btn { cursor: pointer; padding: 0; }
+button.clock-btn > span { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; }
+.item.adj small { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.adj-history { margin-top: 12px; }
+.adj-history > summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 6px 0; }
+.field.otset .otrow label.wrap { white-space: normal; display: inline; line-height: 2.2; }

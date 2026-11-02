@@ -7,6 +7,7 @@ export type PayFrequency = 'weekly' | 'biweekly' | 'monthly';
 export interface PaySettings {
   pay_frequency: PayFrequency; pay_anchor: string; pay_weekday: number; pay_month_day: number; pay_month_offset: number; overtime: boolean;
   ot_after: number; ot_mode: 'multiplier' | 'fixed'; ot_multiplier: number; ot_fixed_rate: number;
+  grace_minutes: number; mutual_approval: boolean; pay_method: 'actual' | 'grace'; pay_grace_minutes: number;
 }
 export interface Period { period_start: string; period_end: string; pay_date: string }
 export interface PayLine {
@@ -96,6 +97,11 @@ export function otText(s: Pick<PaySettings, 'overtime' | 'ot_after' | 'ot_mode' 
   if (!s.overtime) return 'No overtime pay';
   const after = Number(s.ot_after ?? 40), mult = Number(s.ot_multiplier ?? 1.5);
   return `Overtime after ${hrs(after)} h a week at ${s.ot_mode === 'fixed' ? `${money(Number(s.ot_fixed_rate ?? 0))} an hour` : `${mult}× the hourly rate`}`;
+}
+export function payMethodText(s: Pick<PaySettings, 'pay_method' | 'pay_grace_minutes'>) {
+  return s.pay_method === 'grace' && Number(s.pay_grace_minutes) > 0
+    ? `Paid by schedule within ${Number(s.pay_grace_minutes)} min of a shift's start and end, otherwise by real clock times`
+    : 'Paid by real clock-in and clock-out times';
 }
 export const totals = (lines: PayLine[]) => lines.reduce((t, l) => ({
   hours: t.hours + l.hours, ot: t.ot + l.overtime_hours, reg: t.reg + l.regular_pay, otPay: t.otPay + l.overtime_pay,
