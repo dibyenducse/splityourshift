@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
-import { enablePush, isIOS, isStandalone, pushIsOn, pushSupported } from '../lib/push';
+import { disablePush, enablePush, isIOS, isStandalone, pushIsOn, pushSupported } from '../lib/push';
 import { DAY_SHORT, addDays, mmdd, shiftLong, todayIso } from '../lib/time';
 import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slotOf } from '../lib/rules';
 import type { Bundle, TimeEntry, TimeFix } from '../lib/types';
@@ -64,7 +64,11 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
     if (error) toast(errText(error), 'error', "Didn't clock out"); else { toast('Clocked out. Your hours are saved.', 'ok', 'Done'); reload(); }
   };
   const turnOn = async () => {
-    if (push) return toast("Shift reminders are on for this phone. To turn them off, block notifications for this site in your phone's settings.", 'ok', 'Reminders on');
+    if (push) {
+      try { await disablePush(); setPush(false); toast('Shift reminders are off on this phone. Tap the bell again to turn them back on.', 'ok', 'Reminders off'); }
+      catch (e) { toast(errText(e), 'error', "Couldn't turn off"); }
+      return;
+    }
     try { await enablePush(userId); setPush(true); toast("Reminders are on. You'll get a notification when it's time to clock in and out.", 'ok', 'Reminders on'); }
     catch (e) { toast(errText(e), 'error', "Couldn't turn on"); }
   };
@@ -93,7 +97,7 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
       <div className="panel-head"><h2>Time clock</h2>
         <span className="clock-tools">
           {(pushSupported() || isIOS()) && <button className={`btn icon bellbtn${push ? ' on' : ''}`} onClick={turnOn}
-            title={push ? 'Shift reminders are on' : 'Turn on shift reminders'} aria-label={push ? 'Shift reminders are on' : 'Turn on shift reminders'}><BellIcon on={push} /></button>}
+            title={push ? 'Shift reminders are on (tap to turn off)' : 'Turn on shift reminders'} aria-label={push ? 'Shift reminders on. Tap to turn off' : 'Turn on shift reminders'} aria-pressed={push}><BellIcon on={push} /></button>}
           <span className={`lamp${open ? ' on' : ''}`} title={open ? 'On the clock' : 'Not clocked in'} /></span></div>
       <div className="clock">{face}</div>
       <div className="actions" style={{ justifyContent: 'center' }}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
-import { DAY_LONG, addDays, ago, mmdd, shiftLong, shiftShort, todayIso } from '../lib/time';
+import { DAY_LONG, addDays, mmdd, shiftLong, shiftShort, todayIso } from '../lib/time';
 import { cellKey, empOf } from '../lib/rules';
 import type { Bundle, Slot } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
@@ -14,11 +14,17 @@ interface Check { task_id: string; work_date: string; employee_id: string; done_
 const shiftOrder = (s: Slot) => (s.start_hour - 5 + 24) % 24;
 const dayName = (d: string) => `${DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7]} ${mmdd(d)}`;
 
+/** A shift on a day: slot + date (overnight shifts belong to the day they start). */
+interface Turn { slot: Slot; date: string; start: number }
+const turnStart = (s: Slot, d: string) => new Date(d + 'T00:00:00Z').getTime() + s.start_hour * 36e5;
+
 /**
- * Shift reports and tasks for one day, shift by shift. Workers write a report for their own shift and tick off its
- * tasks; everyone at the business reads the reports. The owner also sets up the task lists.
+ * Shift reports and tasks. Reports are written by the workers on each shift (never by the owner):
+ *  - a worker sees the reports of the shifts before theirs at the same hotel (the handover), ticks their tasks
+ *    and writes the report for their own shift;
+ *  - the owner sees every hotel's shifts for a day side by side, with task progress, and only reads.
  */
-export function ShiftLog({ b, empId, owner, compact }: { b: Bundle; empId?: string; owner?: boolean; compact?: boolean }) {
+export function ShiftLog({ b, empId, owner }: { b: Bundle; empId?: string; owner?: boolean }) {
   const toast = useToast();
   const [date, setDate] = useState(todayIso());
   const [reports, setReports] = useState<Report[]>([]);
@@ -28,15 +34,17 @@ export function ShiftLog({ b, empId, owner, compact }: { b: Bundle; empId?: stri
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState('');
   const me = empId ? empOf(b, empId) : undefined;
+  const writer = !owner && !!empId; // only workers (including an owner in their worker view) write reports
+  const prev = addDays(date, -1);
 
   const load = useCallback(async () => {
     const [r, t, c] = await Promise.all([
-      supabase.from('shift_reports').select('*').eq('org_id', b.org.id).eq('work_date', date).order('created_at'),
+      supabase.from('shift_reports').select('*').eq('org_id', b.org.id).in('work_date', [prev, date]).order('created_at'),
       supabase.from('shift_tasks').select('*').eq('org_id', b.org.id).eq('active', true).order('created_at'),
-      supabase.from('task_checks').select('task_id, work_date, employee_id, done_at').eq('org_id', b.org.id).eq('work_date', date),
+      supabase.from('task_checks').select('task_id, work_date, employee_id, done_at').eq('org_id', b.org.id).in('work_date', [prev, date]),
     ]);
     setReports((r.data ?? []) as Report[]); setTasks((t.data ?? []) as Task[]); setChecks((c.data ?? []) as Check[]);
-  }, [b.org.id, date]);
+  }, [b.org.id, date, prev]);
   useEffect(() => {
     load();
     const ch = supabase.channel(`log-${b.org.id}-${empId ?? 'owner'}`)
@@ -46,20 +54,19 @@ export function ShiftLog({ b, empId, owner, compact }: { b: Bundle; empId?: stri
     return () => { supabase.removeChannel(ch); };
   }, [b.org.id, empId, load]);
 
-  const locs = owner ? b.locs : b.locs.filter((l) => me?.locs.includes(l.id) || b.slots.some((s) => s.location_id === l.id && b.assign[cellKey(s.id, date)] === empId));
-  const tasksFor = (locId: string, slotId: string) => tasks.filter((t) => t.location_id === locId && (t.slot_id === slotId || !t.slot_id) && (t.repeat === 'daily' || t.on_date === date));
-  const canWrite = (slotId: string) => owner || (!!empId && b.assign[cellKey(slotId, date)] === empId);
+  const tasksFor = (t: Turn) => tasks.filter((x) => x.location_id === t.slot.location_id && (x.slot_id === t.slot.id || !x.slot_id) && (x.repeat === 'daily' || x.on_date === t.date));
+  const isMine = (t: Turn) => writer && b.assign[cellKey(t.slot.id, t.date)] === empId;
+  const turnsAt = (locId: string, days: string[]) => days.flatMap((d) => b.slots.filter((s) => s.location_id === locId).map((s) => ({ slot: s, date: d, start: turnStart(s, d) })))
+    .sort((x, y) => x.start - y.start);
 
-  const post = async (locId: string, slotId: string) => {
-    const key = `${locId}|${slotId}`, body = (draft[key] ?? '').trim();
-    if (!body) return toast('Write something first.', 'error', 'Empty report');
-    const author = empId ?? b.emps.find((e) => e.user_id && e.user_id === b.org.owner_id)?.id;
-    if (!author) return toast('You need a worker profile to write reports.', 'error', "Can't post");
+  const post = async (t: Turn) => {
+    const key = `${t.slot.id}|${t.date}`, body = (draft[key] ?? '').trim();
+    if (!body || !empId) return toast('Write something first.', 'error', 'Empty report');
     setBusy(key);
-    const { error } = await supabase.from('shift_reports').insert({ org_id: b.org.id, location_id: locId, slot_id: slotId, work_date: date, employee_id: author, body });
+    const { error } = await supabase.from('shift_reports').insert({ org_id: b.org.id, location_id: t.slot.location_id, slot_id: t.slot.id, work_date: t.date, employee_id: empId, body });
     setBusy('');
     if (error) return toast(errText(error), 'error', 'Not posted');
-    setDraft({ ...draft, [key]: '' }); toast(owner ? 'Posted.' : 'Posted. Your manager is notified.', 'ok', 'Shift report'); load();
+    setDraft({ ...draft, [key]: '' }); toast('Posted. Your manager and the next shift can read it.', 'ok', 'Shift report'); load();
   };
   const saveEdit = async (r: Report) => {
     const body = (draft[`edit|${r.id}`] ?? r.body).trim(); if (!body) return;
@@ -71,75 +78,83 @@ export function ShiftLog({ b, empId, owner, compact }: { b: Bundle; empId?: stri
     const { error } = await supabase.from('shift_reports').delete().eq('id', r.id);
     if (error) toast(errText(error), 'error', 'Not deleted'); else load();
   };
-  const tick = async (t: Task, slotId: string, on: boolean) => {
-    const who = empId ?? b.emps.find((e) => e.user_id === b.org.owner_id)?.id;
-    if (on) {
-      if (!who) return toast('You need a worker profile to tick tasks.', 'error', "Can't tick");
-      const { error } = await supabase.from('task_checks').insert({ task_id: t.id, work_date: date, org_id: b.org.id, employee_id: who });
-      if (error) return toast(errText(error), 'error', 'Not saved');
-    } else {
-      const { error } = await supabase.from('task_checks').delete().eq('task_id', t.id).eq('work_date', date);
-      if (error) return toast(errText(error), 'error', 'Not saved');
-    }
-    void slotId; load();
+  const tick = async (task: Task, t: Turn, on: boolean) => {
+    if (!empId) return;
+    const { error } = on
+      ? await supabase.from('task_checks').insert({ task_id: task.id, work_date: t.date, org_id: b.org.id, employee_id: empId })
+      : await supabase.from('task_checks').delete().eq('task_id', task.id).eq('work_date', t.date);
+    if (error) toast(errText(error), 'error', 'Not saved'); else load();
   };
 
-  const general = reports.filter((r) => !r.slot_id);
+  const card = (t: Turn, tag?: string) => {
+    const k = cellKey(t.slot.id, t.date), who = empOf(b, b.assign[k]), mine = isMine(t), key = `${t.slot.id}|${t.date}`;
+    const rs = reports.filter((r) => r.slot_id === t.slot.id && r.work_date === t.date), ts = tasksFor(t);
+    const done = ts.filter((x) => checks.some((c) => c.task_id === x.id && c.work_date === t.date)).length;
+    return (
+      <div key={key} className={`log-shift${mine ? ' mine' : ''}`}>
+        <div className="log-head"><b>{shiftShort(t.slot.start_hour, t.slot.hours)}</b>
+          <span>{t.date !== date ? `${dayName(t.date)} · ` : ''}{shiftLong(t.slot.start_hour, t.slot.hours)} · {who ? who.name : 'open'}</span>
+          {tag && <span className="tag plain">{tag}</span>}
+          {ts.length > 0 && <span className={`tag ${done === ts.length ? 'ok' : 'warn'}`}>{done}/{ts.length} tasks</span>}</div>
+        {ts.length > 0 && <ul className="tasks">{ts.map((x) => {
+          const c = checks.find((y) => y.task_id === x.id && y.work_date === t.date);
+          return (<li key={x.id}><label className={c ? 'done' : ''}>
+            <input type="checkbox" checked={!!c} disabled={!mine} onChange={(e) => tick(x, t, e.target.checked)} />
+            <span><span className="tt">{x.title}</span>{x.notes && <small>{x.notes}</small>}{c && <small>Done by {empOf(b, c.employee_id)?.name ?? '?'} at {clockTime(c.done_at)}</small>}</span></label></li>);
+        })}</ul>}
+        {rs.map((r) => (
+          <div key={r.id} className="report">
+            <div className="report-meta"><b>{empOf(b, r.employee_id)?.name ?? 'Someone'}</b> · {clockTime(r.created_at)}{r.updated_at && ' (edited)'}</div>
+            {editing === r.id ? <>
+              <textarea rows={3} value={draft[`edit|${r.id}`] ?? r.body} onChange={(e) => setDraft({ ...draft, [`edit|${r.id}`]: e.target.value })} />
+              <div className="actions"><button className="btn small primary" onClick={() => saveEdit(r)}>Save</button><button className="btn small" onClick={() => setEditing(null)}>Cancel</button></div>
+            </> : <p>{r.body}</p>}
+            {editing !== r.id && r.employee_id === empId && writer && <div className="actions">
+              <button className="mini" onClick={() => setEditing(r.id)}>Edit</button>
+              <ConfirmButton className="mini danger-text" label="Delete" confirmLabel="Tap again" onConfirm={() => remove(r)} /></div>}
+          </div>))}
+        {mine && <div className="report-new">
+          <textarea rows={3} placeholder="Your shift report: what happened, what the next shift and your manager should know…"
+            value={draft[key] ?? ''} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-label={`Shift report for ${shiftShort(t.slot.start_hour, t.slot.hours)}`} />
+          <div><button className="btn small primary" disabled={busy === key || !(draft[key] ?? '').trim()} onClick={() => post(t)}>Post report</button></div>
+        </div>}
+        {!rs.length && !mine && <p className="empty-note">No report{who ? ` from ${who.name}` : ''} yet.</p>}
+      </div>);
+  };
+
+  const datebar = (
+    <div className="datepick">
+      <button className="btn icon" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">‹</button>
+      <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Day" />
+      <button className="btn icon" onClick={() => setDate(addDays(date, 1))} aria-label="Next day">›</button>
+      {date !== todayIso() && <button className="btn small" onClick={() => setDate(todayIso())}>Today</button>}
+    </div>);
+
+  if (owner) return (
+    <section className="panel shiftlog" id="shift-log">
+      <div className="panel-head"><h2>Shift reports</h2>{datebar}</div>
+      <p className="hint">{dayName(date)}. Written by the workers on each shift, morning to night audit. You get a notification for every new report; task progress shows on each shift.</p>
+      {b.locs.map((l) => (
+        <div key={l.id} className="log-loc"><h3>{l.name}</h3>
+          <div className="log-grid">{turnsAt(l.id, [date]).sort((x, y) => shiftOrder(x.slot) - shiftOrder(y.slot)).map((t) => card(t))}</div></div>))}
+    </section>);
+
+  // Worker: at each hotel, their shift on this day and the shifts just before it (the handover).
+  const myLocs = b.locs.filter((l) => me?.locs.includes(l.id) || b.slots.some((s) => s.location_id === l.id && [prev, date].some((d) => b.assign[cellKey(s.id, d)] === empId)));
   return (
     <section className="panel shiftlog" id="shift-log">
-      <div className="panel-head"><h2>Shift reports{compact ? ' and tasks' : ''}</h2>
-        <div className="datepick">
-          <button className="btn icon" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">‹</button>
-          <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Day" />
-          <button className="btn icon" onClick={() => setDate(addDays(date, 1))} aria-label="Next day">›</button>
-          {date !== todayIso() && <button className="btn small" onClick={() => setDate(todayIso())}>Today</button>}
-        </div></div>
-      <p className="hint">{dayName(date)}. {owner ? 'What each shift wrote for the next shift and for you, and how their tasks went. You get a notification for every new report.'
-        : 'Write what the next shift and your manager should know. Everyone here can read the reports; your manager gets a notification.'}</p>
-      {locs.map((l) => {
-        const slots = b.slots.filter((s) => s.location_id === l.id).sort((x, y) => shiftOrder(x) - shiftOrder(y));
+      <div className="panel-head"><h2>Shift reports and tasks</h2>{datebar}</div>
+      <p className="hint">{dayName(date)}. Read what the shifts before you wrote, do your shift's tasks, and leave your report for the next shift. Your manager gets a notification.</p>
+      {myLocs.map((l) => {
+        const all = turnsAt(l.id, [prev, date]);
+        const at = all.findIndex((t) => t.date === date && isMine(t));
+        const show = at >= 0 ? all.slice(Math.max(0, at - 3), at + 1) : all.filter((t) => t.date === date);
         return (
-          <div key={l.id} className="log-loc">
-            {(owner ? b.locs.length > 1 : locs.length > 1) && <h3>{l.name}</h3>}
-            {slots.map((s) => {
-              const k = cellKey(s.id, date), who = empOf(b, b.assign[k]), mine = canWrite(s.id), key = `${l.id}|${s.id}`;
-              const rs = reports.filter((r) => r.slot_id === s.id), ts = tasksFor(l.id, s.id);
-              if (!owner && !mine && !rs.length) return null;
-              const done = ts.filter((t) => checks.some((c) => c.task_id === t.id)).length;
-              return (
-                <div key={s.id} className={`log-shift${mine && !owner ? ' mine' : ''}`}>
-                  <div className="log-head"><b>{l.name} {shiftShort(s.start_hour, s.hours)}</b><span>{shiftLong(s.start_hour, s.hours)}{who ? ` · ${who.name}` : ' · open'}</span>
-                    {ts.length > 0 && <span className={`tag ${done === ts.length ? 'ok' : 'plain'}`}>{done}/{ts.length} tasks</span>}</div>
-                  {ts.length > 0 && <ul className="tasks">{ts.map((t) => {
-                    const c = checks.find((x) => x.task_id === t.id);
-                    return (<li key={t.id}><label className={c ? 'done' : ''}>
-                      <input type="checkbox" checked={!!c} disabled={!mine && !owner} onChange={(e) => tick(t, s.id, e.target.checked)} />
-                      <span>{t.title}{t.notes && <small>{t.notes}</small>}{c && <small>Done by {empOf(b, c.employee_id)?.name ?? '?'} at {clockTime(c.done_at)}</small>}</span></label></li>);
-                  })}</ul>}
-                  {rs.map((r) => (
-                    <div key={r.id} className="report">
-                      <div className="report-meta"><b>{empOf(b, r.employee_id)?.name ?? 'Someone'}</b> · {clockTime(r.created_at)}{r.updated_at && ' (edited)'}</div>
-                      {editing === r.id ? <>
-                        <textarea rows={3} value={draft[`edit|${r.id}`] ?? r.body} onChange={(e) => setDraft({ ...draft, [`edit|${r.id}`]: e.target.value })} />
-                        <div className="actions"><button className="btn small primary" onClick={() => saveEdit(r)}>Save</button><button className="btn small" onClick={() => setEditing(null)}>Cancel</button></div>
-                      </> : <p>{r.body}</p>}
-                      {editing !== r.id && (r.employee_id === empId || owner) && <div className="actions">
-                        {r.employee_id === empId && <button className="mini" onClick={() => setEditing(r.id)}>Edit</button>}
-                        <ConfirmButton className="mini danger-text" label="Delete" confirmLabel="Tap again" onConfirm={() => remove(r)} /></div>}
-                    </div>))}
-                  {mine && <div className="report-new">
-                    <textarea rows={2} placeholder={`Report for ${shiftShort(s.start_hour, s.hours)}: what happened, what the next shift should know…`}
-                      value={draft[key] ?? ''} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-label={`Shift report for ${l.name} ${shiftShort(s.start_hour, s.hours)}`} />
-                    <div><button className="btn small primary" disabled={busy === key || !(draft[key] ?? '').trim()} onClick={() => post(l.id, s.id)}>Post report</button></div>
-                  </div>}
-                  {!rs.length && !mine && <p className="empty-note">No report.</p>}
-                </div>);
-            })}
+          <div key={l.id} className="log-loc">{myLocs.length > 1 && <h3>{l.name}</h3>}
+            {at < 0 && <p className="hint" style={{ margin: 0 }}>You don't work at {l.name} on {dayName(date)}. Here are its shift reports.</p>}
+            {show.map((t, i) => card(t, at >= 0 && i < show.length - 1 ? 'Before your shift' : undefined))}
           </div>);
       })}
-      {general.length > 0 && <div className="log-shift"><div className="log-head"><b>Other notes</b></div>{general.map((r) => <div key={r.id} className="report"><div className="report-meta"><b>{empOf(b, r.employee_id)?.name}</b> · {ago(r.created_at)}</div><p>{r.body}</p></div>)}</div>}
-      {!owner && !locs.some((l) => b.slots.some((s) => s.location_id === l.id && (canWrite(s.id) || reports.some((r) => r.slot_id === s.id)))) &&
-        <p className="empty-note">No shift for you on {dayName(date)} and no reports yet. You can write a report on a day you work.</p>}
     </section>
   );
 }

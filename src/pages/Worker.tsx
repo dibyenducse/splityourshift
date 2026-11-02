@@ -86,7 +86,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
         {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
-        <ShiftLog b={b} empId={w.id} compact />
+        <ShiftLog b={b} empId={w.id} />
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
           <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts (set by your manager).</p>

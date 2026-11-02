@@ -35,6 +35,20 @@ export async function enablePush(userId: string) {
   try { localStorage.setItem(FLAG, '1'); } catch { /* storage unavailable */ }
 }
 
+/** Turns reminders off on this phone: unsubscribes and forgets its push address on the server. */
+export async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      await sub.unsubscribe();
+    }
+  } finally {
+    try { localStorage.removeItem(FLAG); } catch { /* storage unavailable */ }
+  }
+}
+
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
