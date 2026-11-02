@@ -14,7 +14,8 @@ import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { PayslipList } from '../components/Payslips';
 import { AdjustmentsPanel } from '../components/Adjustments';
-import { ShiftLog } from '../components/ShiftLog';
+import { TasksBoard } from '../components/ShiftLog';
+import { ShiftReportsBook } from '../components/Logbook';
 import { AvailabilityEditor } from '../components/Availability';
 
 const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">Time off requested</span>
@@ -31,6 +32,8 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
   const [sheet, setSheet] = useState<'request' | 'notes' | null>(null);
+  // Worker sections in the header: my shifts (time clock, schedule, pay), the shift report logbook, my tasks.
+  const [view, setView] = useState<'home' | 'reports' | 'tasks'>('home');
   const nav = useNavigate();
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const { notes, reload: reloadNotes } = useNotes();
@@ -75,18 +78,22 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         profile={preview ? undefined : <ProfileMenu name={w.name} role={`${self ? 'Owner, working as a worker' : 'Worker'} · ${b.org.name}`} items={[
           ...(self ? [{ label: '⇄ Switch to owner view', hint: 'Schedule, time clock, payroll', onClick: self.onExit, primary: true }] : []),
           { label: 'Account settings', hint: 'Name, email, photo, password, availability', onClick: () => nav('/app/account') },
-          { label: 'My shifts', hint: rangeTitle(week, addDays(week, 6)), onClick: () => jump('my-shifts') },
-          { label: 'Shift reports and tasks', onClick: () => jump('shift-log') },
+          { label: 'My shifts', hint: rangeTitle(week, addDays(week, 6)), onClick: () => { setView('home'); setTimeout(() => jump('my-shifts'), 50); } },
+          { label: 'Shift reports', hint: 'The logbook: write and read reports', onClick: () => setView('reports') },
+          { label: 'My tasks', onClick: () => setView('tasks') },
           { label: 'Request time off', onClick: () => setSheet('request') },
-          { label: 'My payslips', hint: 'Every paid payday', onClick: () => jump('my-payslips') },
-        ]} />} />
-      <div className="wrap"><div className="layout">
+          { label: 'My payslips', hint: 'Every paid payday', onClick: () => { setView('home'); setTimeout(() => jump('my-payslips'), 50); } },
+        ]} />}
+        nav={<nav className="topnav" aria-label="Sections">{([['home', 'My shifts'], ['reports', 'Shift reports'], ['tasks', 'My tasks']] as const).map(([v, t]) =>
+          <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>{t}</button>)}</nav>} />
+      {view === 'reports' ? <div className="wrap"><div className="layout"><ShiftReportsBook b={b} empId={preview ? undefined : w.id} /></div></div>
+      : view === 'tasks' ? <div className="wrap"><div className="layout"><TasksBoard b={b} empId={preview ? undefined : w.id} /></div></div>
+      : <div className="wrap"><div className="layout">
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
         {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
-        <ShiftLog b={b} empId={w.id} />
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
           <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts (set by your manager).</p>
@@ -127,7 +134,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
 
         <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} /></div>
         </fieldset>
-      </div></div>
+      </div></div>}
 
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
       {sheet === 'request' && <RequestSheet b={b} empId={w.id} week={week} live={live} onClose={() => setSheet(null)} reload={reload} />}
