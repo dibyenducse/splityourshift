@@ -46,7 +46,9 @@ export default function OwnerApp() {
   const [previewEmp, setPreviewEmp] = useState<string | null>(null);
   const [payLoc, setPayLoc] = useState<string | undefined>();
   const [payDue, setPayDue] = useState<DashRow[]>([]);
-  const undo = useRef<{ changes: Changes; ledgerId?: string }[]>([]);
+  // Undo is per schedule (location): each change remembers which locations' cells it touched.
+  const undo = useRef<{ locs: string[]; changes: Changes; ledgerId?: string }[]>([]);
+  const [, setUndoTick] = useState(0);
   const { notes, reload: reloadNotes } = useNotes();
   const orgId = me!.orgId!;
 
@@ -96,7 +98,11 @@ export default function OwnerApp() {
       let ledgerId: string | undefined;
       if (opts.ledger) { const { data } = await supabase.from('ledger').insert(opts.ledger).select('id').single(); ledgerId = data?.id; }
       if (opts.settle) await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', opts.settle);
-      if (!opts.skipUndo) { undo.current.push({ changes: inverse, ledgerId }); if (undo.current.length > 40) undo.current.shift(); }
+      if (!opts.skipUndo) {
+        const locs = [...new Set(Object.keys(changes).map((k) => slotOf(b, k)?.location_id).filter(Boolean) as string[])];
+        undo.current.push({ locs, changes: inverse, ledgerId }); if (undo.current.length > 80) undo.current.shift();
+        setUndoTick((t) => t + 1);
+      }
       if (r.warnings.length) toast(`${message} ${r.warnings.map((w) => w.msg).join(' ')}`, 'warn', 'Done, check this'); else toast(message, 'ok', 'Done');
       reload();
       return true;
@@ -107,10 +113,18 @@ export default function OwnerApp() {
     }
   }, [b, orgId, reload, toast]);
 
-  const doUndo = async () => {
-    const last = undo.current.pop(); if (!last) return;
+  /** Undo the last change made on one location's schedule; changes on other locations stay. */
+  const doUndo = async (locId: string) => {
+    const i = undo.current.map((u) => u.locs.includes(locId)).lastIndexOf(true); if (i < 0) return;
+    const [last] = undo.current.splice(i, 1); setUndoTick((t) => t + 1);
     if (last.ledgerId) await supabase.from('ledger').delete().eq('id', last.ledgerId);
-    await commit(last.changes, 'Last change undone.', { skipUndo: true });
+    const names = last.locs.map((id) => b?.locs.find((l) => l.id === id)?.name).filter(Boolean).join(' and ');
+    await commit(last.changes, `Undone: the last change on ${names}.`, { skipUndo: true, allowOver: true });
+  };
+  const undoHint = (locId: string) => {
+    const u = [...undo.current].reverse().find((x) => x.locs.includes(locId)); if (!u || !b) return null;
+    const keys = Object.keys(u.changes), other = u.locs.filter((x) => x !== locId).map((id) => b.locs.find((l) => l.id === id)?.name).filter(Boolean);
+    return `Undo the last change here (${keys.length === 1 ? slotLabel(b, keys[0]) : `${keys.length} shifts`})${other.length ? `; it was a trade with ${other.join(', ')}, so that part is undone too` : ''}`;
   };
 
   useDragDrop({
@@ -183,8 +197,8 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const tabs = <div className="subtabs">{(['schedule', 'time', 'payroll'] as const).map((t) => <button key={t} className={`btn small${tab === t ? ' primary' : ''}`} onClick={() => setTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : 'Payroll'}</button>)}</div>;
+  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
+    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : 'Payroll'}</button>)}</nav>;
 
   const schedule = (
     <div className="layout two owner">
@@ -224,7 +238,7 @@ export default function OwnerApp() {
         </section>
       </aside>
       <main className="boards">
-        <div className="tabsrow">{tabs}
+        <div className="tabsrow end">
           <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
         {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
@@ -232,7 +246,7 @@ export default function OwnerApp() {
           <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); setTab('payroll'); }}>Open payroll</button></div>)}
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
-        <WeekGrid b={b} week={week} editable onCell={onCell} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
+        <WeekGrid b={b} week={week} editable onCell={onCell} undoHint={undoHint} onUndo={doUndo} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
           onClearWeek={(l) => { const ch: Changes = {}; for (const s of b.slots.filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
             commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
         <div className="actions no-print"><button className="btn" onClick={() => setAdding(true)}>+ Add a hotel, gas station or shop</button>
@@ -245,7 +259,7 @@ export default function OwnerApp() {
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
         onAccount={() => nav('/app/account')} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
-        extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>}
+        nav={tabs}
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
           { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
           { label: 'Account settings', hint: 'Name, email, photo, password, time zone', onClick: () => nav('/app/account') },
@@ -255,7 +269,7 @@ export default function OwnerApp() {
           { label: 'Add a worker', onClick: () => { setTab('schedule'); addWorker(); } },
           { label: 'Print this week', onClick: () => { setTab('schedule'); setTimeout(() => printBoards(), 50); } },
         ]} />} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} tabs={tabs} reload={reload} initialLoc={payLoc} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>

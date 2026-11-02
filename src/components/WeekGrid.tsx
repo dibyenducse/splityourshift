@@ -7,7 +7,14 @@ import { ConfirmButton } from './ui';
 interface GridProps {
   b: Bundle; week: string; editable: boolean; meId?: string; onlyLocs?: string[];
   onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void; onClearWeek?: (l: Loc) => void;
+  /** Per-location undo: the hint (null = nothing to undo here) and the action. */
+  undoHint?: (locId: string) => string | null; onUndo?: (locId: string) => void;
 }
+
+export const UndoIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}>
+    <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+);
 
 export const PrintIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}>
@@ -24,7 +31,7 @@ export function printBoards(locId?: string) {
 }
 
 /** One board per location: shifts down the side, days across, like the paper schedule. */
-export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek }: GridProps) {
+export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek, undoHint, onUndo }: GridProps) {
   const today = todayIso();
   const ranges: Record<string, [number, number][]> = {};
   for (const k in b.assign) if (valid(b, k)) (ranges[b.assign[k]] ||= []).push([absStart(b, k), absEnd(b, k)]);
@@ -46,6 +53,9 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
               <span className="meta">{lens.length === 1 ? `${slots.length} × ${lens[0]}-hour shifts` : `${slots.length} shifts`}</span>
               {open > 0 && <span className="open">{open} open</span>}
               <span className="board-tools">
+                {editable && onUndo && (() => { const h = undoHint?.(l.id) ?? null; return (
+                  <button className="mini undo-btn" disabled={!h} onClick={() => onUndo(l.id)} title={h ?? `Nothing to undo on ${l.name} yet`} aria-label={h ? `Undo last change on ${l.name}` : `Nothing to undo on ${l.name}`}>
+                    <UndoIcon /> Undo</button>); })()}
                 <button className="mini" onClick={() => printBoards(l.id)} aria-label={`Print ${l.name} schedule`}><PrintIcon /> Print</button>
                 {editable && onEditLoc && <button className="mini" onClick={() => onEditLoc(l)}>Edit shifts</button>}
                 {editable && onClearWeek && filled > 0 && <ConfirmButton className="mini danger-text" label="Clear week" confirmLabel="Click again to clear" onConfirm={() => onClearWeek(l)} />}

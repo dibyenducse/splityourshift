@@ -85,6 +85,8 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
   return (
     <div className="layout">{tabs}
+      <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onSaved={() => { reload(); refresh(); }} />
+
       <section className="panel">
         <div className="panel-head"><h2>Payroll dashboard</h2></div>
         <div className="paydash">{dash.map((d) => (
@@ -143,10 +145,6 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           {row && !locked && (row.period_end < today
             ? <ConfirmButton className="btn primary" label={`Mark as paid · ${money(t.net)}`} confirmLabel="Tap again: lock this payroll as paid" onConfirm={doPaid} />
             : <button className="btn" disabled title="You can mark it paid after the period ends">Mark as paid (after {dateShort(row.period_end)})</button>)}
-          <button className="btn" disabled={!lines} onClick={() => printReport(report()!, 'summary')}>Print summary</button>
-          <button className="btn" disabled={!lines} onClick={() => downloadPdf(report()!, 'summary')}>Download PDF</button>
-          <button className="btn" disabled={!lines?.length} onClick={() => printReport(report()!, 'slips')}>Print all payslips</button>
-          <button className="btn" disabled={!lines?.length} onClick={() => downloadPdf(report()!, 'slips')}>All payslips PDF</button>
         </div>
         {row && row.reopened.length > 0 && <p className="hint" style={{ marginTop: 10 }}>Reopened by support: {row.reopened.map((r) => `${new Date(r.reopened_at!).toLocaleDateString('en-US')} (${r.reopen_reason}; was ${money(r.total_net)})`).join(' · ')}</p>}
       </section>
@@ -164,18 +162,29 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           : <p className="empty-note">No payroll marked paid yet. After payday, open the pay period above and tap Mark as paid; it is saved here.</p>}
       </section>
 
+      <section className="panel">
+        <div className="panel-head"><h2>Print / export</h2>{row && <span className="tag plain">{loc.name} · {periodTitle(row)}</span>}</div>
+        <p className="hint">US Letter size. Payslips for one person are in the table above (Print, PDF) and in each person's History.</p>
+        <div className="actions">
+          <button className="btn" disabled={!lines} onClick={() => printReport(report()!, 'summary')}>Print summary</button>
+          <button className="btn" disabled={!lines} onClick={() => downloadPdf(report()!, 'summary')}>Download summary PDF</button>
+          <button className="btn" disabled={!lines?.length} onClick={() => printReport(report()!, 'slips')}>Print all payslips</button>
+          <button className="btn" disabled={!lines?.length} onClick={() => downloadPdf(report()!, 'slips')}>All payslips PDF</button>
+        </div>
+      </section>
+
       {history && <Sheet eyebrow="Pay history" title={history.name} onClose={() => setHistory(null)}>
         <p className="hint">Every payday {history.name} was paid, at every business. Print or download any payslip.</p>
         <PayslipList business={b.org.name} empId={history.employee_id} />
       </Sheet>}
 
-      <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onSaved={() => { reload(); refresh(); }} />
     </div>
   );
 }
 
 function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onSaved: () => void }) {
   const toast = useToast();
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('sys-payset') !== '0'; } catch { return true; } });
   const loc = b.locs.find((l) => l.id === locId)!;
   const [f, setF] = useState<PaySettings>({
     pay_frequency: loc.pay_frequency ?? 'weekly', pay_anchor: (loc.pay_anchor ?? todayIso()).slice(0, 10), pay_weekday: loc.pay_weekday ?? 4,
@@ -191,9 +200,9 @@ function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onS
     toast(`Saved. ${loc.name}: ${scheduleText(f)}. Paid payrolls stay as they were.`, 'ok', 'Payroll settings'); onSaved();
   };
   return (
-    <section className="panel">
-      <details>
-        <summary><h2 style={{ display: 'inline' }}>Payroll settings · {loc.name}</h2> <span className="hint">({scheduleText(f)})</span></summary>
+    <section className="panel paysettings">
+      <details open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; setOpen(o); try { localStorage.setItem('sys-payset', o ? '1' : '0'); } catch { /* private mode */ } }}>
+        <summary><span className="ps-title"><h2>Payroll settings · {loc.name}</h2><span className="hint">{scheduleText(f)} · {otText(f)}</span></span><span className="ps-toggle">{open ? 'Hide' : 'Show'}</span></summary>
         <p className="hint" style={{ marginTop: 8 }}>Each business has its own schedule. Set it once; every pay period and payday after that is worked out for you. Changing it never changes a payroll already marked paid.</p>
         <div className="twocol">
           <div className="field"><label htmlFor="ps-freq">How often you pay</label>

@@ -518,3 +518,19 @@ table.data.payroll { min-width: 980px; }
 .inline-field input { flex: 1 1 auto; min-width: 0; }
 .inline-field .btn { flex: none; }
 @media (max-width: 520px) { .inline-field { flex-direction: column; } .account .twocol { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- header sections + per-schedule undo */
+.topnav { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.tnav { font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 7px 14px; min-height: 36px;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.tnav:hover { color: var(--fg); }
+.tnav.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / .12); border: 1px solid var(--line); }
+.tnav:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 900px) { .topnav { order: 10; flex: 1 1 100%; } .tnav { flex: 1 1 0; padding: 7px 6px; } }
+.tabsrow.end { justify-content: flex-end; }
+.undo-btn:disabled { opacity: .45; cursor: default; }
+.panel.paysettings details > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; }
+.panel.paysettings details > summary::-webkit-details-marker { display: none; }
+.paysettings .ps-title { display: grid; gap: 2px; min-width: 0; }
+.paysettings .ps-title h2 { margin: 0; }
+.paysettings .ps-toggle { flex: none; font-size: 13px; font-weight: 700; color: var(--accent); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 10px; }

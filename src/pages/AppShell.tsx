@@ -13,17 +13,20 @@ import Onboarding from './Onboarding';
 import Account from './Account';
 
 /** Top bar shared by all three account types. */
-export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccount, who, profile }: {
+export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccount, who, profile, nav }: {
   subtitle: string; week?: string; setWeek?: (w: string) => void; extra?: ReactNode;
   notes?: Note[]; onNotes?: () => void; onAccount: () => void; who: ReactNode;
   /** Profile photo menu (top-right); replaces the name button. */
   profile?: ReactNode;
+  /** Main sections (Schedule / Time clock / Payroll), shown in the header. */
+  nav?: ReactNode;
 }) {
   const unread = notes?.filter((n) => !n.read_at).length ?? 0;
   const step = (n: number) => { if (week && setWeek) { const d = new Date(week + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); setWeek(d.toISOString().slice(0, 10)); } };
   return (
     <header className="topbar"><div className="wrap">
       <Link className="brand" to="/" title="Go to the home page"><Logo /><span><b>SplitYourShift</b><small>{subtitle}</small></span></Link>
+      {nav}
       {week && setWeek && <div className="weeknav">
         <button className="btn icon" onClick={() => step(-7)} aria-label="Previous week">‹</button>
         <div className="label">{weekTitle(week)}</div>
