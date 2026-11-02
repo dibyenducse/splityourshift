@@ -14,6 +14,7 @@ import { PrintIcon, WeekGrid, printBoards, useDragDrop } from '../components/Wee
 import { ShiftEditor } from '../components/ShiftEditor';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
+import { ShiftLog, TaskManager } from '../components/ShiftLog';
 import { PayslipList } from '../components/Payslips';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
@@ -39,7 +40,7 @@ export default function OwnerApp() {
   // Owner who also works shifts: the worker view of their own profile (remembered on this device).
   const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
-  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll'>('schedule');
+  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll' | 'reports'>('schedule');
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -197,8 +198,8 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : 'Payroll'}</button>)}</nav>;
+  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll', 'reports'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
+    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : 'Shift reports'}</button>)}</nav>;
 
   const schedule = (
     <div className="layout two owner">
@@ -266,10 +267,11 @@ export default function OwnerApp() {
           { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
           { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },
           { label: 'Time clock', hint: 'Who is on the clock, hour fixes', onClick: () => setTab('time') },
+          { label: 'Shift reports and tasks', hint: 'Notes from each shift, task lists', onClick: () => setTab('reports') },
           { label: 'Add a worker', onClick: () => { setTab('schedule'); addWorker(); } },
           { label: 'Print this week', onClick: () => { setTab('schedule'); setTimeout(() => printBoards(), 50); } },
         ]} />} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftLog b={b} owner /><TaskManager b={b} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
