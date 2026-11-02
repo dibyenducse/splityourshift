@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
@@ -23,7 +24,7 @@ import WorkerApp from './Worker';
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'account' } | null;
+  | { type: 'notes' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.errors[0].short}</span>
@@ -31,6 +32,7 @@ const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.
 
 export default function OwnerApp() {
   const { me, signOut, refresh } = useAuth();
+  const nav = useNavigate();
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
@@ -132,8 +134,8 @@ export default function OwnerApp() {
   if (!b) return <Loading />;
   if (previewEmp) return <WorkerApp preview={{ orgId, empId: previewEmp, onExit: () => { setPreviewEmp(null); reload(); } }} />;
   if (adding) return (
-    <><AppBar subtitle={b.org.name} onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
-      profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[{ label: 'Account settings', onClick: () => setSheet({ type: 'account' }) }]} />} />
+    <><AppBar subtitle={b.org.name} onAccount={() => nav('/app/account')} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
+      profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[{ label: 'Account settings', onClick: () => nav('/app/account') }]} />} />
       <div className="wrap"><Onboarding mode="add" orgId={orgId} existing={b.emps} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); reload(); }} /></div></>
   );
 
@@ -242,12 +244,16 @@ export default function OwnerApp() {
   return (
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
-        onAccount={() => setSheet({ type: 'account' })} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
+        onAccount={() => nav('/app/account')} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         extra={<button className="btn" onClick={doUndo} disabled={!undo.current.length}>↶ Undo</button>}
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
           { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
-          { label: 'Account settings', hint: 'Name, business, time zone, password', onClick: () => setSheet({ type: 'account' }) },
-          { label: 'Payroll', onClick: () => setTab('payroll') },
+          { label: 'Account settings', hint: 'Name, email, photo, password, time zone', onClick: () => nav('/app/account') },
+          { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
+          { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },
+          { label: 'Time clock', hint: 'Who is on the clock, hour fixes', onClick: () => setTab('time') },
+          { label: 'Add a worker', onClick: () => { setTab('schedule'); addWorker(); } },
+          { label: 'Print this week', onClick: () => { setTab('schedule'); setTimeout(() => printBoards(), 50); } },
         ]} />} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={tabs} reload={reload} /> : <Payroll b={b} tabs={tabs} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
@@ -284,7 +290,6 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return <div><span className="tag plain">{r.status[0].toUpperCase() + r.status.slice(1)}</span></div>;
   }} />;
 
-  if (s.type === 'account') return <AccountSheet b={b} onClose={close} reload={reload} signOut={signOut} goWorker={goWorker} />;
 
   if (s.type === 'shift') {
     if (!valid(b, s.key)) return null;
@@ -507,41 +512,5 @@ function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: (
   );
 }
 
-const TZS: [string, string][] = [['America/New_York', 'Eastern'], ['America/Chicago', 'Central'], ['America/Denver', 'Mountain'], ['America/Phoenix', 'Arizona'],
-  ['America/Los_Angeles', 'Pacific'], ['America/Anchorage', 'Alaska'], ['Pacific/Honolulu', 'Hawaii']];
 
-function AccountSheet({ b, onClose, reload, signOut, goWorker }: { b: Bundle; onClose: () => void; reload: () => Promise<void>; signOut: () => Promise<void>; goWorker: () => void }) {
-  const toast = useToast();
-  const [name, setName] = useState(b.org.owner_name ?? '');
-  const [biz, setBiz] = useState(b.org.name);
-  const [tz, setTz] = useState(b.org.time_zone || 'America/Chicago');
-  const [pw, setPw] = useState('');
-  const save = async () => {
-    const { error } = await supabase.from('organizations').update({ owner_name: name.trim() || null, name: biz.trim() || b.org.name, time_zone: tz }).eq('id', b.org.id);
-    if (error) return toast(errText(error), 'error', 'Not saved');
-    toast('Saved.', 'ok', 'Saved'); reload();
-  };
-  const changePw = async () => {
-    if (pw.length < 8) return toast('Use at least 8 characters.', 'error', 'Not saved');
-    const { error } = await supabase.auth.updateUser({ password: pw });
-    if (error) return toast(errText(error), 'error', 'Not saved');
-    setPw(''); toast('New password saved.', 'ok', 'Saved');
-  };
-  const workers = b.emps.length, locs = b.locs.length;
-  return (
-    <Sheet eyebrow="My account" title="Owner profile" onClose={onClose}>
-      <div className="field"><label htmlFor="ac-name">Your name</label><input type="text" id="ac-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="field"><label htmlFor="ac-biz">Business name</label><input type="text" id="ac-biz" value={biz} onChange={(e) => setBiz(e.target.value)} /></div>
-      <div className="field"><label htmlFor="ac-tz">Time zone (for shift reminders)</label>
-        <select id="ac-tz" value={tz} onChange={(e) => setTz(e.target.value)}>{TZS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}{!TZS.some(([v]) => v === tz) && <option value={tz}>{tz}</option>}</select></div>
-      <div className="actions"><button className="btn primary" onClick={save}>Save</button></div>
-      <div className="sec"><h4>Work shifts yourself</h4><p>Switch to your worker view to see your own shifts, clock in and out, ask for time off and see your pay. No invite needed.</p>
-        <div className="actions"><button className="btn small primary" onClick={goWorker}>⇄ Switch to worker view</button></div></div>
-      <div className="sec"><h4>Your business</h4><p>{locs} location{locs === 1 ? '' : 's'} · {workers} worker{workers === 1 ? '' : 's'} · since {new Date(b.org.created_at).toLocaleDateString()}</p></div>
-      <div className="sec"><h4>Change password</h4><div className="field"><label htmlFor="ac-pass">New password</label><input type="password" id="ac-pass" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></div>
-        <div style={{ marginTop: 8 }}><button className="btn small" onClick={changePw}>Save new password</button></div></div>
-      <div className="actions"><button className="btn" onClick={signOut}>Log out</button></div>
-    </Sheet>
-  );
-}
 

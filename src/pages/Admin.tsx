@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
@@ -20,6 +21,7 @@ interface Account { id: string; name: string; owner_name: string | null; owner_e
 
 export default function AdminApp() {
   const { signOut } = useAuth();
+  const nav = useNavigate();
   const toast = useToast();
   const [tab, setTab] = useState<'overview' | 'accounts'>('overview');
   const [days, setDays] = useState(14);
@@ -54,7 +56,7 @@ export default function AdminApp() {
   return (
     <>
       <AppBar subtitle="Admin panel" onAccount={() => setAccount(true)} who={<b>Admin</b>}
-        profile={<ProfileMenu name="Admin" role="SplitYourShift admin" items={[{ label: 'Account', onClick: () => setAccount(true) }]} />} />
+        profile={<ProfileMenu name="Admin" role="SplitYourShift admin" items={[{ label: 'Account settings', hint: 'Name, email, photo, password', onClick: () => nav('/app/account') }]} />} />
       <div className="wrap"><div className="layout">{tabs}{body}</div></div>
       {account && <Sheet eyebrow="My account" title="Admin" onClose={() => setAccount(false)}>
         <div className="sec"><p>You can see every owner, worker and request, but you can't change anyone's schedule.</p></div>

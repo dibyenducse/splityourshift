@@ -1,33 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
-import { DAY_LONG, addDays, ago, ampm, mmdd, mondayOf, money, rangeTitle, shiftLong, todayIso } from '../lib/time';
+import { DAY_LONG, addDays, ago, mmdd, mondayOf, money, rangeTitle, shiftLong, todayIso } from '../lib/time';
 import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotLabel, slotOf } from '../lib/rules';
 import { dateShort, myPay, periodTitle, type MyPay } from '../lib/payroll';
-import type { Avail, Bundle, Req } from '../lib/types';
+import type { Bundle, Req } from '../lib/types';
 import { Loading, Sheet, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
 import { ClockPanel, HoursList } from '../components/Clock';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { PayslipList } from '../components/Payslips';
+import { AvailabilityEditor } from '../components/Availability';
 
 const reqTag = (r: Req) => r.status === 'pending' ? <span className="tag warn">Time off requested</span>
   : r.status === 'approved' ? <span className="tag ok">Time off approved</span>
   : r.status === 'denied' ? <span className="tag bad">Request denied</span> : <span className="tag plain">Cancelled</span>;
-const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
 /**
  * Worker app. With `preview`, an owner sees exactly what one worker sees, with every button turned off.
  * With `self`, an owner who also works shifts uses their own worker profile (fully working) and can switch back.
  */
 export default function WorkerApp({ preview, self }: { preview?: { orgId: string; empId: string; onExit: () => void }; self?: { onExit: () => void } }) {
-  const { me, signOut } = useAuth();
+  const { me } = useAuth();
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
-  const [sheet, setSheet] = useState<'request' | 'notes' | 'account' | null>(null);
+  const [sheet, setSheet] = useState<'request' | 'notes' | null>(null);
+  const nav = useNavigate();
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const { notes, reload: reloadNotes } = useNotes();
   const [pay, setPay] = useState<MyPay[]>([]);
   const orgId = preview?.orgId ?? me!.orgId!, empId = preview?.empId ?? me!.empId!;
@@ -62,20 +65,17 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
     if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled. You keep this shift.', 'ok', 'Cancelled');
     reload();
   };
-  const setAvail = async (a: Avail) => {
-    const { error } = await supabase.from('availability').upsert({ employee_id: w.id, dow: a.dow, mode: a.mode, from_hour: a.from_hour, to_hour: a.to_hour });
-    if (error) toast(errText(error), 'error', 'Not saved'); else toast(`Saved. ${DAY_LONG[a.dow]}: ${a.mode === 'any' ? 'any time' : a.mode === 'off' ? 'not available' : `${ampm(a.from_hour)} – ${ampm(a.to_hour)}`}.`, 'ok', 'Availability');
-    reload();
-  };
 
   return (
     <>
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={preview ? undefined : notes} onNotes={preview ? undefined : () => setSheet('notes')}
-        onAccount={preview ? preview.onExit : () => setSheet('account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>}
+        onAccount={preview ? preview.onExit : () => nav('/app/account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>}
         profile={preview ? undefined : <ProfileMenu name={w.name} role={`${self ? 'Owner, working as a worker' : 'Worker'} · ${b.org.name}`} items={[
           ...(self ? [{ label: '⇄ Switch to owner view', hint: 'Schedule, time clock, payroll', onClick: self.onExit, primary: true }] : []),
-          { label: 'My account', hint: 'Phone, language, password', onClick: () => setSheet('account') },
-          { label: 'My payslips', hint: 'Every paid payday', onClick: () => document.getElementById('my-payslips')?.scrollIntoView({ behavior: 'smooth' }) },
+          { label: 'Account settings', hint: 'Name, email, photo, password, availability', onClick: () => nav('/app/account') },
+          { label: 'My shifts', hint: rangeTitle(week, addDays(week, 6)), onClick: () => jump('my-shifts') },
+          { label: 'Request time off', onClick: () => setSheet('request') },
+          { label: 'My payslips', hint: 'Every paid payday', onClick: () => jump('my-payslips') },
         ]} />} />
       <div className="wrap"><div className="layout">
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
@@ -83,7 +83,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
 
-        <section className="panel"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
+        <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
           <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts (set by your manager).</p>
           <div className="myshifts">{mine.length ? mine.map((k) => { const s = slotOf(b, k)!, d = parseCell(k).date, r = live[k];
             return (<div key={k} className="mycard" style={{ ['--h' as string]: w.hue }}>
@@ -110,16 +110,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
 
         <section className="panel"><div className="panel-head"><h2>My availability</h2></div>
           <p className="hint">Tell your manager when you can work each week. They see it while making the schedule. For a single day off, use Request time off instead.</p>
-          <div className="stack">{w.avail.map((a) => (
-            <div key={a.dow} className="srow" style={{ gridTemplateColumns: '110px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)', alignItems: 'center' }}>
-              <b>{DAY_LONG[a.dow]}</b>
-              <select aria-label={`${DAY_LONG[a.dow]} availability`} value={a.mode} onChange={(e) => setAvail({ ...a, mode: e.target.value as Avail['mode'] })}>
-                <option value="any">Any time</option><option value="hours">Only these hours</option><option value="off">Not available</option></select>
-              {a.mode === 'hours' ? <>
-                <select aria-label={`${DAY_LONG[a.dow]} from`} value={a.from_hour} onChange={(e) => setAvail({ ...a, from_hour: +e.target.value })}>{HOURS.map((h) => <option key={h} value={h}>{ampm(h)}</option>)}</select>
-                <select aria-label={`${DAY_LONG[a.dow]} until`} value={a.to_hour} onChange={(e) => setAvail({ ...a, to_hour: +e.target.value })}>{HOURS.map((h) => <option key={h} value={h}>{ampm(h)}</option>)}</select>
-              </> : <><span /><span /></>}
-            </div>))}</div></section>
+          <AvailabilityEditor empId={w.id} avail={w.avail} onSaved={reload} /></section>
 
         <section className="panel"><div className="panel-head"><h2>My time-off requests</h2></div>
           <p className="hint">You can cancel a request while it's waiting. After your manager approves it, ask them directly to change it.</p>
@@ -135,7 +126,6 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
 
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
       {sheet === 'request' && <RequestSheet b={b} empId={w.id} week={week} live={live} onClose={() => setSheet(null)} reload={reload} />}
-      {sheet === 'account' && <WorkerAccount b={b} empId={w.id} onClose={() => setSheet(null)} reload={reload} signOut={signOut} />}
     </>
   );
 }
@@ -166,35 +156,3 @@ function RequestSheet({ b, empId, week, live, onClose, reload }: { b: Bundle; em
   );
 }
 
-function WorkerAccount({ b, empId, onClose, reload, signOut }: { b: Bundle; empId: string; onClose: () => void; reload: () => void; signOut: () => Promise<void> }) {
-  const toast = useToast();
-  const w = empOf(b, empId)!;
-  const [phone, setPhone] = useState(w.phone ?? '');
-  const [a, setA] = useState(''); const [c, setC] = useState('');
-  const saveProfile = async () => {
-    const { error } = await supabase.rpc('update_my_profile', { p_phone: phone });
-    if (error) return toast(errText(error), 'error', 'Not saved');
-    toast('Saved.', 'ok', 'Saved'); reload();
-  };
-  const changePw = async () => {
-    if (a.length < 8) return toast('Use at least 8 characters.', 'error', "Can't save");
-    if (a !== c) return toast("The two passwords don't match.", 'error', "Can't save");
-    const { error } = await supabase.auth.updateUser({ password: a });
-    if (error) return toast(errText(error), 'error', "Can't save");
-    setA(''); setC(''); toast('New password saved.', 'ok', 'Saved');
-  };
-  return (
-    <Sheet eyebrow="My account" title="My profile" onClose={onClose}>
-      <div className="field"><label htmlFor="ac-wname">Name</label><input type="text" id="ac-wname" value={w.name} readOnly /></div>
-      <div className="field"><label htmlFor="ac-email">Email (log-in)</label><input type="email" id="ac-email" value={w.email ?? ''} readOnly /></div>
-      <div className="field"><label htmlFor="ac-phone">Phone (log-in)</label><input type="tel" id="ac-phone" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-      <div className="actions"><button className="btn primary" onClick={saveProfile}>Save</button></div>
-      <div className="sec"><h4>Set by your manager</h4><p>Works at {w.locs.map((id) => b.locs.find((l) => l.id === id)?.name).filter(Boolean).join(', ') || '—'} · up to {w.max_shifts} shifts a week · {money(w.rate)} an hour.</p></div>
-      <div className="sec"><h4>Change password</h4><div className="twocol">
-        <div className="field"><label htmlFor="ac-pass">New password</label><input type="password" id="ac-pass" value={a} onChange={(e) => setA(e.target.value)} autoComplete="new-password" /></div>
-        <div className="field"><label htmlFor="ac-pass2">Type it again</label><input type="password" id="ac-pass2" value={c} onChange={(e) => setC(e.target.value)} autoComplete="new-password" /></div></div>
-        <div style={{ marginTop: 8 }}><button className="btn small" onClick={changePw}>Save new password</button></div></div>
-      <div className="actions"><button className="btn" onClick={signOut}>Log out</button></div>
-    </Sheet>
-  );
-}

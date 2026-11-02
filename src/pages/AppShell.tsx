@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase } from '../lib/supabase';
 import { loadNotes, markNotesRead } from '../lib/api';
@@ -10,6 +10,7 @@ import OwnerApp from './Owner';
 import WorkerApp from './Worker';
 import AdminApp from './Admin';
 import Onboarding from './Onboarding';
+import Account from './Account';
 
 /** Top bar shared by all three account types. */
 export function AppBar({ subtitle, week, setWeek, extra, notes, onNotes, onAccount, who, profile }: {
@@ -73,8 +74,11 @@ export function NotesSheet({ notes, onClose, reload, render }: { notes: Note[]; 
 export default function AppShell() {
   const { me } = useAuth();
   if (!me) return <Loading />;
-  if (me.role === 'admin') return <AdminApp />;
-  if (me.role === 'owner') return <OwnerApp />;
-  if (me.role === 'worker') return <WorkerApp />;
-  return <Onboarding mode="new" />;
+  const home = me.role === 'admin' ? <AdminApp /> : me.role === 'owner' ? <OwnerApp /> : me.role === 'worker' ? <WorkerApp /> : <Onboarding mode="new" />;
+  return (
+    <Routes>
+      {me.role !== 'new' && <Route path="account" element={<Account />} />}
+      <Route path="*" element={home} />
+    </Routes>
+  );
 }

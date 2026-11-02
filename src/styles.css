@@ -492,15 +492,29 @@ table.data.payroll { min-width: 980px; }
 .pmenu { position: relative; }
 .pm-btn { padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; }
 .pm-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.pm-pop { position: absolute; right: 0; top: calc(100% + 8px); width: min(300px, calc(100vw - 24px)); background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: 12px; box-shadow: var(--shadow); padding: 8px; display: grid; gap: 2px; z-index: 40; }
+.pm-pop { position: fixed; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 8px; display: grid; gap: 2px; align-content: start; z-index: 60; overflow-y: auto; overscroll-behavior: contain; }
 .pm-head { display: flex; gap: 12px; align-items: center; padding: 6px 6px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .pm-head div { display: grid; min-width: 0; } .pm-head b { font-size: 15px; } .pm-head span { font-size: 12.5px; color: var(--muted); }
 .pm-head small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pm-photo { position: relative; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 50%; }
-.pm-photo .pm-edit { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 5px; }
-.pm-item { text-align: left; font: inherit; font-size: 14px; color: var(--fg); background: none; border: 0; border-radius: 8px; padding: 9px 10px; cursor: pointer; display: grid; }
+.pm-item { text-align: left; font: inherit; font-size: 14.5px; color: var(--fg); background: none; border: 0; border-radius: 8px; padding: 10px 10px; min-height: 44px; cursor: pointer; display: grid; align-content: center; }
 .pm-item small { font-size: 12px; color: var(--muted); }
 .pm-item:hover, .pm-item:focus-visible { background: var(--surface-2); outline: none; }
 .pm-item.primary { color: var(--accent); font-weight: 700; }
 .pm-item.danger-text { color: var(--bad); }
+
+/* ---------------------------------------------------------------- availability editor */
+.avail-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px 12px; align-items: center; }
+.avail-hours { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.avail-hours select { flex: 1 1 0; min-width: 0; }
+@media (max-width: 560px) { .avail-row { grid-template-columns: 1fr; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); } }
+
+/* ---------------------------------------------------------------- account settings page */
+.account { max-width: 860px; padding-block: 18px 40px; display: grid; gap: 16px; }
+.acct-title { font-family: var(--f-display); font-size: 28px; margin: 0; }
+.account > .hint { margin: -8px 0 0; }
+.acct-photo { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.inline-field { display: flex; gap: 8px; align-items: stretch; }
+.inline-field input { flex: 1 1 auto; min-width: 0; }
+.inline-field .btn { flex: none; }
+@media (max-width: 520px) { .inline-field { flex-direction: column; } .account .twocol { grid-template-columns: 1fr; } }

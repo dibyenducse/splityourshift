@@ -10,6 +10,8 @@ export async function whoAmI(): Promise<Me | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const base = { userId: user.id, email: user.email ?? '', avatarUrl: (user.user_metadata?.avatar_url as string | undefined) ?? null };
+  // After an email change is confirmed, copy the new address to this user's worker profiles.
+  supabase.rpc('sync_my_email').then(() => {}, () => {});
   const { data: adm } = await supabase.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
   if (adm) return { ...base, role: 'admin' };
   const { data: org } = await supabase.from('organizations').select('id').eq('owner_id', user.id).order('created_at').limit(1).maybeSingle();
