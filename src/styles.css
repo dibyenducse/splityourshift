@@ -534,3 +534,10 @@ table.data.payroll { min-width: 980px; }
 .paysettings .ps-title { display: grid; gap: 2px; min-width: 0; }
 .paysettings .ps-title h2 { margin: 0; }
 .paysettings .ps-toggle { flex: none; font-size: 13px; font-weight: 700; color: var(--accent); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 10px; }
+.paytable tr.on td { background: var(--accent-soft); }
+.paytable tfoot td { font-weight: 700; border-top: 2px solid var(--line-strong); }
+.bizpills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bizpill { font: inherit; display: grid; text-align: left; gap: 1px; padding: 8px 14px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); cursor: pointer; }
+.bizpill small { font-size: 12px; color: var(--muted); }
+.bizpill.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.bizpill.on b { color: var(--accent); }

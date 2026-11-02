@@ -60,6 +60,8 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
   if (!loc) return <div className="layout">{tabs}<section className="panel"><p className="empty-note">Add a hotel, gas station or shop first.</p></section></div>;
 
+  const all = dash.reduce((t, d) => ({ payable: t.payable + d.payable, paid: t.paid + (d.next_paid ? d.payable : 0), hours: t.hours + d.hours, employees: t.employees + d.employees,
+    lines: t.lines + d.employees, pending: t.pending + d.pending, completed: t.completed + d.completed }), { payable: 0, paid: 0, hours: 0, employees: 0, lines: 0, pending: 0, completed: 0 });
   const cur = periods.find((p) => p.period_start <= today && p.period_end >= today);
   const next = [...periods].filter((p) => p.pay_date >= today).sort((x, y) => x.pay_date.localeCompare(y.pay_date))[0];
   const status = row ? statusOf(row, today) : '';
@@ -85,18 +87,28 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
   return (
     <div className="layout">{tabs}
-      <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onSaved={() => { reload(); refresh(); }} />
+      <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} />
 
       <section className="panel">
-        <div className="panel-head"><h2>Payroll dashboard</h2></div>
-        <div className="paydash">{dash.map((d) => (
-          <button key={d.location_id} className={`paycard${d.location_id === loc.id ? ' on' : ''}`} onClick={() => setLocId(d.location_id)}>
-            <div className="pc-head"><b>{d.name}</b><span className="tag plain">{FREQ_LABEL[d.frequency]}</span></div>
-            <div className="pc-row"><span>Current period</span><span>{periodTitle({ period_start: d.cur_start, period_end: d.cur_end })}</span></div>
-            <div className="pc-row"><span>Next payday</span><span><b>{dateShort(d.next_pay_date)}</b> · {periodTitle({ period_start: d.next_start, period_end: d.next_end })}</span></div>
-            <div className="pc-big">{money(d.payable)}<small>{d.next_paid ? 'paid' : 'to pay'} · {d.employees} employees · {hrs(d.hours)} h</small></div>
-            <div className="pc-row"><span>{d.pending ? <span className="tag bad">{d.pending} pending</span> : <span className="tag ok">Nothing pending</span>}</span><span>{d.completed} paid so far</span></div>
-          </button>))}</div>
+        <div className="panel-head"><h2>Payroll dashboard · all businesses</h2><span className="tag plain">{dash.length} business{dash.length === 1 ? '' : 'es'}</span></div>
+        <div className="tiles" style={{ marginBottom: 12 }}>
+          <div className="tile"><div className="k">To pay on the next paydays</div><div className="v">{money(all.payable)}</div><div className="s">{all.paid ? `${money(all.paid)} of it already marked paid` : 'across every business'}</div></div>
+          <div className="tile"><div className="k">Hours in those pay periods</div><div className="v">{hrs(all.hours)}</div><div className="s">clocked hours, every business</div></div>
+          <div className="tile"><div className="k">Pending payrolls</div><div className="v">{all.pending}</div><div className="s">{all.pending ? 'payday came, not marked paid' : 'everything is up to date'}</div></div>
+          <div className="tile"><div className="k">Paid so far</div><div className="v">{all.completed}</div><div className="s">payrolls marked paid</div></div>
+        </div>
+        <div className="table-wrap"><table className="data paytable"><thead><tr><th>Business</th><th>Pay schedule</th><th>Current period</th><th>Next payday</th><th className="num">Employees</th><th className="num">Hours</th><th className="num">To pay</th><th>Status</th><th /></tr></thead>
+          <tbody>{dash.map((d) => (
+            <tr key={d.location_id} className={d.location_id === loc.id ? 'on' : ''}>
+              <td><b>{d.name}</b></td><td>{FREQ_LABEL[d.frequency]}</td>
+              <td>{periodTitle({ period_start: d.cur_start, period_end: d.cur_end })}</td>
+              <td><b>{dateShort(d.next_pay_date)}</b><div className="hint" style={{ margin: 0 }}>for {periodTitle({ period_start: d.next_start, period_end: d.next_end })}</div></td>
+              <td className="num">{d.employees}</td><td className="num">{hrs(d.hours)}</td><td className="num"><b>{money(d.payable)}</b></td>
+              <td>{d.pending ? <span className="tag bad">{d.pending} pending</span> : d.next_paid ? <span className="tag ok">Paid</span> : <span className="tag warn">To pay</span>}<div className="hint" style={{ margin: 0 }}>{d.completed} paid so far</div></td>
+              <td><button className={`btn small${d.location_id === loc.id ? ' primary' : ''}`} onClick={() => setLocId(d.location_id)}>{d.location_id === loc.id ? 'Showing' : 'Open'}</button></td>
+            </tr>))}</tbody>
+          {dash.length > 1 && <tfoot><tr><td><b>All businesses</b></td><td /><td /><td /><td className="num">{all.employees}</td><td className="num">{hrs(all.hours)}</td><td className="num"><b>{money(all.payable)}</b></td><td>{all.pending ? <span className="tag bad">{all.pending} pending</span> : <span className="tag ok">Up to date</span>}</td><td /></tr></tfoot>}
+        </table></div>
       </section>
 
       <section className="panel">
@@ -182,7 +194,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
   );
 }
 
-function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onSaved: () => void }) {
+function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: string; onPick: (id: string) => void; onSaved: () => void }) {
   const toast = useToast();
   const [open, setOpen] = useState(() => { try { return localStorage.getItem('sys-payset') !== '0'; } catch { return true; } });
   const loc = b.locs.find((l) => l.id === locId)!;
@@ -203,6 +215,9 @@ function PaySettingsPanel({ b, locId, onSaved }: { b: Bundle; locId: string; onS
     <section className="panel paysettings">
       <details open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; setOpen(o); try { localStorage.setItem('sys-payset', o ? '1' : '0'); } catch { /* private mode */ } }}>
         <summary><span className="ps-title"><h2>Payroll settings · {loc.name}</h2><span className="hint">{scheduleText(f)} · {otText(f)}</span></span><span className="ps-toggle">{open ? 'Hide' : 'Show'}</span></summary>
+        {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
+          {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
+            <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}</small></button>)}</div>}
         <p className="hint" style={{ marginTop: 8 }}>Each business has its own schedule. Set it once; every pay period and payday after that is worked out for you. Changing it never changes a payroll already marked paid.</p>
         <div className="twocol">
           <div className="field"><label htmlFor="ps-freq">How often you pay</label>
