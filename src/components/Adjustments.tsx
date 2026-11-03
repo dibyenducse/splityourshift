@@ -36,6 +36,7 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
   const [busy, setBusy] = useState('');
   const [prop, setProp] = useState({ from: '', to: '', kind: 'future_swap', minutes: 30, note: '', loc: b.locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1) });
   const [ask, setAsk] = useState(false);
+  const [acc, setAcc] = useState<Adjustment | null>(null);
   const load = useCallback(async () => {
     const { data } = await supabase.from('shift_adjustments').select('*').eq('org_id', b.org.id).order('created_at', { ascending: false }).limit(150);
     setRows((data ?? []) as Adjustment[]);
@@ -112,7 +113,12 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
       {forMe.length > 0 && <><h4>{owner ? 'Waiting for your approval' : 'Waiting for your answer'}</h4><div className="stack">{forMe.map((a) => item(a, owner ? <>
         <button className="btn small primary" disabled={busy === a.id} onClick={() => update(a, 'approve', 'Approved.')}>Approve</button>
         <button className="btn small" disabled={busy === a.id} onClick={() => update(a, 'decline', 'Declined.')}>Decline</button></> : <>
-        <button className="btn small primary" disabled={busy === a.id} onClick={() => respond(a, true)}>{a.kind === 'late_ignore' ? 'Approve' : 'Accept'}</button>
+        {a.kind === 'future_swap'
+          ? (acc?.id === a.id ? <AcceptSwap b={b} a={a} busy={busy === a.id} onCancel={() => setAcc(null)}
+              onGo={(mode, slot, date) => act(a.id, () => supabase.rpc('accept_future_swap', { p_id: a.id, p_mode: mode, p_ret_slot: slot, p_ret_date: date }),
+                mode === 'cover' ? 'Accepted. The shift is yours; nothing is owed.' : slot ? 'Accepted. You swapped shifts; both are on the schedule.' : 'Accepted. They owe you a shift; it is on Shifts owed.').then(() => setAcc(null))} />
+            : <button className="btn small primary" disabled={busy === a.id} onClick={() => setAcc(a)}>Accept…</button>)
+          : <button className="btn small primary" disabled={busy === a.id} onClick={() => respond(a, true)}>{a.kind === 'late_ignore' ? 'Approve' : 'Accept'}</button>}
         <button className="btn small" disabled={busy === a.id} onClick={() => respond(a, false)}>Decline</button></>))}</div></>}
       {mineWaiting.length > 0 && <><h4>{owner ? 'Waiting for a worker to answer' : 'Your requests'}</h4><div className="stack">{mineWaiting.map((a) => item(a,
         <ConfirmButton className="btn small" label="Cancel request" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Request cancelled.')} />))}</div></>}
@@ -126,5 +132,35 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
       {owner && <details className="adj-history" open><summary>New swap request (any date and shift)</summary>{swapForm}</details>}
       {owner && !rows.length && <p className="empty-note">Nothing yet. When a worker clocks in late, covers someone or picks up an extra shift, it shows up here.</p>}
     </section>
+  );
+}
+
+/** Accepting a coworker's swap request: just cover it, or swap (they work one of my shifts: pick now or later). */
+function AcceptSwap({ b, a, busy, onGo, onCancel }: { b: Bundle; a: Adjustment; busy: boolean; onGo: (mode: 'cover' | 'swap', slot: string | null, date: string | null) => void; onCancel: () => void }) {
+  const who = empOf(b, a.from_emp)?.name ?? 'They';
+  const [mode, setMode] = useState<'cover' | 'swap'>('cover');
+  const [later, setLater] = useState(true);
+  const [loc, setLoc] = useState(b.slots.find((x) => x.id === a.slot_id)?.location_id ?? b.locs[0]?.id ?? '');
+  const [slot, setSlot] = useState('');
+  const [date, setDate] = useState(addDays(todayIso(), 7));
+  const slots = b.slots.filter((x) => x.location_id === loc).sort((x, y) => x.start_hour - y.start_hour);
+  return (
+    <div className="accept-swap">
+      <label className="inline"><input type="radio" name={`m-${a.id}`} checked={mode === 'cover'} onChange={() => setMode('cover')} /> Just cover it: {who} owes me nothing</label>
+      <label className="inline"><input type="radio" name={`m-${a.id}`} checked={mode === 'swap'} onChange={() => setMode('swap')} /> Swap: {who} works one of my shifts in return</label>
+      {mode === 'swap' && <div className="accept-ret">
+        <label className="inline"><input type="radio" name={`r-${a.id}`} checked={!later} onChange={() => setLater(false)} /> Pick the date now</label>
+        {!later && <div className="twocol">
+          <div className="field"><label>Date</label><input type="date" min={todayIso()} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Return shift date" /></div>
+          {b.locs.length > 1 && <div className="field"><label>Location</label><select value={loc} onChange={(e) => { setLoc(e.target.value); setSlot(''); }} aria-label="Return shift location">{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+          <div className="field"><label>Shift</label><select value={slot} onChange={(e) => setSlot(e.target.value)} aria-label="Return shift"><option value="">Pick…</option>
+            {slots.map((x) => <option key={x.id} value={x.id}>{shiftNameOf(x)} · {shiftLong(x.start_hour, x.hours)}</option>)}</select></div>
+        </div>}
+        <label className="inline"><input type="radio" name={`r-${a.id}`} checked={later} onChange={() => setLater(true)} /> Decide later (kept on Shifts owed)</label>
+      </div>}
+      <div className="actions">
+        <button className="btn small primary" disabled={busy || (mode === 'swap' && !later && !slot)} onClick={() => onGo(mode, mode === 'swap' && !later ? slot : null, mode === 'swap' && !later ? date : null)}>Accept</button>
+        <button className="btn small" onClick={onCancel}>Back</button></div>
+    </div>
   );
 }

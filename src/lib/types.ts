@@ -27,6 +27,8 @@ export interface Emp {
 export interface Req {
   id: string; org_id: string; employee_id: string; slot_id: string | null; work_date: string;
   label: string; reason: string | null; status: 'pending' | 'approved' | 'denied' | 'cancelled'; created_at: string; decided_at: string | null;
+  /** Worker who took over an approved time-off shift. */
+  covered_by?: string | null;
 }
 export interface LedgerRow {
   id: string; org_id: string; debtor_id: string; creditor_id: string; slot_id: string | null;

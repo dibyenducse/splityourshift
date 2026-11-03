@@ -16,6 +16,7 @@ import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { TaskManager, TasksBoard } from '../components/ShiftLog';
 import { ShiftReportsBook } from '../components/Logbook';
+import { CoverSheet } from '../components/Cover';
 import { PayslipList } from '../components/Payslips';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
@@ -26,7 +27,7 @@ import WorkerApp from './Worker';
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | null;
+  | { type: 'notes' } | { type: 'cover'; id: string } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const UserIcon = () => (
@@ -171,6 +172,7 @@ export default function OwnerApp() {
   };
 
   const pending = b.reqs.filter((r) => r.status === 'pending');
+  const needCover = b.reqs.filter((r) => r.status === 'approved' && r.slot_id && !r.covered_by && r.work_date >= todayIso()).sort((x, y) => x.work_date.localeCompare(y.work_date));
   const openOwed = b.ledger.filter((l) => l.status === 'open');
   const emptyWeek = !b.slots.some((s) => DAY_LONG.some((_, d) => b.assign[cellKey(s.id, addDays(week, d))]));
   const prevHas = b.slots.some((s) => DAY_LONG.some((_, d) => b.assign[cellKey(s.id, addDays(week, d - 7))]));
@@ -188,9 +190,9 @@ export default function OwnerApp() {
     if (error) { toast(errText(error), 'error', 'Not saved'); reload(); return; }
     const w = empOf(b, r.employee_id);
     await reload(); reloadNotes();
-    if (approve && r.slot_id && b.assign[cellKey(r.slot_id, r.work_date)] === r.employee_id) {
-      setSheet({ type: 'swap', key: cellKey(r.slot_id, r.work_date) });
-      toast(`Approved. Now pick who works ${r.label}.`, 'ok', 'Approved');
+    if (approve && r.slot_id) {
+      setSheet({ type: 'cover', id: r.id });
+      toast(`Approved. ${w?.name ?? 'They'} ${w ? 'is' : 'are'} off ${r.label}. Now ask who can cover.`, 'ok', 'Approved');
     } else toast(approve ? 'Approved.' : `Denied. ${w?.name ?? 'The worker'} keeps the shift.`, approve ? 'ok' : 'warn', approve ? 'Approved' : 'Denied');
   };
 
@@ -232,6 +234,9 @@ export default function OwnerApp() {
               {r.reason && <q>{r.reason}</q>}
               <div className="actions"><button className="btn small primary" onClick={() => decide(r, true)}>Approve &amp; find cover</button><button className="btn small" onClick={() => decide(r, false)}>Deny</button></div></div>
           )) : <p className="empty-note">No requests waiting.</p>}</div>
+          {needCover.length > 0 && <><h4 style={{ margin: '12px 0 6px' }}>Approved, needs cover</h4><div className="stack">{needCover.map((r) => (
+            <div key={r.id} className="item"><div><b>{r.label}</b> · {empOf(b, r.employee_id)?.name ?? '?'} is off</div>
+              <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'cover', id: r.id })}>Who can cover?</button></div></div>))}</div></>}
         </section>
         <section className="panel">
           <div className="panel-head"><h2>Shifts owed</h2></div>
@@ -310,6 +315,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return keysOf(b, other).filter((o) => o !== k && parseCell(o).date >= todayIso()).map((o) => ({ o, r: evaluate(b, { [k]: other, [o]: orig }, { allowOver: true }) }));
   };
 
+  if (s.type === 'cover') { const r = b.reqs.find((x) => x.id === s.id); return r ? <CoverSheet b={b} req={r} onClose={close} reload={reload} /> : null; }
   if (s.type === 'notes') return <NotesSheet notes={notes} onClose={close} reload={reloadNotes} render={(n) => {
     const r = n.request_id ? b.reqs.find((x) => x.id === n.request_id) : undefined;
     if (!r) return null;
@@ -326,6 +332,9 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return (
       <Sheet eyebrow="Shift" title={w ? w.name : 'Open shift'} onClose={close}>
         {slotCard(s.key)}
+        {(() => { const { slot, date } = parseCell(s.key); const off = b.reqs.find((r) => r.status === 'approved' && r.slot_id === slot && r.work_date === date); if (!off) return null;
+          return (<div className="banner warn"><p><b>{empOf(b, off.employee_id)?.name} has approved time off</b> for this shift. {off.covered_by ? `${empOf(b, off.covered_by)?.name} is covering it.` : 'Nobody is covering it yet.'}</p>
+            {!off.covered_by && <button className="btn small primary" onClick={() => set({ type: 'cover', id: off.id })}>Who can cover?</button>}</div>); })()}
         {(() => { const sw = swapOf(b, s.key); if (!sw) return null; const o = empOf(b, sw.orig)?.name ?? 'someone', n = empOf(b, sw.now)?.name ?? 'someone';
           return (<div className="sec swapinfo"><h4>⇄ Swapped shift</h4>
             <p><b>{n}</b> works this shift instead of <b>{o}</b>.</p>

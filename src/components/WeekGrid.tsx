@@ -36,6 +36,9 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
   const ranges: Record<string, [number, number][]> = {};
   for (const k in b.assign) if (valid(b, k)) (ranges[b.assign[k]] ||= []).push([absStart(b, k), absEnd(b, k)]);
   const pending = new Set(b.reqs.filter((r) => r.status === 'pending' && r.slot_id).map((r) => cellKey(r.slot_id!, r.work_date)));
+  // Approved time off by shift: "Needs cover" until someone covers it, then "Coverage assigned".
+  const offs: Record<string, (typeof b.reqs)[number]> = {};
+  for (const r of b.reqs) if (r.status === 'approved' && r.slot_id) offs[cellKey(r.slot_id, r.work_date)] = r;
   const locs = b.locs.filter((l) => !onlyLocs || onlyLocs.includes(l.id));
   if (!locs.length) return <p className="empty-note">No locations yet.</p>;
   return (
@@ -81,6 +84,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                           const cls = meId ? (w.id === meId ? ' me' : ' dim') : '';
                           const entry = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
                           const sw = swapOf(b, k), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
+                          const off = offs[k], covering = off && off.employee_id !== w.id ? empOf(b, off.employee_id)?.name ?? 'someone' : null, offSelf = off && off.employee_id === w.id;
                           const status = [onNow && 'on the clock now', entry?.clock_out && 'clocked in and out', sw && `swapped from ${empOf(b, sw.orig)?.name ?? '?'}`, dbl && 'double shift', pending.has(k) && 'asked for this shift off', unavail && 'unavailable at this time'].filter(Boolean);
                           inner = (
                             <div className={`chip${cls}`} style={{ ['--h' as string]: w.hue }} title={`${w.name}${status.length ? ` · ${status.join(' · ')}` : ''}`} {...(editable ? { 'data-drag': '', 'data-wid': w.id, 'data-key': k } : {})}>
@@ -88,6 +92,8 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                                 <span className="cname">{shortName(b, w)}</span>
                                 {onNow && <span className="sdot" aria-label="On the clock now" />}
                                 {sw && <span className="flag swap" aria-label={`Swapped from ${empOf(b, sw.orig)?.name ?? '?'}`}>⇄</span>}
+                                {covering && !sw && <span className="flag cover" title={`Coverage assigned: covering ${covering}'s time off`}>cover</span>}
+                                {offSelf && <span className="flag off" title="Time off approved">off</span>}
                               </span>
                               {(dbl || pending.has(k) || entry?.clock_out || unavail) && <span className="chip-flags">
                                 {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
@@ -96,7 +102,8 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                                 {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
                               </span>}
                             </div>);
-                        } else inner = <span className="ph">Open</span>;
+                        } else if (offs[k]) inner = <span className="ph needs" title={`${empOf(b, offs[k].employee_id)?.name ?? 'Someone'} has approved time off`}>Needs cover<small>{shortName(b, empOf(b, offs[k].employee_id) ?? { id: '', name: '?' })} off</small></span>;
+                        else inner = <span className="ph">Open</span>;
                         return (
                           <td key={d} className="cell" {...(editable ? { tabIndex: 0, 'data-cell': k } : {})}
                             onClick={editable && onCell ? () => onCell(k) : undefined}
@@ -117,6 +124,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
         <span><span className="flag ok">✓</span> clocked in and out</span>
         <span><span className="flag">off?</span> asked for this shift off</span>
         <span><span className="flag swap">⇄</span> swapped shift</span>
+        <span><span className="flag cover">cover</span> covering someone's time off</span>
       </p>
     </>
   );

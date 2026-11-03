@@ -4,16 +4,17 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
 import { DAY_LONG, addDays, ago, mmdd, mondayOf, money, rangeTitle, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotLabel, slotOf } from '../lib/rules';
+import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotOf } from '../lib/rules';
 import { dateShort, myPay, periodTitle, type MyPay } from '../lib/payroll';
 import type { Bundle, Req } from '../lib/types';
-import { Loading, Sheet, useToast } from '../components/ui';
+import { Loading, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
 import { ClockPanel, HoursList } from '../components/Clock';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { PayslipList } from '../components/Payslips';
 import { AdjustmentsPanel } from '../components/Adjustments';
+import { CoverOffersPanel, TimeOffSheet } from '../components/Cover';
 import { TasksBoard } from '../components/ShiftLog';
 import { ShiftReportsBook } from '../components/Logbook';
 import { AvailabilityEditor } from '../components/Availability';
@@ -94,6 +95,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
+        {!preview && <CoverOffersPanel b={b} empId={w.id} />}
         {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
@@ -138,34 +140,9 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
       </div></div>}
 
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
-      {sheet === 'request' && <RequestSheet b={b} empId={w.id} week={week} live={live} onClose={() => setSheet(null)} reload={reload} />}
+      {sheet === 'request' && <TimeOffSheet b={b} empId={w.id} onClose={() => setSheet(null)} reload={reload} />}
     </>
   );
 }
 
-function RequestSheet({ b, empId, week, live, onClose, reload }: { b: Bundle; empId: string; week: string; live: Record<string, Req>; onClose: () => void; reload: () => void }) {
-  const toast = useToast();
-  const [sel, setSel] = useState<string[]>([]);
-  const [reason, setReason] = useState('');
-  const upcoming = keysOf(b, empId).filter((k) => { const d = parseCell(k).date; return d >= week && d < addDays(week, 14) && d >= todayIso() && !(live[k] && live[k].status !== 'denied'); });
-  const send = async () => {
-    if (!sel.length) return toast('Tick at least one shift.', 'error', 'Nothing selected');
-    const cells = sel.map((k) => { const { slot, date } = parseCell(k); return { slot_id: slot, work_date: date }; });
-    const { data, error } = await supabase.rpc('request_time_off', { p_cells: cells, p_reason: reason });
-    if (error) return toast(errText(error), 'error', 'Not sent');
-    toast(`Request sent for ${data} shift${data === 1 ? '' : 's'}. You can cancel it while it's waiting.`, 'ok', 'Sent');
-    onClose(); reload();
-  };
-  return (
-    <Sheet eyebrow="Time off" title="Ask for time off" onClose={onClose}>
-      <div className="sec"><p>Choose the shifts you can't work. Your manager decides and finds cover. You'll get a notification with the answer, and you can cancel while it's waiting.</p></div>
-      <div className="list">{upcoming.length ? upcoming.map((k) => (
-        <label key={k} className="row"><input type="checkbox" checked={sel.includes(k)} onChange={(e) => setSel(e.target.checked ? [...sel, k] : sel.filter((x) => x !== k))} />
-          <span className="main"><b>{slotLabel(b, k)}</b><span>{shiftLong(slotOf(b, k)!.start_hour, slotOf(b, k)!.hours)}</span></span></label>))
-        : <p className="empty-note">No upcoming shifts to ask off in these two weeks.</p>}</div>
-      <div className="field"><label htmlFor="rq-reason">Reason (optional)</label><input type="text" id="rq-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Doctor's appointment" /></div>
-      <div><button className="btn primary" disabled={!upcoming.length} onClick={send}>Send request</button></div>
-    </Sheet>
-  );
-}
 
