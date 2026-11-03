@@ -23,6 +23,14 @@ jobs:
             echo "::error::Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD secrets and the SUPABASE_PROJECT_REF variable (see SETUP.md)."
             exit 1
           fi
+      - name: Check Supabase access (token and project status)
+        run: |
+          code=$(curl -sS -o proj.json -w '%{http_code}' "https://api.supabase.com/v1/projects/$PROJECT_REF" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          if [ "$code" = "401" ]; then echo "::error::The SUPABASE_ACCESS_TOKEN secret is not valid any more (expired or deleted). Make a new token and update the secret."; exit 1; fi
+          if [ "$code" -ge 300 ]; then echo "::error::Supabase answered $code for the project: $(head -c 300 proj.json)"; exit 1; fi
+          st=$(jq -r .status proj.json)
+          echo "::notice::Supabase project status: $st"
+          if [ "$st" != "ACTIVE_HEALTHY" ]; then echo "::error::The Supabase project is $st. If it says INACTIVE or PAUSED, open the Supabase dashboard and restore (unpause) the project, then run this again."; exit 1; fi
       - uses: supabase/setup-cli@v1
         with:
           version: 2.20.5
