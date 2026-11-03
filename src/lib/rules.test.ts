@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellKey, evaluate, payFor, periodOf, paidPeriod, defAvail, coverage } from './rules';
+import { cellKey, evaluate, payFor, periodOf, paidPeriod, defAvail, coverage, shortName } from './rules';
 import type { Bundle, Emp } from './types';
 
 const emp = (id: string, name: string, extra: Partial<Emp> = {}): Emp => ({
@@ -83,5 +83,16 @@ describe('pay', () => {
     expect(paidPeriod(org, '2026-11-02')).toEqual({ weeks: ['2026-10-26', '2026-11-02'], payday: '2026-11-13' });
     expect(paidPeriod({ ...org, pay_period: 'weekly' }, '2026-10-26')).toEqual({ weeks: ['2026-10-19'], payday: '2026-10-30' });
     expect(paidPeriod({ ...org, pay_weekday: 0 }, '2026-10-26')).toEqual({ weeks: ['2026-10-12', '2026-10-19'], payday: '2026-10-26' });
+  });
+
+  it('shortens names for the schedule', () => {
+    const b = bundle();
+    const people = [{ id: 'a', name: 'Tammy Kline' }, { id: 'b', name: 'Tammy Ross' }, { id: 'c', name: 'Dibyendu Mondal', short_name: 'Dibbo' }, { id: 'd', name: 'Shea' }];
+    const with_ = (mode: 'first' | 'last' | 'first_initial' | 'custom') => ({ ...b, org: { ...b.org, name_display: mode }, emps: people.map((p) => ({ ...b.emps[0], ...p })) });
+    const names = (mode: 'first' | 'last' | 'first_initial' | 'custom') => people.map((p) => shortName(with_(mode), p));
+    expect(names('first')).toEqual(['Tammy K.', 'Tammy R.', 'Dibyendu', 'Shea']);
+    expect(names('last')).toEqual(['Kline', 'Ross', 'Mondal', 'Shea']);
+    expect(names('first_initial')).toEqual(['Tammy K.', 'Tammy R.', 'Dibyendu M.', 'Shea']);
+    expect(names('custom')).toEqual(['Tammy K.', 'Tammy R.', 'Dibbo', 'Shea']);
   });
 });

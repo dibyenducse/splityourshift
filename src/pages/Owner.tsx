@@ -6,7 +6,7 @@ import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } 
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
   HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
-  slotLabel, slotOf, swapOf, valid, type Changes, type Result, type Row,
+  shortName, slotLabel, slotOf, swapOf, valid, type Changes, type Result, type Row,
 } from '../lib/rules';
 import type { Bundle, Emp, LedgerRow, Loc, Req } from '../lib/types';
 import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../components/ui';
@@ -29,6 +29,11 @@ type SheetState =
   | { type: 'notes' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
+const UserIcon = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>
+);
+
 const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.errors[0].short}</span>
   : r.warnings.length ? <span className="tag warn">{r.warnings[0].short}</span> : <span className="tag ok">Works</span>;
 
@@ -200,7 +205,7 @@ export default function OwnerApp() {
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
   const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll', 'reports', 'tasks'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="lamp on" style={{ width: 9, height: 9 }} />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : 'Tasks'}</button>)}</nav>;
+    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : 'Tasks'}</button>)}</nav>;
 
   const schedule = (
     <div className="layout two owner">
@@ -212,10 +217,10 @@ export default function OwnerApp() {
             {staff.length ? staff.map((w) => { const n = countWeek(b, w.id, week); return (
               <div key={w.id} className={`wcard${picked === w.id ? ' picked' : ''}`} data-drag="" data-wid={w.id} style={{ ['--h' as string]: w.hue }}
                 onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) setPicked(picked === w.id ? null : w.id); }}>
-                <span className="dot" /><span className="wname">{w.name}</span>{b.entries.some((e) => e.employee_id === w.id && !e.clock_out) && <span className="lamp on" title={`${w.name} is on the clock`} aria-label="On the clock" />}
+                <span className="dot" /><span className="wname" title={w.name}>{w.name}</span>{b.entries.some((e) => e.employee_id === w.id && !e.clock_out) && <span className="sdot" title={`${w.name} is on the clock`} aria-label="On the clock" />}
                 {w.user_id === me!.userId ? <span className="lstat you">you</span> : w.status !== 'active' && <span className={`lstat ${w.status}`}>{w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'expired' : 'no login'}</span>}
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
-                <button className="mini" onClick={() => setSheet({ type: 'profile', id: w.id })} aria-label={`Open ${w.name}'s profile`}>Profile</button>
+                <button className="iconbtn" onClick={() => setSheet({ type: 'profile', id: w.id })} title="View Profile" aria-label={`View ${w.name}'s profile`}><UserIcon /></button>
               </div>); }) : <p className="empty-note">No workers yet.</p>}
           </div>
         </section>
@@ -241,6 +246,9 @@ export default function OwnerApp() {
       </aside>
       <main className="boards">
         <div className="tabsrow end">
+          <label className="namepick no-print">Names
+            <select value={b.org.name_display ?? 'first'} onChange={async (e) => { const { error } = await supabase.from('organizations').update({ name_display: e.target.value }).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); }} aria-label="How names show on the schedule">
+              <option value="first">First name</option><option value="last">Last name</option><option value="first_initial">First name + last initial</option><option value="custom">Custom short name</option></select></label>
           <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
         {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
@@ -430,9 +438,9 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
   const { me, refresh } = useAuth();
   const w = empOf(b, id);
   const others = b.emps.filter((x) => !x.user_id);
-  const [f, setF] = useState(() => ({ name: w?.name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
+  const [f, setF] = useState(() => ({ name: w?.name ?? '', short: w?.short_name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
   const [busy, setBusy] = useState(false);
-  const dirty = useMemo(() => w && (f.name !== w.name || f.email !== (w.email ?? '') || f.phone !== (w.phone ?? '') || f.max !== w.max_shifts || f.rate !== w.rate), [f, w]);
+  const dirty = useMemo(() => w && (f.name !== w.name || f.short !== (w.short_name ?? '') || f.email !== (w.email ?? '') || f.phone !== (w.phone ?? '') || f.max !== w.max_shifts || f.rate !== w.rate), [f, w]);
   if (!w) return null;
   const n = countWeek(b, w.id, week);
   const mine = keysOf(b, w.id).filter((k) => parseCell(k).date >= week && parseCell(k).date < addDays(week, 7));
@@ -441,7 +449,7 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
   const save = async () => {
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email.trim())) return toast('That email looks wrong. Check it and try again.', 'error', 'Not saved');
     setBusy(true);
-    const { error } = await supabase.from('employees').update({ name: f.name.trim() || 'Unnamed', email: f.email.trim() || null, phone: f.phone.trim() || null, max_shifts: Math.max(1, Math.min(21, f.max)), rate: Math.max(0, f.rate) }).eq('id', w.id);
+    const { error } = await supabase.from('employees').update({ name: f.name.trim() || 'Unnamed', short_name: f.short.trim().slice(0, 20) || null, email: f.email.trim() || null, phone: f.phone.trim() || null, max_shifts: Math.max(1, Math.min(21, f.max)), rate: Math.max(0, f.rate) }).eq('id', w.id);
     setBusy(false);
     if (error) return toast(errText(error), 'error', 'Not saved');
     if (f.max < n) toast(`${f.name} already has ${n} shifts this week, more than the new limit of ${f.max}.`, 'warn', 'Over the limit'); else toast('Profile saved.', 'ok', 'Saved');
@@ -464,7 +472,11 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
 
   return (
     <Sheet eyebrow="Worker profile" title={w.name} onClose={onClose}>
-      <div className="field"><label htmlFor="pf-name">Name</label><input type="text" id="pf-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+      <div className="twocol">
+        <div className="field"><label htmlFor="pf-name">Full name</label><input type="text" id="pf-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+        <div className="field"><label htmlFor="pf-short">Short name on the schedule</label><input type="text" id="pf-short" maxLength={20} value={f.short} onChange={(e) => setF({ ...f, short: e.target.value })} placeholder={w ? shortName({ ...b, org: { ...b.org, name_display: 'first' } }, w) : ''} />
+          <span className="hint">{(b.org.name_display ?? 'first') === 'custom' ? 'Shown on the schedule.' : 'Used when the schedule shows custom short names.'}</span></div>
+      </div>
       <div className="twocol">
         <div className="field"><label htmlFor="pf-email">Email (invite and log-in)</label><input type="email" id="pf-email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="name@email.com" /></div>
         <div className="field"><label htmlFor="pf-phone">Phone (log-in)</label><input type="tel" id="pf-phone" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="(555) 123-4567" /></div>

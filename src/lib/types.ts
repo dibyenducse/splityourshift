@@ -5,6 +5,8 @@ export interface Org {
   id: string; owner_id: string; name: string; owner_name: string | null;
   pay_period: 'weekly' | 'biweekly'; pay_anchor: string; pay_weekday?: number; overtime: boolean;
   status: string; created_at: string; last_active_at: string | null; time_zone: string;
+  /** How names show on the schedule. */
+  name_display?: 'first' | 'last' | 'first_initial' | 'custom';
 }
 export interface Loc {
   id: string; org_id: string; name: string; type: LocType; sort: number;
@@ -18,6 +20,8 @@ export interface Avail { dow: number; mode: 'any' | 'hours' | 'off'; from_hour: 
 export interface Emp {
   id: string; org_id: string; user_id: string | null; name: string; email: string | null; phone: string | null;
   max_shifts: number; rate: number; hue: number; lang: string; invited_at: string | null;
+  /** Owner-set short name for the schedule (used when the business shows custom short names). */
+  short_name?: string | null;
   locs: string[]; avail: Avail[]; status: LoginStatus;
 }
 export interface Req {

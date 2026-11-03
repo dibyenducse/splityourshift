@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { DAY_LONG, addDays, mmdd, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, swapOf, valid, type Changes, type Result } from '../lib/rules';
+import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, shortName, swapOf, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
 import { ConfirmButton } from './ui';
 
@@ -79,15 +79,22 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                           const st = absStart(b, k), en = absEnd(b, k);
                           const dbl = (ranges[w.id] || []).some(([a, z]) => z === st || a === en);
                           const cls = meId ? (w.id === meId ? ' me' : ' dim') : '';
+                          const entry = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
+                          const sw = swapOf(b, k), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
+                          const status = [onNow && 'on the clock now', entry?.clock_out && 'clocked in and out', sw && `swapped from ${empOf(b, sw.orig)?.name ?? '?'}`, dbl && 'double shift', pending.has(k) && 'asked for this shift off', unavail && 'unavailable at this time'].filter(Boolean);
                           inner = (
-                            <div className={`chip${cls}`} style={{ ['--h' as string]: w.hue }} {...(editable ? { 'data-drag': '', 'data-wid': w.id, 'data-key': k } : {})}>
-                              {w.name}
-                              {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
-                              {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
-                              {(() => { const sw = swapOf(b, k); return sw ? <span className="flag swap" title={`Swapped: ${empOf(b, sw.orig)?.name ?? '?'} → ${w.name}`}>⇄</span> : null; })()}
-                              {(() => { const e = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
-                                return e ? (e.clock_out ? <span className="flag ok" title="Clocked in and out">✓</span> : <span className="flag on" title="On the clock now">● on</span>) : null; })()}
-                              {editable && !availFor(b, w, k) && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
+                            <div className={`chip${cls}`} style={{ ['--h' as string]: w.hue }} title={`${w.name}${status.length ? ` · ${status.join(' · ')}` : ''}`} {...(editable ? { 'data-drag': '', 'data-wid': w.id, 'data-key': k } : {})}>
+                              <span className="chip-row">
+                                <span className="cname">{shortName(b, w)}</span>
+                                {onNow && <span className="sdot" aria-label="On the clock now" />}
+                                {sw && <span className="flag swap" aria-label={`Swapped from ${empOf(b, sw.orig)?.name ?? '?'}`}>⇄</span>}
+                              </span>
+                              {(dbl || pending.has(k) || entry?.clock_out || unavail) && <span className="chip-flags">
+                                {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
+                                {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
+                                {entry?.clock_out && <span className="flag ok" title="Clocked in and out">✓</span>}
+                                {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
+                              </span>}
                             </div>);
                         } else inner = <span className="ph">Open</span>;
                         return (
@@ -106,7 +113,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
       })}
       <p className="grid-key">
         <span><span className="flag">2×</span> double shift (back to back)</span>
-        <span><span className="flag on">● on</span> on the clock now</span>
+        <span><span className="sdot" /> on the clock now</span>
         <span><span className="flag ok">✓</span> clocked in and out</span>
         <span><span className="flag">off?</span> asked for this shift off</span>
         <span><span className="flag swap">⇄</span> swapped shift</span>

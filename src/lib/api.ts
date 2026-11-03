@@ -48,7 +48,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
   let rows: Partial<Emp>[];
   if (full) rows = must(await supabase.from('employees').select('*').eq('org_id', orgId).order('name'));
   else {
-    const co = must(await supabase.from('coworkers').select('id, org_id, name, hue').eq('org_id', orgId).order('name')) as Partial<Emp>[];
+    const co = must(await supabase.from('coworkers').select('id, org_id, name, hue, short_name').eq('org_id', orgId).order('name')) as Partial<Emp>[];
     const mine = myEmpId ? must(await supabase.from('employees').select('*').eq('id', myEmpId).maybeSingle()) as Partial<Emp> | null : null;
     rows = co.map((c) => (mine && c.id === mine.id ? mine : c));
   }
@@ -71,7 +71,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
     for (const x of avail.filter((v) => v.employee_id === r.id)) a[x.dow] = { dow: x.dow, mode: x.mode, from_hour: x.from_hour, to_hour: x.to_hour };
     return {
       id: r.id!, org_id: orgId, user_id: r.user_id ?? null, name: r.name ?? '', email: r.email ?? null, phone: r.phone ?? null,
-      max_shifts: r.max_shifts ?? 5, rate: Number(r.rate ?? 0), hue: r.hue ?? 200, lang: r.lang ?? 'en', invited_at: r.invited_at ?? null,
+      short_name: r.short_name ?? null, max_shifts: r.max_shifts ?? 5, rate: Number(r.rate ?? 0), hue: r.hue ?? 200, lang: r.lang ?? 'en', invited_at: r.invited_at ?? null,
       locs: links.filter((l) => l.employee_id === r.id).map((l) => l.location_id), avail: a,
       status: (status as { employee_id: string; status: LoginStatus }[]).find((s) => s.employee_id === r.id)?.status ?? 'none',
     };

@@ -604,3 +604,19 @@ ul.tasks label.done small { text-decoration: none; display: block; }
 .flag.swap { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 700; }
 .swapform { margin-top: 8px; }
 .swapinfo ul.plain li { margin: 2px 0; }
+
+/* ---------------------------------------------------------------- compact names and status */
+.sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; flex: none; }
+.wcard .wname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iconbtn { display: inline-grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.iconbtn:hover, .iconbtn:focus-visible { color: var(--accent); border-color: var(--line-strong); background: var(--surface); outline: none; }
+.chip { flex-direction: column; gap: 3px; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.chip-row { display: flex; align-items: center; justify-content: center; gap: 5px; max-width: 100%; min-width: 0; }
+.chip .cname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-row .flag.swap { padding: 0 3px; line-height: 1.2; }
+.chip-flags { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
+.namepick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; margin-right: auto; }
+.namepick select { min-height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 2px 8px; background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; font-weight: 500; }
+.wcard .wname { flex: 1 1 auto; }
+.wcard .lstat { white-space: nowrap; font-size: 9.5px; }
+.wcard .count { flex: none; }

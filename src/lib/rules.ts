@@ -163,3 +163,25 @@ export function swapOf(b: Bundle, k: string) {
   if (!a) return null;
   return { a, orig: a.kind === 'future_swap' ? a.from_emp : a.to_emp, now };
 }
+
+/**
+ * The name shown on the schedule: first name, last name, first name + last initial, or the worker's custom
+ * short name, as the business chooses. Two people with the same short name get their last initial added.
+ */
+export function shortName(b: Bundle, e: Pick<Emp, 'id' | 'name' | 'short_name'>): string {
+  const mode = b.org.name_display ?? 'first';
+  const parts = (n: string) => { const p = n.trim().split(/\s+/); return { first: p[0] ?? n, last: p.length > 1 ? p[p.length - 1] : '' }; };
+  const base = (x: Pick<Emp, 'name' | 'short_name'>) => {
+    const { first, last } = parts(x.name);
+    if (mode === 'custom' && x.short_name?.trim()) return x.short_name.trim();
+    if (mode === 'last') return last || first;
+    if (mode === 'first_initial') return last ? `${first} ${last[0]}.` : first;
+    return first;
+  };
+  const mine = base(e);
+  const clash = b.emps.some((o) => o.id !== e.id && base(o).toLowerCase() === mine.toLowerCase());
+  if (!clash) return mine;
+  const { first, last } = parts(e.name);
+  if (mode === 'last') return `${last || first} ${first[0]}.`;
+  return last ? `${first} ${last.slice(0, mode === 'first_initial' ? 2 : 1)}.` : e.name;
+}
