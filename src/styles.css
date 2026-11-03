@@ -601,3 +601,6 @@ ul.tasks label.done small { text-decoration: none; display: block; }
 .doc-editor { width: 100%; min-height: 260px; resize: vertical; font: inherit; font-size: 16px; line-height: 1.6; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 10px;
   background: var(--surface); color: var(--fg); overflow: hidden; }
 .doc-editor:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flag.swap { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.swapform { margin-top: 8px; }
+.swapinfo ul.plain li { margin: 2px 0; }

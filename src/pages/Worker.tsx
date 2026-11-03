@@ -82,6 +82,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           { label: 'Shift reports', hint: 'The logbook: write and read reports', onClick: () => setView('reports') },
           { label: 'My tasks', onClick: () => setView('tasks') },
           { label: 'Request time off', onClick: () => setSheet('request') },
+          { label: 'Swap a shift', hint: 'Ask a coworker to work one of your shifts', onClick: () => { setView('home'); setTimeout(() => jump('swaps'), 80); } },
           { label: 'My payslips', hint: 'Every paid payday', onClick: () => { setView('home'); setTimeout(() => jump('my-payslips'), 50); } },
         ]} />}
         nav={<nav className="topnav" aria-label="Sections">{([['home', 'My shifts'], ['reports', 'Shift reports'], ['tasks', 'My tasks']] as const).map(([v, t]) =>

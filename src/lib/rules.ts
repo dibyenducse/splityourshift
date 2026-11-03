@@ -153,3 +153,13 @@ export function coverage(rows: Row[]) {
   return c;
 }
 export const HUES = [12, 205, 145, 275, 38, 180, 330, 95, 240, 58, 300, 160, 20, 220];
+
+/** The swap behind a shift, if its current worker got it by a swap or takeover: who had it and who has it now. */
+export function swapOf(b: Bundle, k: string) {
+  const { slot, date } = parseCell(k), now = b.assign[k];
+  if (!now) return null;
+  const a = (b.swaps ?? []).filter((x) => x.slot_id === slot && x.work_date === date).reverse()
+    .find((x) => (x.kind === 'future_swap' ? x.to_emp : x.from_emp) === now);
+  if (!a) return null;
+  return { a, orig: a.kind === 'future_swap' ? a.from_emp : a.to_emp, now };
+}

@@ -6,7 +6,7 @@ import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } 
 import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
 import {
   HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
-  slotLabel, slotOf, valid, type Changes, type Result, type Row,
+  slotLabel, slotOf, swapOf, valid, type Changes, type Result, type Row,
 } from '../lib/rules';
 import type { Bundle, Emp, LedgerRow, Loc, Req } from '../lib/types';
 import { ConfirmButton, Loading, Sheet, StatusTag, useToast } from '../components/ui';
@@ -268,6 +268,7 @@ export default function OwnerApp() {
           { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
           { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },
           { label: 'Time clock', hint: 'Who is on the clock, hour fixes', onClick: () => setTab('time') },
+          { label: 'Shift swaps', hint: 'Swap any date and shift; pending, accepted, done', onClick: () => { setTab('time'); setTimeout(() => document.getElementById('swaps')?.scrollIntoView({ behavior: 'smooth' }), 80); } },
           { label: 'Shift reports', hint: 'The logbook your workers write', onClick: () => setTab('reports') },
           { label: 'Tasks', hint: 'Task lists for each shift', onClick: () => setTab('tasks') },
           { label: 'Add a worker', onClick: () => { setTab('schedule'); addWorker(); } },
@@ -317,6 +318,14 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return (
       <Sheet eyebrow="Shift" title={w ? w.name : 'Open shift'} onClose={close}>
         {slotCard(s.key)}
+        {(() => { const sw = swapOf(b, s.key); if (!sw) return null; const o = empOf(b, sw.orig)?.name ?? 'someone', n = empOf(b, sw.now)?.name ?? 'someone';
+          return (<div className="sec swapinfo"><h4>⇄ Swapped shift</h4>
+            <p><b>{n}</b> works this shift instead of <b>{o}</b>.</p>
+            <ul className="plain">
+              <li>Original: {o}</li><li>Now: {n}</li>
+              <li>{sw.a.kind === 'future_swap' ? `${o} asked ${n} to work it${sw.a.note ? ` (${sw.a.note})` : ''}; ${n} accepted` : sw.a.kind === 'takeover' ? `${n} took it over at clock-in (given for good)` : `${n} covered it at clock-in as a swap`}</li>
+              <li>Requested {new Date(sw.a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}{sw.a.decided_at ? ` · accepted ${new Date(sw.a.decided_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</li>
+            </ul></div>); })()}
         {w ? <div className="sec"><h4>{w.name} can't make it?</h4><p>Pick who takes this shift. You can trade one of their shifts back to {w.name} right away, or record it as owed.</p>
           <div className="actions"><button className="btn primary" onClick={() => set({ type: 'swap', key: s.key })}>Swap or find cover</button>
             <button className="btn" onClick={() => set({ type: 'profile', id: w.id })}>{w.name}'s profile</button>

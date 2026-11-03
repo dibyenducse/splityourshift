@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { DAY_LONG, addDays, mmdd, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, valid, type Changes, type Result } from '../lib/rules';
+import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, swapOf, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
 import { ConfirmButton } from './ui';
 
@@ -84,6 +84,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                               {w.name}
                               {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
                               {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
+                              {(() => { const sw = swapOf(b, k); return sw ? <span className="flag swap" title={`Swapped: ${empOf(b, sw.orig)?.name ?? '?'} → ${w.name}`}>⇄</span> : null; })()}
                               {(() => { const e = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
                                 return e ? (e.clock_out ? <span className="flag ok" title="Clocked in and out">✓</span> : <span className="flag on" title="On the clock now">● on</span>) : null; })()}
                               {editable && !availFor(b, w, k) && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
@@ -108,6 +109,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
         <span><span className="flag on">● on</span> on the clock now</span>
         <span><span className="flag ok">✓</span> clocked in and out</span>
         <span><span className="flag">off?</span> asked for this shift off</span>
+        <span><span className="flag swap">⇄</span> swapped shift</span>
       </p>
     </>
   );

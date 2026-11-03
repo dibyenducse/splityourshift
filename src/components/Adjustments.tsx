@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
-import { ago } from '../lib/time';
+import { addDays, ago, shiftLong, todayIso } from '../lib/time';
 import { empOf } from '../lib/rules';
 import type { Adjustment, Bundle } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
+import { shiftNameOf } from './Logbook';
 
 const STATUS: Record<Adjustment['status'], [string, string]> = {
   pending: ['Waiting for answer', 'warn'], awaiting_owner: ['Waiting for manager', 'warn'], accepted: ['Agreed', 'ok'],
@@ -19,6 +20,7 @@ export function adjText(b: Bundle, a: Adjustment) {
     case 'extra': return `${f} worked an extra paid shift${t ? ` (${t}'s shift)` : ''}${on}`;
     case 'late_ignore': return `${f} was ${a.minutes} min late and ${t} stayed on: call it even${on}`;
     case 'late_swap': return a.slot_id ? `${f} comes ${a.minutes} min early for ${t} another day (was late${on})` : `${f} and ${t}: ${a.minutes}-minute swap${a.note ? ` (${a.note})` : ''}`;
+    case 'future_swap': return `${f} asked ${t} to work ${f}'s shift${on}${a.note ? ` (${a.note})` : ''}`;
     case 'late_payroll': return `${f} was ${a.minutes} min late; paid by normal payroll${t ? ` (${t} stayed on)` : ''}${on}`;
     default: return `${f} and ${t ?? ''}: adjustment${on}`;
   }
@@ -32,7 +34,8 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
   const toast = useToast();
   const [rows, setRows] = useState<Adjustment[]>([]);
   const [busy, setBusy] = useState('');
-  const [prop, setProp] = useState({ from: '', to: '', kind: 'swap', minutes: 30, note: '' });
+  const [prop, setProp] = useState({ from: '', to: '', kind: 'future_swap', minutes: 30, note: '', loc: b.locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1) });
+  const [ask, setAsk] = useState(false);
   const load = useCallback(async () => {
     const { data } = await supabase.from('shift_adjustments').select('*').eq('org_id', b.org.id).order('created_at', { ascending: false }).limit(150);
     setRows((data ?? []) as Adjustment[]);
@@ -53,23 +56,56 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
   const respond = (a: Adjustment, yes: boolean) => act(a.id, () => supabase.rpc('respond_adjustment', { p_id: a.id, p_accept: yes }), yes ? 'Accepted. Everyone involved was told.' : 'Declined.');
   const update = (a: Adjustment, action: string, ok: string) => act(a.id, () => supabase.rpc('update_adjustment', { p_id: a.id, p_action: action }), ok);
   const propose = () => {
-    if (!prop.from || !prop.to || prop.from === prop.to) return toast('Pick two different workers.', 'error', 'Missing');
-    act('new', () => supabase.rpc('propose_adjustment', { p_from: prop.from, p_to: prop.to, p_kind: prop.kind, p_minutes: prop.minutes, p_note: prop.note }),
-      `Sent to ${empOf(b, prop.to)?.name}. They accept or decline.`);
-    setProp({ ...prop, note: '' });
+    const from = owner ? prop.from : empId!;
+    if (!from || !prop.to || from === prop.to) return toast(owner ? 'Pick two different workers.' : 'Pick the coworker to ask.', 'error', 'Missing');
+    if (prop.kind === 'future_swap' && (!prop.slot || !prop.date)) return toast('Pick the date and the shift.', 'error', 'Missing');
+    act('new', () => prop.kind === 'future_swap'
+      ? supabase.rpc('request_future_swap', { p_to: prop.to, p_slot: prop.slot, p_date: prop.date, p_note: prop.note, p_from: owner ? from : null })
+      : supabase.rpc('propose_adjustment', { p_from: from, p_to: prop.to, p_kind: prop.kind, p_minutes: prop.minutes, p_note: prop.note }),
+      `Sent to ${empOf(b, prop.to)?.name}. When they accept, they're on that shift.`);
+    setProp({ ...prop, note: '' }); setAsk(false);
   };
+  // The owner's shift slots at the chosen location, named Morning / Evening / Night.
+  const slotsAt = b.slots.filter((x) => x.location_id === prop.loc).sort((x, y) => x.start_hour - y.start_hour);
+  const myLocs = owner ? b.locs : b.locs.filter((l) => empOf(b, empId)?.locs.includes(l.id)).length ? b.locs.filter((l) => empOf(b, empId)?.locs.includes(l.id)) : b.locs;
+  const swapForm = (
+    <div className="swapform">
+      <div className="twocol">
+        {owner && <div className="field"><label htmlFor="pp-from">Worker who can't work it</label>
+          <select id="pp-from" value={prop.from} onChange={(e) => setProp({ ...prop, from: e.target.value })}><option value="">Pick…</option>{b.emps.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>}
+        <div className="field"><label htmlFor="pp-to">{owner ? 'Worker who is asked' : 'Ask this coworker'}</label>
+          <select id="pp-to" value={prop.to} onChange={(e) => setProp({ ...prop, to: e.target.value })}><option value="">Pick…</option>{b.emps.filter((e) => e.id !== (owner ? prop.from : empId)).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
+        {owner && <div className="field"><label htmlFor="pp-kind">What</label>
+          <select id="pp-kind" value={prop.kind} onChange={(e) => setProp({ ...prop, kind: e.target.value })}>
+            <option value="future_swap">Work a specific shift (date and shift)</option><option value="swap">Cover one shift later (goes to Shifts owed)</option><option value="late_swap">A swap of minutes</option></select></div>}
+        {prop.kind === 'future_swap' && <>
+          <div className="field"><label htmlFor="pp-date">Date</label><input id="pp-date" type="date" min={todayIso()} value={prop.date} onChange={(e) => e.target.value && setProp({ ...prop, date: e.target.value })} />
+            <span className="hint">Any future date, even if that week isn't scheduled yet.</span></div>
+          {myLocs.length > 1 && <div className="field"><label htmlFor="pp-loc">Location</label>
+            <select id="pp-loc" value={prop.loc} onChange={(e) => setProp({ ...prop, loc: e.target.value, slot: '' })}>{myLocs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+          <div className="field"><label htmlFor="pp-slot">Shift</label>
+            <select id="pp-slot" value={prop.slot} onChange={(e) => setProp({ ...prop, slot: e.target.value })}><option value="">Pick…</option>
+              {slotsAt.map((x) => <option key={x.id} value={x.id}>{shiftNameOf(x)} · {shiftLong(x.start_hour, x.hours)}</option>)}</select></div>
+        </>}
+        {prop.kind === 'late_swap' && <div className="field"><label htmlFor="pp-min">Minutes</label><input id="pp-min" type="number" min={1} max={600} value={prop.minutes} onChange={(e) => setProp({ ...prop, minutes: +e.target.value || 1 })} /></div>}
+        <div className="field" style={{ gridColumn: '1 / -1' }}><label htmlFor="pp-note">Note (optional)</label><input id="pp-note" type="text" value={prop.note} onChange={(e) => setProp({ ...prop, note: e.target.value })} placeholder="e.g. doctor's appointment" /></div>
+      </div>
+      <div className="actions"><button className="btn primary" disabled={busy === 'new'} onClick={propose}>Send swap request</button>
+        {!owner && <button className="btn" onClick={() => setAsk(false)}>Cancel</button>}</div>
+    </div>);
 
   const forMe = rows.filter((a) => owner ? a.status === 'awaiting_owner' : a.status === 'pending' && a.to_emp === empId);
   const mineWaiting = owner ? rows.filter((a) => a.status === 'pending') : rows.filter((a) => a.status === 'pending' && a.from_emp === empId);
+  const upcoming = rows.filter((a) => a.kind === 'future_swap' && a.status === 'accepted' && (a.work_date ?? '') >= todayIso() && (owner || a.from_emp === empId || a.to_emp === empId));
   const todo = rows.filter((a) => a.status === 'accepted' && a.kind === 'late_swap' && (owner || a.from_emp === empId || a.to_emp === empId));
-  const history = rows.filter((a) => !forMe.includes(a) && !mineWaiting.includes(a) && !todo.includes(a)).slice(0, 25);
-  const tag = (a: Adjustment) => <span className={`tag ${STATUS[a.status][1]}`}>{STATUS[a.status][0]}</span>;
+  const history = rows.filter((a) => !forMe.includes(a) && !mineWaiting.includes(a) && !todo.includes(a) && !upcoming.includes(a)).slice(0, 25);
+  const tag = (a: Adjustment) => a.kind === 'future_swap' && a.status === 'accepted' && (a.work_date ?? '') < todayIso() ? <span className="tag ok">Done</span>
+    : <span className={`tag ${STATUS[a.status][1]}`}>{a.kind === 'future_swap' && a.status === 'accepted' ? 'Accepted · on the schedule' : STATUS[a.status][0]}</span>;
   const item = (a: Adjustment, buttons?: React.ReactNode) => (
     <div key={a.id} className="item adj"><div>{adjText(b, a)}</div><small>{ago(a.created_at)} · {tag(a)}</small>{buttons && <div className="actions">{buttons}</div>}</div>);
 
-  if (!owner && !rows.length) return null;
   return (
-    <section className="panel">
+    <section className="panel" id="swaps">
       <div className="panel-head"><h2>{owner ? 'Swaps and shift adjustments' : 'Swaps and agreements'}</h2>{forMe.length > 0 && <span className="badge">{forMe.length}</span>}</div>
       <p className="hint">{owner ? 'Takeovers, swaps, extra shifts and late arrivals that workers set up from the time clock. ' + (b.locs.some((l) => (l as { mutual_approval?: boolean }).mutual_approval === false) ? 'Where mutual approval is off, accepted swaps wait for you.' : 'When both workers agree it is final; you are told.')
         : 'Requests from coworkers, and what you agreed to. Your manager is told about each one.'}</p>
@@ -80,22 +116,14 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
         <button className="btn small" disabled={busy === a.id} onClick={() => respond(a, false)}>Decline</button></>))}</div></>}
       {mineWaiting.length > 0 && <><h4>{owner ? 'Waiting for a worker to answer' : 'Your requests'}</h4><div className="stack">{mineWaiting.map((a) => item(a,
         <ConfirmButton className="btn small" label="Cancel request" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Request cancelled.')} />))}</div></>}
+      {!owner && (ask ? <div className="option"><h4>Can't work a shift? Ask a coworker</h4>{swapForm}</div>
+        : <div className="actions"><button className="btn primary" onClick={() => setAsk(true)}>⇄ Ask a coworker to work one of my shifts</button></div>)}
+      {upcoming.length > 0 && <><h4>Accepted swaps coming up</h4><div className="stack">{upcoming.map((a) => item(a, owner ?
+        <ConfirmButton className="btn small" label="Cancel swap" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Swap cancelled. Set the schedule as you need.')} /> : undefined))}</div></>}
       {todo.length > 0 && <><h4>Agreed, not done yet</h4><div className="stack">{todo.map((a) => item(a,
         <button className="btn small" disabled={busy === a.id} onClick={() => update(a, 'complete', 'Marked done.')}>Mark done</button>))}</div></>}
       {history.length > 0 && <details className="adj-history"><summary>History ({history.length})</summary><div className="stack">{history.map((a) => item(a))}</div></details>}
-      {owner && <details className="adj-history"><summary>Propose a swap between two workers</summary>
-        <div className="twocol" style={{ marginTop: 8 }}>
-          <div className="field"><label htmlFor="pp-from">Worker who gets covered / comes early</label>
-            <select id="pp-from" value={prop.from} onChange={(e) => setProp({ ...prop, from: e.target.value })}><option value="">Pick…</option>{b.emps.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-          <div className="field"><label htmlFor="pp-to">Worker who is asked</label>
-            <select id="pp-to" value={prop.to} onChange={(e) => setProp({ ...prop, to: e.target.value })}><option value="">Pick…</option>{b.emps.filter((e) => e.id !== prop.from).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-          <div className="field"><label htmlFor="pp-kind">What</label>
-            <select id="pp-kind" value={prop.kind} onChange={(e) => setProp({ ...prop, kind: e.target.value })}><option value="swap">They cover one whole shift (goes to Shifts owed)</option><option value="late_swap">A swap of minutes</option></select></div>
-          {prop.kind === 'late_swap' && <div className="field"><label htmlFor="pp-min">Minutes</label><input id="pp-min" type="number" min={1} max={600} value={prop.minutes} onChange={(e) => setProp({ ...prop, minutes: +e.target.value || 1 })} /></div>}
-          <div className="field" style={{ gridColumn: '1 / -1' }}><label htmlFor="pp-note">Note (optional)</label><input id="pp-note" type="text" value={prop.note} onChange={(e) => setProp({ ...prop, note: e.target.value })} placeholder="e.g. Friday night, Microtel" /></div>
-        </div>
-        <div className="actions"><button className="btn primary" disabled={busy === 'new'} onClick={propose}>Send proposal</button></div>
-      </details>}
+      {owner && <details className="adj-history" open><summary>New swap request (any date and shift)</summary>{swapForm}</details>}
       {owner && !rows.length && <p className="empty-note">Nothing yet. When a worker clocks in late, covers someone or picks up an extra shift, it shows up here.</p>}
     </section>
   );
