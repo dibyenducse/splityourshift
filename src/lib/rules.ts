@@ -161,7 +161,7 @@ export function swapOf(b: Bundle, k: string) {
   const a = (b.swaps ?? []).filter((x) => x.slot_id === slot && x.work_date === date).reverse()
     .find((x) => (x.kind === 'future_swap' ? x.to_emp : x.from_emp) === now);
   if (!a) return null;
-  return { a, orig: a.kind === 'future_swap' ? a.from_emp : a.to_emp, now };
+  return { a, orig: a.kind === 'future_swap' ? a.from_emp : a.to_emp, now }; // payback/swap/takeover: from_emp works it, to_emp had it
 }
 
 /**

@@ -63,7 +63,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
     full ? supabase.rpc('login_status', { p_org: orgId }).then(must<{ employee_id: string; status: LoginStatus }[]>) : [],
     supabase.from('time_entries').select('*').eq('org_id', orgId).gte('work_date', addDays(from, -14)).lte('work_date', to).order('clock_in').then(must<TimeEntry[]>),
     supabase.from('time_fix_requests').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(200).then(must<TimeFix[]>),
-    supabase.from('shift_adjustments').select('*').eq('org_id', orgId).in('kind', ['future_swap', 'swap', 'takeover']).in('status', ['accepted', 'recorded', 'completed'])
+    supabase.from('shift_adjustments').select('*').eq('org_id', orgId).in('kind', ['future_swap', 'payback', 'swap', 'takeover']).in('status', ['accepted', 'recorded', 'completed'])
       .gte('work_date', from).lte('work_date', to).then((r) => (r.data ?? []) as Adjustment[], () => [] as Adjustment[]),
   ]);
   const emps: Emp[] = rows.map((r) => {

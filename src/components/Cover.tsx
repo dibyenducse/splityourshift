@@ -124,3 +124,40 @@ export function CoverSheet({ b, req, onClose, reload }: { b: Bundle; req: Req; o
     </Sheet>
   );
 }
+
+/**
+ * Pay back a shift owed on any future date and shift slot, even before that week is scheduled.
+ * The owner sets it directly; the worker who owes asks, and the other worker accepts.
+ */
+export function PaybackPicker({ b, ledgerId, owner, onDone }: { b: Bundle; ledgerId: string; owner?: boolean; onDone: () => void }) {
+  const toast = useToast();
+  const l = b.ledger.find((x) => x.id === ledgerId);
+  const d = empOf(b, l?.debtor_id), c = empOf(b, l?.creditor_id);
+  const locs = b.locs.filter((x) => c?.locs.includes(x.id)).length ? b.locs.filter((x) => c?.locs.includes(x.id)) : b.locs;
+  const [f, setF] = useState({ loc: locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 7) });
+  const [busy, setBusy] = useState(false);
+  const slots = b.slots.filter((s) => s.location_id === f.loc).sort((x, y) => x.start_hour - y.start_hour);
+  const k = f.slot ? cellKey(f.slot, f.date) : null, now = k ? empOf(b, b.assign[k]) : undefined;
+  const go = async () => {
+    if (!f.slot) return toast('Pick the shift.', 'error', 'Missing');
+    setBusy(true);
+    const { error } = await supabase.rpc('payback_request', { p_ledger: ledgerId, p_slot: f.slot, p_date: f.date });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(owner ? `Set. ${d?.name} works it; the shift owed is settled.` : `Sent to ${c?.name}. When they accept, you're on that shift and you're even.`, 'ok', 'Pay back'); onDone();
+  };
+  if (!l || !d || !c) return null;
+  return (
+    <div className="option"><h4>Any future date and shift</h4>
+      <p>{d.name} works {c.name}'s shift on the day you pick, even if that week isn't scheduled yet. {owner ? 'It is set right away.' : `${c.name} accepts it first.`} When the day is scheduled, {d.name} is placed there automatically and it's marked ⇄.</p>
+      <div className="twocol">
+        <div className="field"><label htmlFor="pb-date">Date</label><input id="pb-date" type="date" min={todayIso()} value={f.date} onChange={(e) => e.target.value && setF({ ...f, date: e.target.value })} /></div>
+        {locs.length > 1 && <div className="field"><label htmlFor="pb-loc">Location</label><select id="pb-loc" value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value, slot: '' })}>{locs.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
+        <div className="field"><label htmlFor="pb-slot">Shift</label><select id="pb-slot" value={f.slot} onChange={(e) => setF({ ...f, slot: e.target.value })}><option value="">Pick…</option>
+          {slots.map((s) => <option key={s.id} value={s.id}>{shiftNameOf(s)} · {shiftLong(s.start_hour, s.hours)}</option>)}</select>
+          {k && <span className="hint">{now ? `Scheduled now: ${now.name}.` : 'Not scheduled yet.'}</span>}</div>
+      </div>
+      <div className="actions"><button className="btn primary" disabled={busy || !f.slot} onClick={go}>{owner ? 'Set this pay back' : `Ask ${c.name}`}</button></div>
+    </div>
+  );
+}

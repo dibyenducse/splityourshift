@@ -61,7 +61,7 @@ export interface Bundle {
 /** A takeover, swap, extra shift or late-arrival agreement between workers (see shift_adjustments). */
 export interface Adjustment {
   id: string; org_id: string; location_id: string | null;
-  kind: 'takeover' | 'swap' | 'extra' | 'late_ignore' | 'late_swap' | 'late_payroll' | 'proposal' | 'future_swap';
+  kind: 'takeover' | 'swap' | 'extra' | 'late_ignore' | 'late_swap' | 'late_payroll' | 'proposal' | 'future_swap' | 'payback';
   from_emp: string; to_emp: string | null; slot_id: string | null; work_date: string | null; label: string | null; minutes: number | null;
   entry_id: string | null; status: 'pending' | 'awaiting_owner' | 'accepted' | 'declined' | 'recorded' | 'completed' | 'cancelled';
   note: string | null; created_at: string; decided_at: string | null; completed_at: string | null;

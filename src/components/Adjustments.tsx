@@ -5,6 +5,7 @@ import { empOf } from '../lib/rules';
 import type { Adjustment, Bundle } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
+import { PaybackPicker } from './Cover';
 
 const STATUS: Record<Adjustment['status'], [string, string]> = {
   pending: ['Waiting for answer', 'warn'], awaiting_owner: ['Waiting for manager', 'warn'], accepted: ['Agreed', 'ok'],
@@ -20,6 +21,7 @@ export function adjText(b: Bundle, a: Adjustment) {
     case 'extra': return `${f} worked an extra paid shift${t ? ` (${t}'s shift)` : ''}${on}`;
     case 'late_ignore': return `${f} was ${a.minutes} min late and ${t} stayed on: call it even${on}`;
     case 'late_swap': return a.slot_id ? `${f} comes ${a.minutes} min early for ${t} another day (was late${on})` : `${f} and ${t}: ${a.minutes}-minute swap${a.note ? ` (${a.note})` : ''}`;
+    case 'payback': return `${f} pays back ${t} by working ${t}'s shift${on}`;
     case 'future_swap': return `${f} asked ${t} to work ${f}'s shift${on}${a.note ? ` (${a.note})` : ''}`;
     case 'late_payroll': return `${f} was ${a.minutes} min late; paid by normal payroll${t ? ` (${t} stayed on)` : ''}${on}`;
     default: return `${f} and ${t ?? ''}: adjustment${on}`;
@@ -37,6 +39,8 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
   const [prop, setProp] = useState({ from: '', to: '', kind: 'future_swap', minutes: 30, note: '', loc: b.locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1) });
   const [ask, setAsk] = useState(false);
   const [acc, setAcc] = useState<Adjustment | null>(null);
+  const [payFor, setPayFor] = useState<string | null>(null);
+  const owe = owner ? [] : b.ledger.filter((l) => l.status === 'open' && l.debtor_id === empId && !rows.some((a) => a.kind === 'payback' && a.status === 'pending' && (a as { ledger_id?: string }).ledger_id === l.id));
   const load = useCallback(async () => {
     const { data } = await supabase.from('shift_adjustments').select('*').eq('org_id', b.org.id).order('created_at', { ascending: false }).limit(150);
     setRows((data ?? []) as Adjustment[]);
@@ -122,6 +126,10 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
         <button className="btn small" disabled={busy === a.id} onClick={() => respond(a, false)}>Decline</button></>))}</div></>}
       {mineWaiting.length > 0 && <><h4>{owner ? 'Waiting for a worker to answer' : 'Your requests'}</h4><div className="stack">{mineWaiting.map((a) => item(a,
         <ConfirmButton className="btn small" label="Cancel request" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Request cancelled.')} />))}</div></>}
+      {!owner && owe.length > 0 && <><h4>Shifts you owe</h4><div className="stack">{owe.map((l) => (
+        <div key={l.id} className="item"><div>You owe <b>{empOf(b, l.creditor_id)?.name ?? '?'}</b> a shift</div><small>{empOf(b, l.creditor_id)?.name} covered {l.label}</small>
+          {payFor === l.id ? <PaybackPicker b={b} ledgerId={l.id} onDone={() => { setPayFor(null); load(); }} />
+            : <div className="actions"><button className="btn small primary" onClick={() => setPayFor(l.id)}>Pay back: pick a date and shift</button></div>}</div>))}</div></>}
       {!owner && (ask ? <div className="option"><h4>Can't work a shift? Ask a coworker</h4>{swapForm}</div>
         : <div className="actions"><button className="btn primary" onClick={() => setAsk(true)}>⇄ Ask a coworker to work one of my shifts</button></div>)}
       {upcoming.length > 0 && <><h4>Accepted swaps coming up</h4><div className="stack">{upcoming.map((a) => item(a, owner ?

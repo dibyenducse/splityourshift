@@ -16,7 +16,7 @@ import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { TaskManager, TasksBoard } from '../components/ShiftLog';
 import { ShiftReportsBook } from '../components/Logbook';
-import { CoverSheet } from '../components/Cover';
+import { CoverSheet, PaybackPicker } from '../components/Cover';
 import { PayslipList } from '../components/Payslips';
 import Onboarding from './Onboarding';
 import TimeClock from './OwnerTime';
@@ -340,7 +340,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
             <p><b>{n}</b> works this shift instead of <b>{o}</b>.</p>
             <ul className="plain">
               <li>Original: {o}</li><li>Now: {n}</li>
-              <li>{sw.a.kind === 'future_swap' ? `${o} asked ${n} to work it${sw.a.note ? ` (${sw.a.note})` : ''}; ${n} accepted` : sw.a.kind === 'takeover' ? `${n} took it over at clock-in (given for good)` : `${n} covered it at clock-in as a swap`}</li>
+              <li>{sw.a.kind === 'future_swap' ? `${o} asked ${n} to work it${sw.a.note ? ` (${sw.a.note})` : ''}; ${n} accepted` : sw.a.kind === 'payback' ? `${n} pays back a shift owed to ${o}${sw.a.note ? ` (${sw.a.note})` : ''}` : sw.a.kind === 'takeover' ? `${n} took it over at clock-in (given for good)` : `${n} covered it at clock-in as a swap`}</li>
               <li>Requested {new Date(sw.a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}{sw.a.decided_at ? ` · accepted ${new Date(sw.a.decided_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</li>
             </ul></div>); })()}
         {w ? <div className="sec"><h4>{w.name} can't make it?</h4><p>Pick who takes this shift. You can trade one of their shifts back to {w.name} right away, or record it as owed.</p>
@@ -416,11 +416,12 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     const opts = keysOf(b, c.id).filter((k) => parseCell(k).date > l.work_date && parseCell(k).date >= todayIso()).map((k) => ({ k, r: evaluate(b, { [k]: d.id }, { allowOver: true }) }));
     return (
       <Sheet eyebrow="Pay back" title={`${d.name} owes ${c.name}`} onClose={close}>
-        <div className="sec"><p>{c.name} covered {d.name}'s {l.label}. Pick one of {c.name}'s upcoming shifts for {d.name} to work, in any week. Not scheduled yet? It stays on <b>Shifts owed</b> until you plan that week; come back then. If {d.name} later covers one of {c.name}'s shifts, that also settles it automatically.</p></div>
+        <div className="sec"><p>{c.name} covered {d.name}'s {l.label}. Pick one of {c.name}'s scheduled shifts below, or any future date and shift. If {d.name} later covers one of {c.name}'s shifts, that also settles it automatically.</p></div>
         <div className="list">{opts.length ? opts.map(({ k, r }) => (
           <button key={k} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [k]: d.id }, `${d.name} works ${slotLabel(b, k)} for ${c.name}. They're even.`, { settle: l.id, allowOver: true })) close(); }}>
             <span className="main"><b>{slotLabel(b, k)}</b><span className={r.errors.length ? 'reason bad' : r.warnings.length ? 'reason warn' : ''}>{r.errors[0]?.msg ?? r.warnings[0]?.msg ?? `${d.name} works it, ${c.name} gets the shift off`}</span></span>{statusTag(r)}</button>))
-          : <p className="empty-note">{c.name} has no upcoming shifts after that date.</p>}</div>
+          : <p className="empty-note">{c.name} has no scheduled shifts after that date yet.</p>}</div>
+        <PaybackPicker b={b} ledgerId={l.id} owner onDone={async () => { await reload(); close(); }} />
         <div className="actions"><button className="btn" onClick={async () => { await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', l.id); await reload(); close(); toast('Marked as settled.', 'ok', 'Done'); }}>Mark settled without a shift</button></div>
       </Sheet>);
   }

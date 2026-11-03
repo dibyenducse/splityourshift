@@ -18,68 +18,85 @@ const longDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('e
 const posted = (t: string) => new Date(t).toLocaleString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const DRAFT = 'sys-report-draft';
 
+/** The reporting day in the business's time zone: 7:00 AM starts a new day (6:59 AM still counts as yesterday). */
+export const reportDayNow = (tz: string) => new Date(Date.now() - 7 * 36e5).toLocaleDateString('en-CA', { timeZone: tz || 'America/Chicago' });
+
 /**
- * Shift report logbook (like a shared Google Doc): any worker opens a new page for a shift, picks the
- * location, shift and shift date, writes, and posts. Everyone reads past reports, newest first, with filters.
- * The owner reads; workers (and an owner in worker view) write.
+ * Shift report logbook, by location. The writing form is at the top (workers); below it, every report posted
+ * since 7:00 AM today at the worker's locations. Earlier days are in History (filter by date and location).
+ * Workers only see and post at locations they're assigned to; the owner sees all and only reads.
  */
 export function ShiftReportsBook({ b, empId, owner }: { b: Bundle; empId?: string; owner?: boolean }) {
   const toast = useToast();
+  const [view, setView] = useState<'today' | 'history'>('today');
   const [rows, setRows] = useState<Report[]>([]);
   const [more, setMore] = useState(false);
   const [fl, setFl] = useState({ loc: '', shift: '', date: '' });
   const [open, setOpen] = useState<Report | null>(null);
-  const [writing, setWriting] = useState(false);
   const me = empId ? empOf(b, empId) : undefined;
-  const canWrite = !owner && !!empId;
+  const canWrite = !owner && !!me;
+  const locs = owner ? b.locs : b.locs.filter((l) => me?.locs.includes(l.id));
+  const today = reportDayNow(b.org.time_zone);
   const PAGE = 40;
 
   const shiftOf = (r: Report): ShiftName | null => r.shift_name ?? (r.slot_id ? (b.slots.find((s) => s.id === r.slot_id) ? shiftNameOf(b.slots.find((s) => s.id === r.slot_id)!) : null) : null);
   const title = (r: Report) => `${b.locs.find((l) => l.id === r.location_id)?.name ?? 'Report'}${shiftOf(r) ? ` – ${shiftOf(r)} Shift` : ''}`;
 
   const load = useCallback(async (append = false) => {
-    let q = supabase.from('shift_reports').select('*').eq('org_id', b.org.id).order('created_at', { ascending: false }).limit(PAGE);
-    if (fl.loc) q = q.eq('location_id', fl.loc);
-    if (fl.date) q = q.eq('work_date', fl.date);
-    if (fl.shift) q = q.eq('shift_name', fl.shift);
+    const ids = (fl.loc ? [fl.loc] : locs.map((l) => l.id));
+    if (!ids.length) { setRows([]); setMore(false); return; }
+    let q = supabase.from('shift_reports').select('*').eq('org_id', b.org.id).in('location_id', ids).order('created_at', { ascending: false }).limit(PAGE);
+    if (view === 'today') q = q.eq('report_day', today);
+    else { q = fl.date ? q.eq('report_day', fl.date) : q.lt('report_day', today); if (fl.shift) q = q.eq('shift_name', fl.shift); }
     if (append && rows.length) q = q.lt('created_at', rows[rows.length - 1].created_at);
     const { data, error } = await q;
     if (error) return toast(errText(error), 'error', "Couldn't load reports");
     const got = (data ?? []) as Report[];
     setRows(append ? [...rows, ...got] : got); setMore(got.length === PAGE);
-  }, [b.org.id, fl, rows, toast]);
-  useEffect(() => { load(); }, [fl.loc, fl.date, fl.shift, b.org.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [b.org.id, fl, rows, toast, view, today, locs]);
+  useEffect(() => { load(); }, [view, fl.loc, fl.date, fl.shift, b.org.id, today]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const ch = supabase.channel(`book-${b.org.id}-${empId ?? 'owner'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shift_reports', filter: `org_id=eq.${b.org.id}` }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [b.org.id, empId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [b.org.id, empId, view]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const list = (
+    <div className="book-list">{rows.length ? rows.map((r) => (
+      <button key={r.id} className="book-item" onClick={() => setOpen(r)}>
+        <span className="bi-head"><b>{title(r)}</b><span className="tag ok">Posted</span></span>
+        <span className="bi-date">Shift of {longDate(r.work_date)} · by {empOf(b, r.employee_id)?.name ?? 'someone'}</span>
+        <span className="bi-text">{r.body}</span>
+        <span className="bi-date">Posted {posted(r.created_at)}{r.updated_at ? ' · edited' : ''}</span>
+      </button>)) : <p className="empty-note">{view === 'today' ? 'No reports yet today (since 7:00 AM).' : fl.date || fl.loc || fl.shift ? 'No reports match these filters.' : 'No earlier reports yet.'}</p>}</div>);
 
   return (
     <section className="panel book" id="shift-reports">
       <div className="panel-head"><h2>Shift reports</h2>
-        {canWrite && <button className="btn primary" onClick={() => setWriting(true)}>+ New report</button>}</div>
-      <p className="hint">{owner ? 'The logbook your workers write at the end of each shift, newest first. You get a notification for each new report.'
-        : 'Open a new page for your shift, write what the next shift and your manager should know, and post it. Read the reports before yours to catch up.'}</p>
-      <div className="book-filters">
-        {b.locs.length > 1 && <select value={fl.loc} onChange={(e) => setFl({ ...fl, loc: e.target.value })} aria-label="Filter by location">
-          <option value="">All locations</option>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}
-        <select value={fl.shift} onChange={(e) => setFl({ ...fl, shift: e.target.value })} aria-label="Filter by shift">
-          <option value="">All shifts</option>{NAMES.map((n) => <option key={n} value={n}>{n}</option>)}</select>
-        <input type="date" value={fl.date} onChange={(e) => setFl({ ...fl, date: e.target.value })} aria-label="Filter by shift date" />
-        {(fl.loc || fl.shift || fl.date) && <button className="btn small" onClick={() => setFl({ loc: '', shift: '', date: '' })}>Clear filters</button>}
-      </div>
-      <div className="book-list">{rows.length ? rows.map((r) => (
-        <button key={r.id} className="book-item" onClick={() => setOpen(r)}>
-          <span className="bi-head"><b>{title(r)}</b><span className="tag ok">Posted</span></span>
-          <span className="bi-date">{longDate(r.work_date)} · by {empOf(b, r.employee_id)?.name ?? 'someone'}</span>
-          <span className="bi-text">{r.body}</span>
-          <span className="bi-date">Posted {posted(r.created_at)}{r.updated_at ? ' · edited' : ''}</span>
-        </button>)) : <p className="empty-note">{fl.loc || fl.shift || fl.date ? 'No reports match these filters.' : 'No shift reports yet.'}</p>}</div>
-      {more && <div className="actions"><button className="btn" onClick={() => load(true)}>Show older reports</button></div>}
+        <div className="seg" role="tablist" aria-label="Reports">
+          <button role="tab" aria-selected={view === 'today'} className={view === 'today' ? 'on' : ''} onClick={() => setView('today')}>Today</button>
+          <button role="tab" aria-selected={view === 'history'} className={view === 'history' ? 'on' : ''} onClick={() => setView('history')}>History</button></div></div>
+      {!locs.length && <p className="empty-note">You aren't assigned to a location yet, so there are no shift reports to show. Ask your manager to add you to one.</p>}
+      {view === 'today' && locs.length > 0 && <>
+        {canWrite && <ReportForm b={b} empId={me!.id} locs={locs} onPosted={() => load()} />}
+        <h3 className="book-day">Today's reports <small>{longDate(today)} · since 7:00 AM{locs.length > 1 ? ` · ${locs.map((l) => l.name).join(', ')}` : ` · ${locs[0].name}`}</small></h3>
+        {list}
+      </>}
+      {view === 'history' && locs.length > 0 && <>
+        <p className="hint">Reports from earlier days. A day runs from 7:00 AM to 6:59 AM the next morning ({b.org.time_zone.split('/')[1]?.replace('_', ' ') ?? b.org.time_zone} time).</p>
+        <div className="book-filters">
+          {locs.length > 1 && <select value={fl.loc} onChange={(e) => setFl({ ...fl, loc: e.target.value })} aria-label="Filter by location">
+            <option value="">All my locations</option>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}
+          <select value={fl.shift} onChange={(e) => setFl({ ...fl, shift: e.target.value })} aria-label="Filter by shift">
+            <option value="">All shifts</option>{NAMES.map((n) => <option key={n} value={n}>{n}</option>)}</select>
+          <input type="date" max={addDays(today, -1)} value={fl.date} onChange={(e) => setFl({ ...fl, date: e.target.value })} aria-label="Filter by reporting day" />
+          {(fl.loc || fl.shift || fl.date) && <button className="btn small" onClick={() => setFl({ loc: '', shift: '', date: '' })}>Clear filters</button>}
+        </div>
+        {list}
+        {more && <div className="actions"><button className="btn" onClick={() => load(true)}>Show older reports</button></div>}
+      </>}
       {open && <ReportSheet b={b} r={open} title={title(open)} mine={canWrite && open.employee_id === empId} onClose={() => setOpen(null)} onChanged={() => { setOpen(null); load(); }} />}
-      {writing && me && <NewReport b={b} empId={me.id} onClose={() => setWriting(false)} onPosted={() => { setWriting(false); load(); }} />}
     </section>
   );
 }
@@ -123,15 +140,15 @@ function Editor({ value, onChange, autoFocus }: { value: string; onChange: (v: s
     placeholder={'Write your shift report here.\n\nWhat happened during the shift, guest requests, problems, what the next shift should check or follow up on…'} aria-label="Report" />;
 }
 
-/** New report: location, shift, shift date, then write. The draft is kept on this device until posted. */
-function NewReport({ b, empId, onClose, onPosted }: { b: Bundle; empId: string; onClose: () => void; onPosted: () => void }) {
+/** The writing form, always open at the top: location, shift, shift date, then write and post. Draft kept on this device. */
+function ReportForm({ b, empId, locs, onPosted }: { b: Bundle; empId: string; locs: Bundle['locs']; onPosted: () => void }) {
   const toast = useToast();
   const me = empOf(b, empId)!;
-  const locs = b.locs.filter((l) => me.locs.includes(l.id)).length ? b.locs.filter((l) => me.locs.includes(l.id)) : b.locs;
   const saved = (() => { try { return JSON.parse(localStorage.getItem(DRAFT) ?? 'null') as { loc: string; shift: string; date: string; body: string } | null; } catch { return null; } })();
   const hour = new Date().getHours();
   const guess: ShiftName = hour >= 4 && hour < 11 ? 'Night' : hour < 19 ? 'Morning' : 'Evening'; // the shift that is ending about now
-  const [f, setF] = useState(() => saved ?? { loc: locs[0]?.id ?? '', shift: guess, date: guess === 'Night' && hour < 12 ? addDays(todayIso(), -1) : todayIso(), body: '' });
+  const fresh = { loc: locs[0]?.id ?? '', shift: guess, date: guess === 'Night' && hour < 12 ? addDays(todayIso(), -1) : todayIso(), body: '' };
+  const [f, setF] = useState(() => (saved && locs.some((l) => l.id === saved.loc) ? saved : fresh));
   const [busy, setBusy] = useState(false);
   useEffect(() => { try { localStorage.setItem(DRAFT, JSON.stringify(f)); } catch { /* private mode */ } }, [f]);
   const slots = useMemo(() => b.slots.filter((s) => s.location_id === f.loc), [b.slots, f.loc]);
@@ -143,31 +160,27 @@ function NewReport({ b, empId, onClose, onPosted }: { b: Bundle; empId: string; 
     const { error } = await supabase.from('shift_reports').insert({ org_id: b.org.id, location_id: f.loc, slot_id: slotFor?.id ?? null, shift_name: f.shift, work_date: f.date, employee_id: empId, body: f.body });
     setBusy(false);
     if (error) return toast(errText(error), 'error', 'Not posted');
-    try { localStorage.removeItem(DRAFT); } catch { /* private mode */ }
+    setF({ ...fresh, loc: f.loc, shift: f.shift, date: f.date });
     toast('Posted. The next shift and your manager can read it.', 'ok', 'Shift report'); onPosted();
   };
   return (
-    <Sheet eyebrow="Shift report" title="New report" onClose={onClose}>
+    <div className="doc-page report-form">
       <div className="newrep-fields">
-        <div className="field"><label htmlFor="nr-loc">Location</label>
-          <select id="nr-loc" value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value })}>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+        {locs.length > 1 && <div className="field"><label htmlFor="nr-loc">Location</label>
+          <select id="nr-loc" value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value })}>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
         <div className="field"><label htmlFor="nr-shift">Shift</label>
-          <select id="nr-shift" value={f.shift} onChange={(e) => setF({ ...f, shift: e.target.value })}>
+          <select id="nr-shift" value={f.shift} onChange={(e) => setF({ ...f, shift: e.target.value as ShiftName })}>
             {NAMES.map((n) => { const s = slots.find((x) => shiftNameOf(x) === n); return <option key={n} value={n}>{n}{s ? ` (${shiftLong(s.start_hour, s.hours)})` : ''}</option>; })}</select></div>
         <div className="field"><label htmlFor="nr-date">Shift date</label>
-          <input id="nr-date" type="date" value={f.date} onChange={(e) => e.target.value && setF({ ...f, date: e.target.value })} />
-          {f.shift === 'Night' && <span className="hint">A night shift belongs to the day it started (Sunday 11 pm – Monday 7 am is Sunday).</span>}</div>
+          <input id="nr-date" type="date" value={f.date} onChange={(e) => e.target.value && setF({ ...f, date: e.target.value })} /></div>
       </div>
-      <div className="doc-page">
-        <div className="rp-head"><div><b>{b.locs.find((l) => l.id === f.loc)?.name} – {f.shift} Shift</b><small>{longDate(f.date)}</small></div></div>
-        <div className="rp-by">Reported by: <b>{me.name}</b></div>
-        <Editor value={f.body} onChange={(body) => setF({ ...f, body })} autoFocus />
-      </div>
-      <div className="actions">
+      <div className="rp-head"><div><b>{locs.find((l) => l.id === f.loc)?.name} – {f.shift} Shift</b><small>{longDate(f.date)} · Reported by {me.name}</small></div></div>
+      <Editor value={f.body} onChange={(body) => setF({ ...f, body })} />
+      {f.shift === 'Night' && <span className="hint">A night shift belongs to the day it started (Sunday 11 pm – Monday 7 am is Sunday).</span>}
+      <div className="actions" style={{ margin: 0 }}>
         <button className="btn primary" disabled={busy || !f.body.trim()} onClick={post}>{busy ? 'Posting…' : 'Post report'}</button>
-        <button className="btn" onClick={onClose}>Close (draft is kept)</button>
-        {f.body && <ConfirmButton className="btn danger-text" label="Discard draft" confirmLabel="Tap again" onConfirm={() => { try { localStorage.removeItem(DRAFT); } catch { /* */ } onClose(); }} />}
+        {f.body && <ConfirmButton className="btn danger-text" label="Clear" confirmLabel="Tap again to clear" onConfirm={() => setF({ ...f, body: '' })} />}
       </div>
-    </Sheet>
+    </div>
   );
 }
