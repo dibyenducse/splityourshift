@@ -14,6 +14,8 @@ export interface Period { period_start: string; period_end: string; pay_date: st
 export interface PayLine {
   employee_id: string; name: string; rate: number; overtime_rate?: number; hours: number; regular_hours: number; overtime_hours: number;
   regular_pay: number; overtime_pay: number; bonus: number; deduction: number; gross: number; net: number; open_entries?: number;
+  /** 'clock': clock records; 'schedule': time clock off, assigned shift hours. */
+  method?: 'clock' | 'schedule'; base_hours?: number; edited_hours?: number | null; missing_shifts?: number;
 }
 export interface PayRun {
   id: string; location_id: string; location_name: string; frequency: PayFrequency; period_start: string; period_end: string; pay_date: string;
@@ -31,7 +33,7 @@ export interface MyPay {
 }
 
 const num = <T,>(rows: T[], keys: (keyof T)[]) => rows.map((r) => { const o = { ...r }; for (const k of keys) (o[k] as unknown) = Number(r[k] ?? 0); return o; });
-const LINE_NUMS: (keyof PayLine)[] = ['rate', 'overtime_rate', 'hours', 'regular_hours', 'overtime_hours', 'regular_pay', 'overtime_pay', 'bonus', 'deduction', 'gross', 'net', 'open_entries'];
+const LINE_NUMS: (keyof PayLine)[] = ['rate', 'overtime_rate', 'hours', 'regular_hours', 'overtime_hours', 'regular_pay', 'overtime_pay', 'bonus', 'deduction', 'gross', 'net', 'open_entries', 'base_hours', 'missing_shifts'];
 const day = (d: string) => String(d).slice(0, 10);
 const fixDates = <T extends object>(r: T) => { const o = { ...r } as Record<string, unknown>; for (const k in o) if (/(_start|_end|_date)$/.test(k) && o[k]) o[k] = day(o[k] as string); return o as T; };
 
@@ -43,7 +45,7 @@ export async function payPeriods(locId: string, around: string, before: number, 
 export async function payLines(locId: string, p: Period): Promise<PayLine[]> {
   const { data, error } = await supabase.rpc('payroll_lines', { p_loc: locId, p_start: p.period_start, p_end: p.period_end });
   if (error) throw error;
-  return num(data as PayLine[], LINE_NUMS);
+  return num(data as PayLine[], LINE_NUMS).map((l) => ({ ...l, edited_hours: l.edited_hours == null ? null : Number(l.edited_hours) }));
 }
 export async function payRuns(orgId: string): Promise<PayRun[]> {
   const { data, error } = await supabase.from('payroll_runs').select('*').eq('org_id', orgId).order('period_start', { ascending: false });
@@ -74,6 +76,15 @@ export async function setAdjustment(orgId: string, locId: string, empId: string,
   const { error } = amount > 0
     ? await q.upsert({ org_id: orgId, location_id: locId, employee_id: empId, period_start: start, kind, amount }, { onConflict: 'location_id,employee_id,period_start,kind' })
     : await q.delete().eq('location_id', locId).eq('employee_id', empId).eq('period_start', start).eq('kind', kind);
+  if (error) throw error;
+}
+
+/** Time clock off: the owner's hours for a worker's pay period (replacing the schedule's total); null goes back to the schedule. */
+export async function setHoursEdit(orgId: string, locId: string, empId: string, start: string, hours: number | null) {
+  const q = supabase.from('payroll_adjustments');
+  const { error } = hours !== null
+    ? await q.upsert({ org_id: orgId, location_id: locId, employee_id: empId, period_start: start, kind: 'hours', amount: hours }, { onConflict: 'location_id,employee_id,period_start,kind' })
+    : await q.delete().eq('location_id', locId).eq('employee_id', empId).eq('period_start', start).eq('kind', 'hours');
   if (error) throw error;
 }
 

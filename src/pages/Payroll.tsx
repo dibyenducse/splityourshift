@@ -6,7 +6,7 @@ import { ConfirmButton, Sheet, useToast } from '../components/ui';
 import { PayslipList } from '../components/Payslips';
 import {
   FREQ_LABEL, dateLong, otText, payMethodText, dateShort, downloadPdf, hrs, markPaid, payDashboard, payLines, payPeriods, payRuns, periodTitle, printReport,
-  scheduleText, setAdjustment, totals, type DashRow, type PayFrequency, type PayLine, type PayRun, type PaySettings, type Period, type Report,
+  scheduleText, setAdjustment, setHoursEdit, totals, type DashRow, type PayFrequency, type PayLine, type PayRun, type PaySettings, type Period, type Report,
 } from '../lib/payroll';
 
 type Row = Period & { run?: PayRun; reopened: PayRun[] };
@@ -57,6 +57,16 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
     try { setLines(await payLines(loc.id, row)); } catch (e) { toast(errText(e), 'error', "Couldn't load payroll"); }
   }, [loc?.id, row?.period_start, row?.run?.id, toast, b]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadLines(); }, [loadLines, tick]);
+  // Live: schedule changes (assign, remove, swap) and clock records update the open payroll at once.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const bump = () => { clearTimeout(t); t = setTimeout(refresh, 400); };
+    const ch = supabase.channel(`pay-live-${b.org.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `org_id=eq.${b.org.id}` }, bump)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', filter: `org_id=eq.${b.org.id}` }, bump)
+      .subscribe();
+    return () => { clearTimeout(t); supabase.removeChannel(ch); };
+  }, [b.org.id]);
 
   if (!loc) return <div className="layout">{tabs}<section className="panel"><p className="empty-note">Add a hotel, gas station or shop first.</p></section></div>;
 
@@ -79,6 +89,14 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
     const n = Math.round((parseFloat(v) || 0) * 100) / 100; if (n < 0 || n === l[kind]) return;
     try { await setAdjustment(b.org.id, loc.id, l.employee_id, row!.period_start, kind, n); refresh(); } catch (e) { toast(errText(e), 'error', 'Not saved'); }
   };
+  const saveHours = async (l: PayLine, v: string) => {
+    const n = v.trim() === '' ? null : Math.round(parseFloat(v) * 100) / 100;
+    if (n !== null && !(n >= 0 && n <= 744)) return toast('Enter hours from 0 to 744.', 'error', 'Not saved');
+    const target = n === null || n === l.base_hours ? null : n;
+    if (target === (l.edited_hours ?? null)) return;
+    try { await setHoursEdit(b.org.id, loc.id, l.employee_id, row!.period_start, target); refresh(); } catch (e) { toast(errText(e), 'error', 'Not saved'); }
+  };
+  const missing = (lines ?? []).filter((l) => (l.missing_shifts ?? 0) > 0);
   const doPaid = async () => {
     try { await markPaid(loc.id, row!.period_start); toast(`${loc.name} payroll for ${periodTitle(row!)} is marked paid. Reminders for it stop.`, 'ok', 'Paid'); refresh(); }
     catch (e) { toast(errText(e), 'error', "Couldn't mark paid"); }
@@ -93,7 +111,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
         <div className="panel-head"><h2>Payroll dashboard · all businesses</h2><span className="tag plain">{dash.length} business{dash.length === 1 ? '' : 'es'}</span></div>
         <div className="tiles" style={{ marginBottom: 12 }}>
           <div className="tile"><div className="k">To pay on the next paydays</div><div className="v">{money(all.payable)}</div><div className="s">{all.paid ? `${money(all.paid)} of it already marked paid` : 'across every business'}</div></div>
-          <div className="tile"><div className="k">Hours in those pay periods</div><div className="v">{hrs(all.hours)}</div><div className="s">clocked hours, every business</div></div>
+          <div className="tile"><div className="k">Hours in those pay periods</div><div className="v">{hrs(all.hours)}</div><div className="s">clocked or scheduled hours, every business</div></div>
           <div className="tile"><div className="k">Pending payrolls</div><div className="v">{all.pending}</div><div className="s">{all.pending ? 'payday came, not marked paid' : 'everything is up to date'}</div></div>
           <div className="tile"><div className="k">Paid so far</div><div className="v">{all.completed}</div><div className="s">payrolls marked paid</div></div>
         </div>
@@ -129,16 +147,25 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
-        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false ? 'Time clock is off here: pay comes from scheduled shift hours.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
+        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false ? 'Time clock is off here: hours come from the assigned schedule and follow every change to it. You can type in different hours for anyone.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
         {locked && <div className="banner"><p><b>Paid and locked.</b> Marked paid {new Date(row!.run!.paid_at).toLocaleString('en-US')}. These numbers won't change, even if rates or hours change later. To correct it, write to <a href="mailto:support@splityourshift.com">support@splityourshift.com</a>; support can reopen it, and that is logged.</p></div>}
         {!locked && open.length > 0 && <div className="banner warn"><p><b>{open.map((l) => l.name).join(', ')}</b> {open.length === 1 ? 'is' : 'are'} still clocked in for this period. Those hours count after they clock out (or after you fix them in Time clock).</p></div>}
 
+        {!locked && missing.length > 0 && <div className="banner warn"><p><b>No clock record:</b> {missing.map((l) => `${l.name} (${l.missing_shifts} shift${l.missing_shifts === 1 ? '' : 's'})`).join(', ')}. Those scheduled shifts have ended with no clock in or out, so they are not paid. Fix them in Time clock if the work was done.</p></div>}
         <div className="table-wrap"><table className="data payroll"><thead><tr>
           <th>Employee</th><th className="num">Hours</th><th>Hourly rate</th><th className="num">Regular pay</th><th className="num">Overtime pay</th><th>Bonus</th><th>Deduction</th><th className="num">Gross</th><th className="num">Net</th><th>Status</th><th>Payslip</th></tr></thead>
           <tbody>{(lines ?? []).map((l) => (
             <tr key={l.employee_id}>
               <td>{l.name}</td>
-              <td className="num">{hrs(l.hours)} h{l.overtime_hours > 0 && <div className="hint" style={{ margin: 0 }}>{hrs(l.regular_hours)} + {hrs(l.overtime_hours)} OT</div>}</td>
+              <td className="num">{!locked && l.method === 'schedule'
+                ? <span className="hrs-edit"><input type="number" min={0} max={744} step={0.25} defaultValue={l.hours} key={`${l.employee_id}-h-${l.hours}-${sel}`} aria-label={`${l.name} hours`} style={{ ...cell, width: 74 }}
+                    onBlur={(e) => saveHours(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /> h</span>
+                : <>{hrs(l.hours)} h</>}
+                {l.overtime_hours > 0 && <div className="hint" style={{ margin: 0 }}>{hrs(l.regular_hours)} + {hrs(l.overtime_hours)} OT</div>}
+                {l.edited_hours != null && <div className="hrs-note"><span className="tag warn" title={`The schedule says ${hrs(l.base_hours ?? 0)} h`}>Edited · schedule {hrs(l.base_hours ?? 0)} h</span>
+                  {!locked && l.method === 'schedule' && <button className="linkish" onClick={() => setHoursEdit(b.org.id, loc.id, l.employee_id, row!.period_start, null).then(refresh, (e) => toast(errText(e), 'error', 'Not saved'))}>Use schedule</button>}</div>}
+                {l.method === 'schedule' && l.edited_hours == null && !locked && <div className="hint" style={{ margin: 0 }}>from schedule</div>}
+                {(l.missing_shifts ?? 0) > 0 && !locked && <div><span className="tag bad" title="Scheduled shifts that ended with no clock record">{l.missing_shifts} no clock record</span></div>}</td>
               <td>{locked ? money(l.rate) : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>$<input type="number" min={0} max={999} step={0.25} defaultValue={l.rate} key={`${l.employee_id}-r-${l.rate}`} aria-label={`${l.name} hourly rate`} style={cell}
                 onBlur={(e) => { if (+e.target.value !== l.rate) saveRate(l.employee_id, e.target.value); }} /></span>}</td>
               <td className="num">{money(l.regular_pay)}</td><td className="num">{l.overtime_pay ? money(l.overtime_pay) : '—'}</td>
@@ -214,15 +241,21 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
     if (error) return toast(errText(error), 'error', 'Not saved');
     toast(`Saved. ${loc.name}: ${scheduleText(f)}. Paid payrolls stay as they were.`, 'ok', 'Payroll settings'); onSaved();
   };
+  const chev = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
   return (
     <section className="panel paysettings">
       <details open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; setOpen(o); try { localStorage.setItem('sys-payset', o ? '1' : '0'); } catch { /* private mode */ } }}>
-        <summary><span className="ps-title"><h2>Payroll settings · {loc.name}</h2><span className="hint">{scheduleText(f)} · {otText(f)} · {f.time_clock ? <>clock on · grace {f.grace_minutes} min · {f.pay_method === 'grace' ? 'scheduled hours with paid grace' : 'actual clock time'}</> : 'clock off · scheduled shift hours'}</span></span><span className="ps-toggle">{open ? 'Hide' : 'Show'}</span></summary>
+        <summary aria-label={open ? 'Collapse payroll settings' : 'Expand payroll settings'}>
+          <span className="ps-title"><h2>Payroll settings · {loc.name}</h2>
+            <span className="ps-chips"><span className="tag plain">{FREQ_LABEL[f.pay_frequency]}</span><span className="tag plain">{f.overtime ? `OT after ${f.ot_after} h` : 'No overtime'}</span>
+              <span className={`tag ${f.time_clock ? 'ok' : 'warn'}`}>{f.time_clock ? `Clock on · grace ${f.grace_minutes} min` : 'Clock off · scheduled hours'}</span></span></span>
+          <span className="ps-chev">{chev}</span></summary>
         {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
           {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
-            <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}</small></button>)}</div>}
-        <p className="hint" style={{ marginTop: 8 }}>Each business has its own schedule. Set it once; every pay period and payday after that is worked out for you. Changing it never changes a payroll already marked paid.</p>
-        <div className="twocol">
+            <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}{l.time_clock === false ? ' · clock off' : ''}</small></button>)}</div>}
+        <div className="ps-grid">
+          <div className="ps-card"><h3>Pay schedule</h3>
+            <div className="ps-fields">
           <div className="field"><label htmlFor="ps-freq">How often you pay</label>
             <select id="ps-freq" value={f.pay_frequency} onChange={(e) => setF({ ...f, pay_frequency: e.target.value as PayFrequency })}>
               <option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option><option value="monthly">Monthly</option></select></div>
@@ -240,8 +273,10 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
             <div className="field"><label htmlFor="ps-moff">A month's pay is paid in</label>
               <select id="ps-moff" value={f.pay_month_offset} onChange={(e) => setF({ ...f, pay_month_offset: +e.target.value })}><option value={0}>The same month</option><option value={1}>The next month</option></select></div>
           </>}
-        </div>
-        <fieldset className="field otset"><legend>Overtime (you decide how you pay it)</legend>
+            </div>
+            <span className="hint">{scheduleText(f)}. Changing it never changes a payroll already marked paid.</span>
+          </div>
+          <div className="ps-card"><h3>Overtime</h3>
           <label className="inline"><input type="checkbox" checked={f.overtime} onChange={(e) => setF({ ...f, overtime: e.target.checked })} /> Pay overtime</label>
           {f.overtime && <div className="otrow">
             <label>after <input type="number" min={1} max={168} step={0.5} value={f.ot_after} onChange={(e) => setF({ ...f, ot_after: +e.target.value || 40 })} aria-label="Overtime starts after hours" /> hours in a week, paid</label>
@@ -252,10 +287,10 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
               : <label>$<input type="number" min={0} max={999} step={0.25} value={f.ot_fixed_rate} onChange={(e) => setF({ ...f, ot_fixed_rate: +e.target.value || 0 })} aria-label="Overtime dollars per hour" /> per overtime hour</label>}
           </div>}
           <span className="hint">{otText(f)}.</span>
-        </fieldset>
-        <fieldset className="field otset"><legend>Time clock and how pay is calculated</legend>
-          <label className="inline"><input type="checkbox" checked={f.time_clock} onChange={(e) => setF({ ...f, time_clock: e.target.checked })} /> Time clock on at {loc.name}</label>
-          {!f.time_clock ? <span className="hint">Off: workers here don't clock in or out and get no late questions. Payroll pays each worker's scheduled shift hours (default shift hours).</span> : <>
+          </div>
+          <div className="ps-card"><h3>Time clock and pay</h3>
+          <label className="switch"><input type="checkbox" role="switch" checked={f.time_clock} onChange={(e) => setF({ ...f, time_clock: e.target.checked })} /><span className="track" aria-hidden="true" /><span><b>Time clock {f.time_clock ? 'on' : 'off'}</b> at {loc.name}</span></label>
+          {!f.time_clock ? <span className="hint">Off: workers here see no time clock at all. Payroll pays each worker's assigned shift hours, follows every schedule change, and you can edit anyone's hours on the payroll. Switching deletes nothing: clock records, edits and paid payrolls are kept.</span> : <>
             <div className="otrow">
               <label>Grace period</label>
               <select value={[10, 15, 30].includes(f.grace_minutes) ? f.grace_minutes : -1} onChange={(e) => setF({ ...f, grace_minutes: +e.target.value < 0 ? 20 : +e.target.value })} aria-label="Grace period">
@@ -269,8 +304,9 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           </>}
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
           {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in Time clock.</span>}
-        </fieldset>
-        <div className="actions"><button className="btn primary" onClick={save}>Save payroll settings</button></div>
+          </div>
+        </div>
+        <div className="ps-foot"><span className="hint">Saved per business. Paid payrolls stay as they were.</span><button className="btn primary" onClick={save}>Save payroll settings</button></div>
       </details>
     </section>
   );

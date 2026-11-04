@@ -191,7 +191,7 @@ function CoverAsk({ b, empId, entryId, onClose, reload }: { b: Bundle; empId: st
   const [pick, setPick] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const me = empOf(b, empId);
-  const myLocs = b.locs.filter((l) => me?.locs.includes(l.id));
+  const myLocs = b.locs.filter((l) => me?.locs.includes(l.id) && l.time_clock !== false);
   const [loc, setLoc] = useState(myLocs[0]?.id ?? b.locs[0]?.id ?? '');
   const days = [addDays(todayIso(), -1), todayIso()];
   const cells = b.slots.flatMap((s) => days.map((d) => cellKey(s.id, d)))

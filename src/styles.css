@@ -640,3 +640,41 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 .forgot-out { margin-top: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--warn, #b7791f); background: var(--warn-soft, #fff7e6); text-align: center; max-width: 420px; }
 .forgot-out p { margin: 0 0 8px; }
 .forgot-out .actions { justify-content: center; margin: 0; flex-wrap: wrap; }
+
+/* Schedule chips: name and every status icon on one line; the name shortens (…) before an icon wraps */
+.chip-row { flex-wrap: nowrap; gap: 3px; }
+.chip-row .flag { padding: 0 3px; line-height: 1.25; font-size: 9.5px; }
+.chip-row .cname { flex: 0 1 auto; }
+.chip-row > :not(.cname) { flex: none; }
+
+/* Payroll settings: collapsible card with a chevron, three setting cards, a footer for Save */
+.panel.paysettings details > summary { cursor: pointer; border-radius: 10px; }
+.panel.paysettings details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.paysettings .ps-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.paysettings .ps-chev { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--accent); background: var(--surface); transition: transform .2s ease, background .2s; }
+.paysettings summary:hover .ps-chev { background: var(--accent-soft); }
+.paysettings details[open] > summary .ps-chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .paysettings .ps-chev { transition: none; } }
+.ps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 16px; align-items: start; }
+.ps-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface-2, var(--surface)); display: grid; gap: 10px; min-width: 0; }
+.ps-card h3 { margin: 0; font-size: 15px; letter-spacing: .01em; }
+.ps-card .hint { margin: 0; }
+.ps-card .field { margin: 0; }
+.ps-fields { display: grid; gap: 10px; }
+.ps-card .inline { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; color: var(--fg); }
+.ps-card .otrow input { width: 80px; flex: none; min-height: 34px; }
+.ps-card .otrow select { width: auto; max-width: 100%; min-height: 34px; }
+.ps-card .otrow label { white-space: nowrap; }
+.ps-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ps-foot .hint { margin: 0; }
+@media (max-width: 520px) { .ps-foot .btn { width: 100%; } }
+/* on/off switch */
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { flex: none; width: 42px; height: 24px; border-radius: 12px; background: var(--line-strong); position: relative; transition: background .2s; }
+.switch .track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .2s; }
+.switch input:checked + .track { background: var(--ok); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hrs-edit { display: inline-flex; align-items: center; gap: 4px; }
+.hrs-note { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 8px; margin-top: 4px; }

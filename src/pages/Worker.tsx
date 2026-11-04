@@ -65,6 +65,8 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const myReqs = b.reqs.filter((r) => r.employee_id === w.id);
   const weeks = periodOf(b.org, week), p = payFor(b, w, weeks), wk = payFor(b, w, [week]);
   const hours = mine.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
+  // Time clock off at every location I work at: no clock anywhere (panel, hours list, wording); pay is by schedule.
+  const clockOn = b.locs.some((l) => w.locs.includes(l.id) && l.time_clock !== false) || b.entries.some((e) => e.employee_id === w.id && !e.clock_out);
 
   const cancel = async (r: Req) => {
     const { error } = await supabase.rpc('cancel_time_off', { p_id: r.id });
@@ -108,7 +110,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
             : <p className="empty-note">No shifts this week.</p>}</div></section>
 
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
-          <p className="hint">Pay counts the hours you clocked in and out, before taxes. Your manager sets your rate.</p>
+          <p className="hint">{clockOn ? 'Pay counts the hours you clocked in and out' : 'Pay counts your scheduled shift hours'}, before taxes. Your manager sets your rate.</p>
           <div className="tiles">
             {pay.map((x) => <div key={x.location_id} className="tile"><div className="k">Next payday{pay.length > 1 ? ` · ${x.location_name}` : ''} · {dateShort(x.next_pay_date)}</div><div className="v">{money(x.next_net)}</div>
               <div className="s">{x.next_paid ? 'paid · ' : ''}for {periodTitle({ period_start: x.next_start, period_end: x.next_end })} · {x.next_hours} h</div></div>)}
@@ -119,8 +121,8 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           </div>
           <h3 id="my-payslips" style={{ fontSize: 17, margin: '16px 0 8px' }}>My payslips</h3>
           <PayslipList business={b.org.name} empId={w.id} limit={6} />
-          <h3 style={{ fontSize: 17, margin: '16px 0 8px' }}>My hours</h3>
-          <HoursList b={b} empId={w.id} weeks={weeks} onCancel={async (f) => { const { error } = await supabase.rpc('cancel_time_fix', { p_id: f.id }); if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled.', 'ok', 'Cancelled'); reload(); }} />
+          {clockOn && <><h3 style={{ fontSize: 17, margin: '16px 0 8px' }}>My hours</h3>
+          <HoursList b={b} empId={w.id} weeks={weeks} onCancel={async (f) => { const { error } = await supabase.rpc('cancel_time_fix', { p_id: f.id }); if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled.', 'ok', 'Cancelled'); reload(); }} /></>}
         </section>
 
         <section className="panel"><div className="panel-head"><h2>My availability</h2></div>

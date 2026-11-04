@@ -113,7 +113,9 @@ export function payFor(b: Bundle, e: Emp, weeks: string[]) {
     shifts += ks.length; sched += ks.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
     const es = b.entries.filter((x) => x.employee_id === e.id && x.work_date >= wk && x.work_date < addDays(wk, 7));
     open += es.filter((x) => !x.clock_out).length;
-    const h = round2(es.reduce((n, x) => n + entryHours(x), 0));
+    // where the owner turned the time clock off, the scheduled shift hours are the hours worked
+    const offHours = ks.filter((k) => b.locs.find((l) => l.id === slotOf(b, k)!.location_id)?.time_clock === false).reduce((n, k) => n + slotOf(b, k)!.hours, 0);
+    const h = round2(es.reduce((n, x) => n + entryHours(x), 0) + offHours);
     hours += h;
     reg += useOt ? Math.min(OT_LIMIT, h) : h; ot += useOt ? Math.max(0, h - OT_LIMIT) : 0;
     return h;

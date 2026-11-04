@@ -32,6 +32,8 @@ export function printBoards(locId?: string) {
 
 /** One board per location: shifts down the side, days across, like the paper schedule. */
 export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek, undoHint, onUndo }: GridProps) {
+  const myLocs = meId ? b.emps.find((e) => e.id === meId)?.locs : undefined;
+  const clockUsed = b.locs.some((l) => l.time_clock !== false && (!myLocs || myLocs.includes(l.id)));
   const today = todayIso();
   const ranges: Record<string, [number, number][]> = {};
   for (const k in b.assign) if (valid(b, k)) (ranges[b.assign[k]] ||= []).push([absStart(b, k), absEnd(b, k)]);
@@ -95,13 +97,11 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                                 {covering && !sw && <span className="flag cover" title={`Coverage assigned: covering ${covering}'s time off`}>cover</span>}
                                 {offSelf && <span className="flag off" title="Time off approved">off</span>}
                                 {ts && <span className="flag swap" title={`Time swap: ${empOf(b, ts.from_emp)?.name ?? '?'} works ${ts.minutes} min of ${empOf(b, ts.to_emp)?.name ?? '?'}'s time`}>⏱</span>}
-                              </span>
-                              {(dbl || pending.has(k) || entry?.clock_out || unavail) && <span className="chip-flags">
                                 {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
                                 {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
                                 {entry?.clock_out && <span className="flag ok" title="Clocked in and out">✓</span>}
-                                {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)">unavailable</span>}
-                              </span>}
+                                {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)" aria-label="Unavailable">⊘</span>}
+                              </span>
                             </div>);
                         } else if (offs[k]) inner = <span className="ph needs" title={`${empOf(b, offs[k].employee_id)?.name ?? 'Someone'} has approved time off`}>Needs cover<small>{shortName(b, empOf(b, offs[k].employee_id) ?? { id: '', name: '?' })} off</small></span>;
                         else inner = <span className="ph">Open</span>;
@@ -119,11 +119,12 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
           </section>
         );
       })}
-      <p className="grid-key">
+      <p className="grid-key">{/* clock icons only where a time clock is used (for a worker: at one of their locations) */}
         <span><span className="flag">2×</span> double shift (back to back)</span>
-        <span><span className="sdot" /> on the clock now</span>
-        <span><span className="flag ok">✓</span> clocked in and out</span>
+        {clockUsed && <><span><span className="sdot" /> on the clock now</span>
+        <span><span className="flag ok">✓</span> clocked in and out</span></>}
         <span><span className="flag">off?</span> asked for this shift off</span>
+        <span><span className="flag">⊘</span> unavailable at this time</span>
         <span><span className="flag swap">⇄</span> swapped shift</span>
         <span><span className="flag swap">⏱</span> time swap (minutes given back)</span>
         <span><span className="flag cover">cover</span> covering someone's time off</span>
