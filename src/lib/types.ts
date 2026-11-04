@@ -14,6 +14,8 @@ export interface Loc {
   pay_frequency?: 'weekly' | 'biweekly' | 'monthly'; pay_anchor?: string; pay_weekday?: number; pay_month_day?: number; pay_month_offset?: number; overtime?: boolean;
   ot_after?: number; ot_mode?: 'multiplier' | 'fixed'; ot_multiplier?: number; ot_fixed_rate?: number;
   grace_minutes?: number; mutual_approval?: boolean; pay_method?: 'actual' | 'grace'; pay_grace_minutes?: number;
+  /** Time clock on at this location (off: no clock in/out; payroll pays scheduled hours). */
+  time_clock?: boolean;
 }
 export interface Slot { id: string; org_id: string; location_id: string; start_hour: number; hours: number; sort: number; active: boolean }
 export interface Avail { dow: number; mode: 'any' | 'hours' | 'off'; from_hour: number; to_hour: number }
@@ -65,4 +67,6 @@ export interface Adjustment {
   from_emp: string; to_emp: string | null; slot_id: string | null; work_date: string | null; label: string | null; minutes: number | null;
   entry_id: string | null; status: 'pending' | 'awaiting_owner' | 'accepted' | 'declined' | 'recorded' | 'completed' | 'cancelled';
   note: string | null; created_at: string; decided_at: string | null; completed_at: string | null;
+  /** Time swaps: when the minutes are given back, and whose turn it is to answer. */
+  ret_slot?: string | null; ret_date?: string | null; turn?: string | null; ledger_id?: string | null;
 }

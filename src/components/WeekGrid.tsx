@@ -83,7 +83,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                           const dbl = (ranges[w.id] || []).some(([a, z]) => z === st || a === en);
                           const cls = meId ? (w.id === meId ? ' me' : ' dim') : '';
                           const entry = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
-                          const sw = swapOf(b, k), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
+                          const sw = swapOf(b, k), ts = (b.swaps ?? []).find((x) => x.kind === 'late_swap' && x.ret_slot === s.id && x.ret_date === parseCell(k).date), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
                           const off = offs[k], covering = off && off.employee_id !== w.id ? empOf(b, off.employee_id)?.name ?? 'someone' : null, offSelf = off && off.employee_id === w.id;
                           const status = [onNow && 'on the clock now', entry?.clock_out && 'clocked in and out', sw && `swapped from ${empOf(b, sw.orig)?.name ?? '?'}`, dbl && 'double shift', pending.has(k) && 'asked for this shift off', unavail && 'unavailable at this time'].filter(Boolean);
                           inner = (
@@ -94,6 +94,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                                 {sw && <span className="flag swap" aria-label={`Swapped from ${empOf(b, sw.orig)?.name ?? '?'}`}>⇄</span>}
                                 {covering && !sw && <span className="flag cover" title={`Coverage assigned: covering ${covering}'s time off`}>cover</span>}
                                 {offSelf && <span className="flag off" title="Time off approved">off</span>}
+                                {ts && <span className="flag swap" title={`Time swap: ${empOf(b, ts.from_emp)?.name ?? '?'} works ${ts.minutes} min of ${empOf(b, ts.to_emp)?.name ?? '?'}'s time`}>⏱</span>}
                               </span>
                               {(dbl || pending.has(k) || entry?.clock_out || unavail) && <span className="chip-flags">
                                 {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
@@ -124,6 +125,7 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
         <span><span className="flag ok">✓</span> clocked in and out</span>
         <span><span className="flag">off?</span> asked for this shift off</span>
         <span><span className="flag swap">⇄</span> swapped shift</span>
+        <span><span className="flag swap">⏱</span> time swap (minutes given back)</span>
         <span><span className="flag cover">cover</span> covering someone's time off</span>
       </p>
     </>

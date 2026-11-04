@@ -129,7 +129,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
-        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. Pay comes from clocked hours (clock in to clock out). {payMethodText(loc as unknown as PaySettings)}. {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
+        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false ? 'Time clock is off here: pay comes from scheduled shift hours.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
         {locked && <div className="banner"><p><b>Paid and locked.</b> Marked paid {new Date(row!.run!.paid_at).toLocaleString('en-US')}. These numbers won't change, even if rates or hours change later. To correct it, write to <a href="mailto:support@splityourshift.com">support@splityourshift.com</a>; support can reopen it, and that is logged.</p></div>}
         {!locked && open.length > 0 && <div className="banner warn"><p><b>{open.map((l) => l.name).join(', ')}</b> {open.length === 1 ? 'is' : 'are'} still clocked in for this period. Those hours count after they clock out (or after you fix them in Time clock).</p></div>}
 
@@ -203,19 +203,21 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
     pay_month_day: loc.pay_month_day ?? 31, pay_month_offset: loc.pay_month_offset ?? 1, overtime: loc.overtime ?? true,
     ot_after: Number(loc.ot_after ?? 40), ot_mode: loc.ot_mode ?? 'multiplier', ot_multiplier: Number(loc.ot_multiplier ?? 1.5), ot_fixed_rate: Number(loc.ot_fixed_rate ?? 0),
     grace_minutes: Number(loc.grace_minutes ?? 10), mutual_approval: loc.mutual_approval ?? true, pay_method: loc.pay_method ?? 'actual', pay_grace_minutes: Number(loc.pay_grace_minutes ?? 0),
+    time_clock: loc.time_clock ?? true,
   });
   const startDow = (new Date(f.pay_anchor + 'T00:00:00Z').getUTCDay() + 6) % 7;
   // Weekly: only the start weekday matters, so keep the anchor on that weekday near today.
   const setStartDow = (d: number) => { const t = todayIso(); const td = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; setF({ ...f, pay_anchor: addDays(t, -((td - d + 7) % 7)) }); };
   const save = async () => {
-    const { error } = await supabase.from('locations').update(f).eq('id', locId);
+    // one grace period: the late notice and (with paid grace) the scheduled hours paid use the same minutes
+    const { error } = await supabase.from('locations').update({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 }).eq('id', locId);
     if (error) return toast(errText(error), 'error', 'Not saved');
     toast(`Saved. ${loc.name}: ${scheduleText(f)}. Paid payrolls stay as they were.`, 'ok', 'Payroll settings'); onSaved();
   };
   return (
     <section className="panel paysettings">
       <details open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; setOpen(o); try { localStorage.setItem('sys-payset', o ? '1' : '0'); } catch { /* private mode */ } }}>
-        <summary><span className="ps-title"><h2>Payroll settings · {loc.name}</h2><span className="hint">{scheduleText(f)} · {otText(f)} · late after {f.grace_minutes} min · {f.pay_method === 'grace' ? `grace pay ${f.pay_grace_minutes} min` : 'actual-time pay'}</span></span><span className="ps-toggle">{open ? 'Hide' : 'Show'}</span></summary>
+        <summary><span className="ps-title"><h2>Payroll settings · {loc.name}</h2><span className="hint">{scheduleText(f)} · {otText(f)} · {f.time_clock ? <>clock on · grace {f.grace_minutes} min · {f.pay_method === 'grace' ? 'scheduled hours with paid grace' : 'actual clock time'}</> : 'clock off · scheduled shift hours'}</span></span><span className="ps-toggle">{open ? 'Hide' : 'Show'}</span></summary>
         {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
           {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
             <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}</small></button>)}</div>}
@@ -251,23 +253,22 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           </div>}
           <span className="hint">{otText(f)}.</span>
         </fieldset>
-        <fieldset className="field otset"><legend>Late arrivals and swaps</legend>
-          <div className="otrow">
-            <label>Grace period: a clock-in up to</label>
-            <select value={[0, 5, 10, 15, 30].includes(f.grace_minutes) ? f.grace_minutes : -1} onChange={(e) => setF({ ...f, grace_minutes: +e.target.value < 0 ? 20 : +e.target.value })} aria-label="Late grace period">
-              {[0, 5, 10, 15, 30].map((m) => <option key={m} value={m}>{m ? `${m} minutes` : 'no grace (0)'}</option>)}<option value={-1}>Custom…</option></select>
-            {![0, 5, 10, 15, 30].includes(f.grace_minutes) && <label><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Custom grace minutes" /> minutes</label>}
-            <label>late isn't counted as late.</label>
-          </div>
-          <span className="hint">Beyond it, the worker is asked what to do (and whoever stayed on is asked to agree). The real clock-in time is always saved.</span>
+        <fieldset className="field otset"><legend>Time clock and how pay is calculated</legend>
+          <label className="inline"><input type="checkbox" checked={f.time_clock} onChange={(e) => setF({ ...f, time_clock: e.target.checked })} /> Time clock on at {loc.name}</label>
+          {!f.time_clock ? <span className="hint">Off: workers here don't clock in or out and get no late questions. Payroll pays each worker's scheduled shift hours (default shift hours).</span> : <>
+            <div className="otrow">
+              <label>Grace period</label>
+              <select value={[10, 15, 30].includes(f.grace_minutes) ? f.grace_minutes : -1} onChange={(e) => setF({ ...f, grace_minutes: +e.target.value < 0 ? 20 : +e.target.value })} aria-label="Grace period">
+                {[10, 15, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}<option value={-1}>Custom…</option></select>
+              {![10, 15, 30].includes(f.grace_minutes) && <label><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Custom grace minutes" /> minutes</label>}
+            </div>
+            <span className="hint">Within {f.grace_minutes} minutes of the start there is no late notice. Later than that, the worker picks normal payroll, a paid adjustment (you approve) or a time swap. Real clock times are always saved.</span>
+            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'actual'} onChange={() => setF({ ...f, pay_method: 'actual' })} /> Pay actual clock-in to clock-out time</label>
+            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'grace'} onChange={() => setF({ ...f, pay_method: 'grace' })} /> Pay scheduled shift hours, with the grace period paid</label>
+            <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}. Work past the shift (beyond grace) and overtime are always paid; nothing is counted twice.</span>
+          </>}
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
           {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in Time clock.</span>}
-        </fieldset>
-        <fieldset className="field otset"><legend>How pay is calculated</legend>
-          <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'actual'} onChange={() => setF({ ...f, pay_method: 'actual' })} /> Actual time: pay exactly from clock-in to clock-out</label>
-          <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'grace'} onChange={() => setF({ ...f, pay_method: 'grace', pay_grace_minutes: f.pay_grace_minutes || 10 })} /> Grace pay: small differences are paid as the scheduled shift</label>
-          {f.pay_method === 'grace' && <div className="otrow"><label className="wrap">Clock-ins up to <input type="number" min={1} max={30} value={f.pay_grace_minutes} onChange={(e) => setF({ ...f, pay_grace_minutes: Math.max(1, Math.min(30, +e.target.value || 1)) })} aria-label="Pay grace minutes" /> minutes late, or clock-outs that many minutes early, are paid from the scheduled start / to the scheduled end.</label></div>}
-          <span className="hint">{payMethodText(f)}. Real clock times are always kept. Grace only adds time: work past the shift and overtime are always paid.</span>
         </fieldset>
         <div className="actions"><button className="btn primary" onClick={save}>Save payroll settings</button></div>
       </details>

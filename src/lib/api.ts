@@ -54,7 +54,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
   }
   const ids = rows.map((r) => r.id!);
   const locIds = locs.map((l) => l.id);
-  const [links, avail, asg, reqs, ledger, status, entries, fixes, swaps] = await Promise.all([
+  const [links, avail, asg, reqs, ledger, status, entries, fixes, swaps, timeSwaps] = await Promise.all([
     locIds.length ? supabase.from('employee_locations').select('employee_id, location_id').in('location_id', locIds).then(must<{ employee_id: string; location_id: string }[]>) : [],
     ids.length ? supabase.from('availability').select('*').in('employee_id', ids).then(must<(Avail & { employee_id: string })[]>) : [],
     supabase.from('assignments').select('slot_id, work_date, employee_id').eq('org_id', orgId).gte('work_date', from).lte('work_date', to).then(must<{ slot_id: string; work_date: string; employee_id: string }[]>),
@@ -65,6 +65,9 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
     supabase.from('time_fix_requests').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(200).then(must<TimeFix[]>),
     supabase.from('shift_adjustments').select('*').eq('org_id', orgId).in('kind', ['future_swap', 'payback', 'swap', 'takeover']).in('status', ['accepted', 'recorded', 'completed'])
       .gte('work_date', from).lte('work_date', to).then((r) => (r.data ?? []) as Adjustment[], () => [] as Adjustment[]),
+    // agreed time swaps, by the day the minutes are given back
+    supabase.from('shift_adjustments').select('*').eq('org_id', orgId).eq('kind', 'late_swap').in('status', ['accepted', 'completed'])
+      .gte('ret_date', from).lte('ret_date', to).then((r) => (r.data ?? []) as Adjustment[], () => [] as Adjustment[]),
   ]);
   const emps: Emp[] = rows.map((r) => {
     const a = defAvail();
@@ -78,7 +81,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
   });
   const assign: Record<string, string> = {};
   for (const x of asg) assign[cellKey(x.slot_id, x.work_date)] = x.employee_id;
-  return { org, locs, slots, emps, assign, reqs, ledger, entries, fixes, swaps };
+  return { org, locs, slots, emps, assign, reqs, ledger, entries, fixes, swaps: [...swaps, ...timeSwaps] };
 }
 
 export async function applyChanges(orgId: string, changes: Changes, allowOver = false) {

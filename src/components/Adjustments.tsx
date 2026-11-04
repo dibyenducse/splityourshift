@@ -20,12 +20,61 @@ export function adjText(b: Bundle, a: Adjustment) {
     case 'swap': return a.slot_id ? `${f} covered ${t}'s shift; ${t} covers one of ${f}'s shifts later${on}` : `${t} covers one shift for ${f}${a.note ? ` (${a.note})` : ''}`;
     case 'extra': return `${f} worked an extra paid shift${t ? ` (${t}'s shift)` : ''}${on}`;
     case 'late_ignore': return `${f} was ${a.minutes} min late and ${t} stayed on: call it even${on}`;
-    case 'late_swap': return a.slot_id ? `${f} comes ${a.minutes} min early for ${t} another day (was late${on})` : `${f} and ${t}: ${a.minutes}-minute swap${a.note ? ` (${a.note})` : ''}`;
+    case 'late_swap': if (a.ret_date) return `${f} works ${a.minutes} min of ${t}'s time${on}${a.note ? ` (${a.note})` : ''}`;
+      return a.slot_id ? `${f} comes ${a.minutes} min early for ${t} another day (was late${on})` : `${f} and ${t}: ${a.minutes}-minute swap${a.note ? ` (${a.note})` : ''}`;
     case 'payback': return `${f} pays back ${t} by working ${t}'s shift${on}`;
     case 'future_swap': return `${f} asked ${t} to work ${f}'s shift${on}${a.note ? ` (${a.note})` : ''}`;
     case 'late_payroll': return `${f} was ${a.minutes} min late; paid by normal payroll${t ? ` (${t} stayed on)` : ''}${on}`;
     default: return `${f} and ${t ?? ''}: adjustment${on}`;
   }
+}
+
+/**
+ * Time swap: minutes one worker gives back to another on a chosen future date and shift (scheduled or not).
+ * New request (from the clock) or, with `counter`, another time proposed for a request that is waiting for me.
+ */
+export function TimeSwapPicker({ b, empId, other, minutes, iOwe, entryId, counter, onDone, onCancel }: {
+  b: Bundle; empId: string; other?: string | null; minutes: number; iOwe?: boolean; entryId?: string; counter?: Adjustment; onDone: () => void; onCancel: () => void;
+}) {
+  const toast = useToast();
+  const me = empOf(b, empId);
+  const locs = b.locs.filter((l) => me?.locs.includes(l.id)).length ? b.locs.filter((l) => me?.locs.includes(l.id)) : b.locs;
+  const first = counter?.ret_slot ? b.slots.find((x) => x.id === counter.ret_slot) : undefined;
+  const [f, setF] = useState({ other: other ?? '', minutes, date: counter?.ret_date ?? addDays(todayIso(), 1), loc: first?.location_id ?? locs[0]?.id ?? '', slot: counter?.ret_slot ?? '' });
+  const [busy, setBusy] = useState(false);
+  const mates = b.emps.filter((e) => e.id !== empId && e.locs.some((l) => locs.some((x) => x.id === l)));
+  const slots = b.slots.filter((x) => x.location_id === f.loc).sort((x, y) => x.start_hour - y.start_hour);
+  const who = empOf(b, counter ? (counter.from_emp === empId ? counter.to_emp : counter.from_emp) : f.other)?.name ?? 'your coworker';
+  const go = async () => {
+    if (!counter && !f.other) return toast('Pick the coworker.', 'error', 'Missing');
+    if (!f.slot || !f.date) return toast('Pick the date and the shift.', 'error', 'Missing');
+    if (!(f.minutes >= 1 && f.minutes <= 600)) return toast('Enter the minutes (1 to 600).', 'error', 'Missing');
+    setBusy(true);
+    const { error } = counter
+      ? await supabase.rpc('counter_time_swap', { p_id: counter.id, p_slot: f.slot, p_date: f.date, p_minutes: f.minutes })
+      : await supabase.rpc('request_time_swap', { p_other: f.other, p_minutes: f.minutes, p_slot: f.slot, p_date: f.date, p_i_owe: !!iOwe, p_entry: entryId ?? null });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not sent');
+    toast(`Sent to ${who}. They can accept, decline or propose another time.`, 'ok', 'Time swap'); onDone();
+  };
+  return (
+    <div className="swapform">
+      <div className="twocol">
+        {!counter && <div className="field"><label htmlFor="ts-who">{iOwe ? 'Who stayed for you' : 'Who came late'}</label>
+          <select id="ts-who" value={f.other} onChange={(e) => setF({ ...f, other: e.target.value })}><option value="">Pick…</option>{mates.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>}
+        <div className="field"><label htmlFor="ts-min">Minutes</label><input id="ts-min" type="number" min={1} max={600} value={f.minutes} onChange={(e) => setF({ ...f, minutes: +e.target.value || 0 })} /></div>
+        <div className="field"><label htmlFor="ts-date">Date to give the time back</label><input id="ts-date" type="date" min={todayIso()} value={f.date} onChange={(e) => e.target.value && setF({ ...f, date: e.target.value })} />
+          <span className="hint">Any future date, even if that week isn't scheduled yet.</span></div>
+        {locs.length > 1 && <div className="field"><label htmlFor="ts-loc">Location</label>
+          <select id="ts-loc" value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value, slot: '' })}>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+        <div className="field"><label htmlFor="ts-slot">Shift</label>
+          <select id="ts-slot" value={f.slot} onChange={(e) => setF({ ...f, slot: e.target.value })}><option value="">Pick…</option>
+            {slots.map((x) => <option key={x.id} value={x.id}>{shiftNameOf(x)} · {shiftLong(x.start_hour, x.hours)}</option>)}</select></div>
+      </div>
+      <p className="hint">{iOwe || (counter && counter.from_emp === empId) ? `You work ${f.minutes || '…'} minutes of ${who}'s time on that shift.` : `${who} works ${f.minutes || '…'} minutes of your time on that shift.`} Your pay isn't changed by the swap; each of you is paid for the time you actually work.</p>
+      <div className="actions"><button className="btn primary" disabled={busy} onClick={go}>{busy ? 'Sending…' : counter ? 'Propose this time' : 'Send time swap request'}</button>
+        <button className="btn" onClick={onCancel}>Cancel</button></div>
+    </div>);
 }
 
 /**
@@ -40,6 +89,7 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
   const [ask, setAsk] = useState(false);
   const [acc, setAcc] = useState<Adjustment | null>(null);
   const [payFor, setPayFor] = useState<string | null>(null);
+  const [ctr, setCtr] = useState<Adjustment | null>(null);
   const owe = owner ? [] : b.ledger.filter((l) => l.status === 'open' && l.debtor_id === empId && !rows.some((a) => a.kind === 'payback' && a.status === 'pending' && (a as { ledger_id?: string }).ledger_id === l.id));
   const load = useCallback(async () => {
     const { data } = await supabase.from('shift_adjustments').select('*').eq('org_id', b.org.id).order('created_at', { ascending: false }).limit(150);
@@ -99,8 +149,8 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
         {!owner && <button className="btn" onClick={() => setAsk(false)}>Cancel</button>}</div>
     </div>);
 
-  const forMe = rows.filter((a) => owner ? a.status === 'awaiting_owner' : a.status === 'pending' && a.to_emp === empId);
-  const mineWaiting = owner ? rows.filter((a) => a.status === 'pending') : rows.filter((a) => a.status === 'pending' && a.from_emp === empId);
+  const forMe = rows.filter((a) => owner ? a.status === 'awaiting_owner' : a.status === 'pending' && (a.turn ?? a.to_emp) === empId);
+  const mineWaiting = owner ? rows.filter((a) => a.status === 'pending') : rows.filter((a) => a.status === 'pending' && !forMe.includes(a) && (a.from_emp === empId || a.to_emp === empId));
   const upcoming = rows.filter((a) => a.kind === 'future_swap' && a.status === 'accepted' && (a.work_date ?? '') >= todayIso() && (owner || a.from_emp === empId || a.to_emp === empId));
   const todo = rows.filter((a) => a.status === 'accepted' && a.kind === 'late_swap' && (owner || a.from_emp === empId || a.to_emp === empId));
   const history = rows.filter((a) => !forMe.includes(a) && !mineWaiting.includes(a) && !todo.includes(a) && !upcoming.includes(a)).slice(0, 25);
@@ -122,8 +172,10 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
               onGo={(mode, slot, date) => act(a.id, () => supabase.rpc('accept_future_swap', { p_id: a.id, p_mode: mode, p_ret_slot: slot, p_ret_date: date }),
                 mode === 'cover' ? 'Accepted. The shift is yours; nothing is owed.' : slot ? 'Accepted. You swapped shifts; both are on the schedule.' : 'Accepted. They owe you a shift; it is on Shifts owed.').then(() => setAcc(null))} />
             : <button className="btn small primary" disabled={busy === a.id} onClick={() => setAcc(a)}>Accept…</button>)
+          : a.kind === 'late_swap' && a.ret_date && ctr?.id === a.id ? <TimeSwapPicker b={b} empId={empId!} minutes={a.minutes ?? 15} counter={a} onDone={() => { setCtr(null); load(); }} onCancel={() => setCtr(null)} />
           : <button className="btn small primary" disabled={busy === a.id} onClick={() => respond(a, true)}>{a.kind === 'late_ignore' ? 'Approve' : 'Accept'}</button>}
-        <button className="btn small" disabled={busy === a.id} onClick={() => respond(a, false)}>Decline</button></>))}</div></>}
+        {ctr?.id !== a.id && <button className="btn small" disabled={busy === a.id} onClick={() => respond(a, false)}>Decline</button>}
+        {a.kind === 'late_swap' && a.ret_date && ctr?.id !== a.id && <button className="btn small" disabled={busy === a.id} onClick={() => setCtr(a)}>Propose another time</button>}</>))}</div></>}
       {mineWaiting.length > 0 && <><h4>{owner ? 'Waiting for a worker to answer' : 'Your requests'}</h4><div className="stack">{mineWaiting.map((a) => item(a,
         <ConfirmButton className="btn small" label="Cancel request" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Request cancelled.')} />))}</div></>}
       {!owner && owe.length > 0 && <><h4>Shifts you owe</h4><div className="stack">{owe.map((l) => (

@@ -5,6 +5,7 @@ import { DAY_SHORT, addDays, mmdd, shiftLong, todayIso } from '../lib/time';
 import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slotOf } from '../lib/rules';
 import type { Bundle, TimeEntry, TimeFix } from '../lib/types';
 import { Sheet, useToast } from './ui';
+import { TimeSwapPicker } from './Adjustments';
 
 /** Start of a shift in this device's time zone (the business and its staff are in the same place). */
 export function shiftWindow(b: Bundle, k: string) {
@@ -19,7 +20,9 @@ const elapsed = (from: string, now: number) => { const m = Math.max(0, Math.floo
 type ClockResult =
   | { mode: 'scheduled'; entry_id: string; label: string; late_minutes: number }
   | { mode: 'late'; entry_id: string; label: string; late_minutes: number; grace: number; covered_by: string | null; covered_name: string | null; covered_minutes: number }
-  | { mode: 'unscheduled'; entry_id: string };
+  | { mode: 'unscheduled'; entry_id: string }
+  /** From clock_out_now(): stayed past the shift beyond grace; next_emp is who came late after me. */
+  | { mode: 'extra'; entry_id: string; extra_minutes: number; label?: string; next_emp?: string | null; next_name?: string | null };
 
 const BellIcon = ({ on }: { on: boolean }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -27,9 +30,10 @@ const BellIcon = ({ on }: { on: boolean }) => (
 );
 
 /**
- * Worker's big round clock button. Tapping anywhere on the circle clocks in at once; then, depending on the
- * schedule, it asks a follow-up: late beyond the grace period (and who stayed on), or no shift right now
- * (covering someone? takeover / swap / extra shift).
+ * Worker's big round clock button. The same circle clocks in and clocks out, with no confirmation. After clocking in
+ * it may ask a follow-up: late beyond the grace period, or no shift right now (takeover / swap / extra shift).
+ * After clocking out past the shift (beyond grace) it offers normal payroll or a time swap. Each worker clocks
+ * in and out on their own. Hidden where the owner turned the time clock off (pay is then the scheduled hours).
  */
 export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: string; userId: string; reload: () => void }) {
   const toast = useToast();
@@ -46,6 +50,10 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const current = mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime() && !entryFor(k); });
   const next = mine.find((k) => shiftWindow(b, k).start.getTime() > now && !entryFor(k));
   const openKey = open?.slot_id ? cellKey(open.slot_id, open.work_date) : null;
+  const me = empOf(b, empId);
+  const clockLocs = b.locs.filter((l) => me?.locs.includes(l.id) && l.time_clock !== false);
+  const openEnd = openKey && slotOf(b, openKey) ? shiftWindow(b, openKey).end : null;
+  const forgot = !!open && !!openEnd && now > openEnd.getTime() + 30 * 60000;
 
   const clockIn = async () => {
     setBusy(true);
@@ -59,9 +67,21 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   };
   const clockOut = async () => {
     setBusy(true);
-    const { error } = await supabase.rpc('clock_out');
+    const { data, error } = await supabase.rpc('clock_out_now');
     setBusy(false);
-    if (error) toast(errText(error), 'error', "Didn't clock out"); else { toast('Clocked out. Your hours are saved.', 'ok', 'Done'); reload(); }
+    if (error) return toast(errText(error), 'error', "Didn't clock out");
+    reload();
+    const r = (data ?? {}) as { entry_id: string; extra_minutes?: number; label?: string; next_emp?: string | null; next_name?: string | null };
+    if ((r.extra_minutes ?? 0) > 0) setAsk({ mode: 'extra', entry_id: r.entry_id, extra_minutes: r.extra_minutes!, label: r.label, next_emp: r.next_emp, next_name: r.next_name });
+    else toast('Clocked out. Your hours are saved.', 'ok', 'Clocked out');
+  };
+  const closeAtEnd = async () => {
+    if (!open) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('clock_out_at_end', { p_entry: open.id });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', "Didn't clock out");
+    toast(`Clocked out at ${clockTime(openEnd!)}, the end of your shift. Your manager is told.`, 'ok', 'Clocked out'); reload();
   };
   const turnOn = async () => {
     if (push) {
@@ -76,10 +96,13 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   let face;
   if (open) {
     face = (<>
-      <div className="clock-btn on" role="status" aria-live="polite"><span>On the clock<b>{elapsed(open.clock_in, now)}</b></span></div>
-      <p className="clock-sub">Since {clockTime(open.clock_in)}{openKey && slotOf(b, openKey) ? ` · ${slotLabel(b, openKey)}` : open.note ? ` · ${open.note}` : ''}</p>
+      <button className="clock-btn on" disabled={busy} onClick={clockOut} aria-label="Clock out now">
+        <span>{busy ? '…' : 'Clock out'}<b>{elapsed(open.clock_in, now)}</b><small>on the clock · tap to stop</small></span></button>
+      <p className="clock-sub" role="status" aria-live="polite">Since {clockTime(open.clock_in)}{openKey && slotOf(b, openKey) ? ` · ${slotLabel(b, openKey)}` : open.note ? ` · ${open.note}` : ''}</p>
       {!open.slot_id && open.note === 'No scheduled shift' && <button className="btn small" onClick={() => setAsk({ mode: 'unscheduled', entry_id: open.id })}>Covering someone? Tell us</button>}
-      <button className="btn big danger clock-out" disabled={busy} onClick={clockOut}>Clock out</button>
+      {forgot && <div className="forgot-out" role="alert"><p><b>Forgot to clock out?</b> Your shift ended at {clockTime(openEnd!)}.</p>
+        <div className="actions"><button className="btn primary" disabled={busy} onClick={closeAtEnd}>Clock out at {clockTime(openEnd!)}</button>
+          <button className="btn" disabled={busy} onClick={clockOut}>Clock out now</button></div></div>}
     </>);
   } else {
     const w = current ? shiftWindow(b, current) : null;
@@ -91,6 +114,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
         : 'No shift right now. You can still clock in to cover someone or work an extra shift.'}</p>
     </>);
   }
+
+  if (!open && !clockLocs.length) return null; // time clock is off everywhere I work: pay is the scheduled hours
 
   return (
     <section className="panel">
@@ -105,36 +130,56 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
       </div>
       {!push && isIOS() && !isStandalone() && <p className="hint" style={{ textAlign: 'center', margin: '8px 0 0' }}>iPhone: tap Share → Add to Home Screen, then open SplitYourShift from your home screen to get reminders.</p>}
       {missed && <MissedPunchSheet b={b} empId={empId} onClose={() => setMissed(false)} reload={reload} />}
-      {ask?.mode === 'late' && <LateSheet r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {ask?.mode === 'late' && <LateSheet b={b} empId={empId} r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {ask?.mode === 'extra' && <ExtraSheet b={b} empId={empId} r={ask} onClose={() => setAsk(null)} reload={reload} />}
       {ask?.mode === 'unscheduled' && <CoverAsk b={b} empId={empId} entryId={ask.entry_id} onClose={() => setAsk(null)} reload={reload} />}
     </section>
   );
 }
 
-/** Late beyond the grace period. If the previous worker stayed on: ignore (they approve), swap later (they accept) or payroll. */
-function LateSheet({ r, onClose, reload }: { r: Extract<ClockResult, { mode: 'late' }>; onClose: () => void; reload: () => void }) {
+/** Late beyond the grace period: normal payroll, ask the owner to pay from the scheduled start, or a time swap. */
+function LateSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string; r: Extract<ClockResult, { mode: 'late' }>; onClose: () => void; reload: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const choose = async (c: 'ignore' | 'swap' | 'payroll') => {
+  const [swap, setSwap] = useState(false);
+  const choose = async (c: 'payroll' | 'paid') => {
     setBusy(true);
     const { error } = await supabase.rpc('late_choice', { p_entry: r.entry_id, p_choice: c });
     setBusy(false);
     if (error) return toast(errText(error), 'error', 'Not saved');
-    toast(c === 'payroll' ? 'Saved. Your real clock-in time is used for pay.' : `Sent to ${r.covered_name}. You'll get a notification when they answer.`, 'ok', 'Saved');
+    toast(c === 'payroll' ? 'Saved. Your real clock-in time is used for pay.' : 'Sent to your manager. If they approve, you are paid from the scheduled start.', 'ok', 'Saved');
     onClose(); reload();
   };
-  const who = r.covered_name, m = r.covered_minutes;
+  const who = r.covered_name, m = r.covered_minutes || r.late_minutes;
   return (
     <Sheet eyebrow="Clocked in" title={`You clocked in ${r.late_minutes} minutes late`} onClose={onClose}>
-      <div className="sec"><p>{r.label}. Your real clock-in time ({clockTime(new Date())}) is saved. {who ? <><b>{who}</b> stayed {m} minutes to cover your shift. How would you like to handle this?</> : `Nobody needed to stay for you, so there is nothing to agree on.`}</p></div>
-      {who ? <>
-        <div className="option"><h4>Ignore</h4><p>Ask {who} to call it even. When they approve, it's recorded that you both agreed to ignore it.</p>
-          <div><button className="btn" disabled={busy} onClick={() => choose('ignore')}>Ask {who} to ignore it</button></div></div>
-        <div className="option best"><h4>Request a swap</h4><p>Another day you come {m} minutes early so {who} can leave {m} minutes early. {who} accepts or declines.</p>
-          <div><button className="btn primary" disabled={busy} onClick={() => choose('swap')}>Offer {m} minutes back</button></div></div>
-        <div className="option"><h4>Use normal payroll</h4><p>No swap. {who}'s extra minutes and your shorter shift are paid as your manager's payroll settings say.</p>
+      <div className="sec"><p>{r.label}. Your real clock-in time ({clockTime(new Date())}) is saved{who ? <>; <b>{who}</b> stayed {r.covered_minutes} minutes for you</> : ''}. How should this be handled?</p></div>
+      {swap ? <div className="option best"><h4>Request a time swap</h4><p>Pick when you give the time back. {who ?? 'Your coworker'} accepts, declines or proposes another time.</p>
+        <TimeSwapPicker b={b} empId={empId} other={r.covered_by} minutes={m} iOwe entryId={r.entry_id} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
+        <div className="option"><h4>Normal payroll</h4><p>You're paid from your real clock-in time.</p>
           <div><button className="btn" disabled={busy} onClick={() => choose('payroll')}>Use normal payroll</button></div></div>
-      </> : <div className="actions"><button className="btn primary" onClick={() => { choose('payroll'); }}>OK</button></div>}
+        <div className="option"><h4>Request paid adjustment</h4><p>Ask your manager to pay you from the scheduled start. They approve or keep the real time.</p>
+          <div><button className="btn" disabled={busy} onClick={() => choose('paid')}>Ask my manager</button></div></div>
+        <div className="option best"><h4>Request time swap</h4><p>Give {m} minutes back {who ? `to ${who}` : 'to a coworker'} on a future date and shift you pick.</p>
+          <div><button className="btn primary" disabled={busy} onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
+      </>}
+    </Sheet>
+  );
+}
+
+/** Clocked out past the shift (beyond grace): normal payroll (the extra time is paid) or a time swap. */
+function ExtraSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string; r: Extract<ClockResult, { mode: 'extra' }>; onClose: () => void; reload: () => void }) {
+  const [swap, setSwap] = useState(false);
+  return (
+    <Sheet eyebrow="Clocked out" title={`You stayed ${r.extra_minutes} minutes after your shift`} onClose={onClose}>
+      <div className="sec"><p>{r.label ? `${r.label}. ` : ''}Your hours are saved{r.next_name ? <>. <b>{r.next_name}</b> came late after you</> : ''}. How should the extra time be handled?</p></div>
+      {swap ? <div className="option best"><h4>Future time swap</h4><p>Pick when the time is given back to you. {r.next_name ?? 'Your coworker'} accepts, declines or proposes another time.</p>
+        <TimeSwapPicker b={b} empId={empId} other={r.next_emp} minutes={r.extra_minutes} entryId={undefined} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
+        <div className="option"><h4>Normal payroll</h4><p>The extra {r.extra_minutes} minutes are paid with your hours.</p>
+          <div><button className="btn" onClick={onClose}>Use normal payroll</button></div></div>
+        <div className="option best"><h4>Future time swap</h4><p>{r.next_name ?? 'A coworker'} gives you {r.extra_minutes} minutes back on a date and shift you pick.</p>
+          <div><button className="btn primary" onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
+      </>}
     </Sheet>
   );
 }

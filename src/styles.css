@@ -635,3 +635,8 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 .book-day small { font-size: 12.5px; color: var(--muted); font-weight: 500; }
 .report-form { margin-bottom: 4px; }
 .report-form .doc-editor { min-height: 200px; }
+
+/* Forgot to clock out: shown on the clock once the shift ended 30+ minutes ago */
+.forgot-out { margin-top: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--warn, #b7791f); background: var(--warn-soft, #fff7e6); text-align: center; max-width: 420px; }
+.forgot-out p { margin: 0 0 8px; }
+.forgot-out .actions { justify-content: center; margin: 0; flex-wrap: wrap; }
