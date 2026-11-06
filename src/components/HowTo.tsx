@@ -21,7 +21,7 @@ function Player({ topic }: { topic: HowToTopic }) {
 }
 
 /** A sheet with one how-to video, or (without `topic`) all of them to pick from. */
-export function HowToSheet({ topic, topics = ['swap', 'clock', 'payroll'], onClose }: { topic?: HowToTopic; topics?: HowToTopic[]; onClose: () => void }) {
+export function HowToSheet({ topic, topics = ['payroll', 'clock', 'swap'], onClose }: { topic?: HowToTopic; topics?: HowToTopic[]; onClose: () => void }) {
   const [t, setT] = useState<HowToTopic>(topic ?? topics[0]);
   return (
     <Sheet eyebrow="How it works" title={HOWTOS[t].title} onClose={onClose}>
