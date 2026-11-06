@@ -6,6 +6,7 @@ import type { Adjustment, Bundle } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
 import { PaybackPicker } from './Cover';
+import { HowToButton } from './HowTo';
 
 const STATUS: Record<Adjustment['status'], [string, string]> = {
   pending: ['Waiting for answer', 'warn'], awaiting_owner: ['Waiting for manager', 'warn'], accepted: ['Agreed', 'ok'],
@@ -161,7 +162,7 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
 
   return (
     <section className="panel" id="swaps">
-      <div className="panel-head"><h2>{owner ? 'Swaps and shift adjustments' : 'Swaps and agreements'}</h2>{forMe.length > 0 && <span className="badge">{forMe.length}</span>}</div>
+      <div className="panel-head"><h2>{owner ? 'Swaps and shift adjustments' : 'Swaps and agreements'}{forMe.length > 0 && <span className="badge">{forMe.length}</span>}</h2><HowToButton topic="swap" /></div>
       <p className="hint">{owner ? 'Takeovers, swaps, extra shifts and late arrivals that workers set up from the time clock. ' + (b.locs.some((l) => (l as { mutual_approval?: boolean }).mutual_approval === false) ? 'Where mutual approval is off, accepted swaps wait for you.' : 'When both workers agree it is final; you are told.')
         : 'Requests from coworkers, and what you agreed to. Your manager is told about each one.'}</p>
       {forMe.length > 0 && <><h4>{owner ? 'Waiting for your approval' : 'Waiting for your answer'}</h4><div className="stack">{forMe.map((a) => item(a, owner ? <>

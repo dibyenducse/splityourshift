@@ -23,6 +23,7 @@ import TimeClock from './OwnerTime';
 import Payroll from './Payroll';
 import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
+import { HowToSheet } from '../components/HowTo';
 import { PLANS, planOf, wantPlan } from '../lib/plans';
 
 type SheetState =
@@ -53,6 +54,7 @@ export default function OwnerApp() {
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [previewEmp, setPreviewEmp] = useState<string | null>(null);
+  const [howto, setHowto] = useState(false);
   const [payLoc, setPayLoc] = useState<string | undefined>();
   const [payDue, setPayDue] = useState<DashRow[]>([]);
   // Undo is per schedule (location): each change remembers which locations' cells it touched.
@@ -284,6 +286,7 @@ export default function OwnerApp() {
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
           { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
           { label: 'Account settings', hint: 'Name, email, photo, password, time zone', onClick: () => nav('/app/account') },
+          { label: '▶ How-to videos', hint: 'Swaps, time clock, payroll', onClick: () => setHowto(true) },
           { label: 'Plan & billing', hint: `${PLANS[planOf(b.org)].name} plan · coupons`, onClick: () => nav('/app/plan') },
           { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
           { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },
@@ -296,6 +299,7 @@ export default function OwnerApp() {
         ]} />} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
+      {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
   );

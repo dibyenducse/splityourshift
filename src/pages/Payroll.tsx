@@ -4,6 +4,7 @@ import { DAY_LONG, addDays, money, todayIso } from '../lib/time';
 import type { Bundle } from '../lib/types';
 import { ConfirmButton, Sheet, useToast } from '../components/ui';
 import { PayslipList } from '../components/Payslips';
+import { HowToButton } from '../components/HowTo';
 import {
   FREQ_LABEL, dateLong, otText, payMethodText, dateShort, downloadPdf, hrs, markPaid, payDashboard, payLines, payPeriods, payRuns, periodTitle, printReport,
   scheduleText, setAdjustment, setHoursEdit, totals, type DashRow, type PayFrequency, type PayLine, type PayRun, type PaySettings, type Period, type Report,
@@ -130,7 +131,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
       </section>
 
       <section className="panel">
-        <div className="panel-head"><h2>{loc.name} payroll</h2>{row && <span className={`tag ${tagFor[status]}`}>{status === 'Paid' ? `Paid · ${dateShort(row.pay_date)}` : `${status} · pay ${dateShort(row.pay_date)}`}</span>}</div>
+        <div className="panel-head"><h2>{loc.name} payroll</h2><span className="clock-tools"><HowToButton topic="payroll" />{row && <span className={`tag ${tagFor[status]}`}>{status === 'Paid' ? `Paid · ${dateShort(row.pay_date)}` : `${status} · pay ${dateShort(row.pay_date)}`}</span>}</span></div>
         <div className="payctl">
           {b.locs.length > 1 && <div className="field"><label htmlFor="pr-loc">Business</label>
             <select id="pr-loc" value={loc.id} onChange={(e) => setLocId(e.target.value)}>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}

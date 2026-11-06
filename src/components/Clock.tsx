@@ -6,6 +6,7 @@ import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slot
 import type { Bundle, TimeEntry, TimeFix } from '../lib/types';
 import { Sheet, useToast } from './ui';
 import { TimeSwapPicker } from './Adjustments';
+import { HowToButton } from './HowTo';
 
 /** Start of a shift in this device's time zone (the business and its staff are in the same place). */
 export function shiftWindow(b: Bundle, k: string) {
@@ -120,7 +121,7 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   return (
     <section className="panel">
       <div className="panel-head"><h2>Time clock</h2>
-        <span className="clock-tools">
+        <span className="clock-tools"><HowToButton topic="clock" />
           {(pushSupported() || isIOS()) && <button className={`btn icon bellbtn${push ? ' on' : ''}`} onClick={turnOn}
             title={push ? 'Shift reminders are on (tap to turn off)' : 'Turn on shift reminders'} aria-label={push ? 'Shift reminders on. Tap to turn off' : 'Turn on shift reminders'} aria-pressed={push}><BellIcon on={push} /></button>}
           <span className={`lamp${open ? ' on' : ''}`} title={open ? 'On the clock' : 'Not clocked in'} /></span></div>
