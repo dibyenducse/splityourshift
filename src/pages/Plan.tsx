@@ -1,0 +1,118 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../App';
+import { supabase, errText } from '../lib/supabase';
+import type { Org } from '../lib/types';
+import { Loading, useToast } from '../components/ui';
+import { ProfileMenu } from '../components/Avatar';
+import { AppBar } from './AppShell';
+import { PLANS, PLAN_ORDER, locLimitText, planOf, untilText, type PlanId } from '../lib/plans';
+
+interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
+
+/**
+ * Plan & billing for the owner: the current plan, the three plans, and a checkout for the chosen one.
+ * There is no card payment yet: a paid plan is unlocked with a coupon code (or by support).
+ */
+export default function PlanPage() {
+  const { me, refresh } = useAuth();
+  const nav = useNavigate();
+  const toast = useToast();
+  const [qs] = useSearchParams();
+  const [org, setOrg] = useState<Org | null>(null);
+  const [locs, setLocs] = useState(0);
+  const [hist, setHist] = useState<Redemption[]>([]);
+  const [pick, setPick] = useState<PlanId | null>((['plus', 'premium'].includes(qs.get('plan') ?? '') ? qs.get('plan') : null) as PlanId | null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!me?.orgId) return;
+    const [{ data: o }, { count }, { data: r }] = await Promise.all([
+      supabase.from('organizations').select('*').eq('id', me.orgId).maybeSingle(),
+      supabase.from('locations').select('id', { count: 'exact', head: true }).eq('org_id', me.orgId),
+      supabase.from('coupon_redemptions').select('*').eq('org_id', me.orgId).order('created_at', { ascending: false }),
+    ]);
+    setOrg(o as Org); setLocs(count ?? 0); setHist((r ?? []) as Redemption[]);
+  }, [me?.orgId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!me || me.role !== 'owner') return <Loading text="Plan & billing is for business owners." />;
+  if (!org) return <Loading />;
+  const cur = planOf(org), plan = PLANS[cur];
+  const ended = (org.plan ?? 'free') !== 'free' && cur === 'free';
+  const need = qs.get('need') === 'locations';
+  const sel = pick ? PLANS[pick] : null;
+
+  const redeem = async () => {
+    if (!code.trim()) return toast('Type your coupon code.', 'error', 'Missing');
+    setBusy(true);
+    const { data, error } = await supabase.rpc('redeem_coupon', { p_code: code });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Coupon not applied');
+    const r = data as { plan: PlanId; months: number; until: string };
+    toast(`${PLANS[r.plan].name} is on for ${r.months} month${r.months > 1 ? 's' : ''}, until ${untilText(r.until)}.`, 'ok', 'Coupon applied');
+    setCode(''); setPick(null); await load(); refresh();
+  };
+
+  return (
+    <>
+      <AppBar subtitle="Plan & billing" onAccount={() => {}} who="" extra={<button className="btn" onClick={() => nav('/app')}>‹ Back</button>}
+        profile={<ProfileMenu name={org.owner_name || me.email} role={`Owner · ${org.name}`} items={[{ label: 'Account settings', onClick: () => nav('/app/account') }, { label: 'Back to my schedule', onClick: () => nav('/app') }]} />} />
+      <div className="wrap account plan-page">
+        <h1 className="acct-title">Plan &amp; billing</h1>
+        {need && <div className="banner warn"><p><b>Your {plan.name} plan includes {locLimitText(cur)}.</b> Choose a bigger plan to add another hotel, gas station or shop.</p></div>}
+        {ended && <div className="banner warn"><p><b>Your {PLANS[(org.plan ?? 'free') as PlanId].name} plan ended on {untilText(org.plan_until)}.</b> Everything is still here. To add locations beyond Starter again, use a new coupon.</p></div>}
+
+        <section className="panel plan-now">
+          <div><span className="kicker">Your plan</span><h2>{plan.name}{plan.price ? <small> · ${plan.price}/month</small> : <small> · Free</small>}</h2>
+            <p className="hint" style={{ margin: 0 }}>{cur === 'free' ? 'Free, no end date.' : org.plan_until ? `Active until ${untilText(org.plan_until)}${org.plan_source === 'coupon' ? ' (coupon)' : ''}.` : org.plan_source === 'early_access' ? 'Early access: no end date.' : 'No end date.'}</p></div>
+          <div className="plan-meter"><b>{locs}</b> of {plan.locations ?? '∞'} location{plan.locations === 1 ? '' : 's'} used
+            {plan.locations !== null && <span className="bar"><i style={{ width: `${Math.min(100, (locs / plan.locations) * 100)}%` }} /></span>}</div>
+        </section>
+
+        <div className="plan-grid">
+          {PLAN_ORDER.map((id) => { const p = PLANS[id], isCur = id === cur;
+            return (<div key={id} className={`plan-card${id === 'plus' ? ' pop' : ''}${pick === id ? ' on' : ''}`}>
+              {id === 'plus' && <span className="tag ok plan-pop">Most popular</span>}
+              <h3>{p.name}</h3><div className="amt">{p.price ? <>${p.price}<small>/month</small></> : 'Free'}</div>
+              <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
+              <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
+              {isCur ? <button className="btn" disabled>Current plan</button>
+                : id === 'free' ? <span className="hint" style={{ margin: 0, textAlign: 'center' }}>Every account starts here</span>
+                : <button className={`btn${pick === id ? ' primary' : ''}`} onClick={() => setPick(id)}>{pick === id ? 'Selected' : `Choose ${p.name}`}</button>}
+            </div>); })}
+        </div>
+
+        {sel && <section className="panel checkout" id="checkout">
+          <div className="panel-head"><h2>Checkout · {sel.name}</h2><button className="btn small" onClick={() => setPick(null)}>Cancel</button></div>
+          <div className="co-grid">
+            <div className="co-sum">
+              <div className="co-line"><span>{sel.name} plan · {locLimitText(sel.id)}</span><b>${sel.price}.00</b></div>
+              <div className="co-line"><span>Billed</span><span>Monthly</span></div>
+              <div className="co-line total"><span>Total per month</span><b>${sel.price}.00</b></div>
+              <p className="hint" style={{ margin: 0 }}>US dollars. Cancel any time; your data stays.</p>
+            </div>
+            <div className="co-pay">
+              <div className="co-coupon">
+                <label htmlFor="co-code"><b>Have a coupon code?</b></label>
+                <div className="co-row"><input id="co-code" type="text" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. SYS-7KQ4-M2XD" autoComplete="off" spellCheck={false}
+                  onKeyDown={(e) => { if (e.key === 'Enter') redeem(); }} />
+                  <button className="btn primary" disabled={busy || !code.trim()} onClick={redeem}>{busy ? 'Applying…' : 'Apply'}</button></div>
+                <span className="hint" style={{ margin: 0 }}>A coupon unlocks its plan for the months it says. No card needed.</span>
+              </div>
+              <div className="co-card" aria-disabled="true">
+                <b>Pay by card</b>
+                <p className="hint" style={{ margin: 0 }}>Card payment is coming soon. For now, use a coupon code, or email <a href={`mailto:support@splityourshift.com?subject=${encodeURIComponent(`${sel.name} plan for ${org.name}`)}`}>support@splityourshift.com</a> and we'll set up your plan.</p>
+              </div>
+            </div>
+          </div>
+        </section>}
+
+        {hist.length > 0 && <section className="panel"><div className="panel-head"><h2>Coupons used</h2></div>
+          <div className="table-wrap"><table className="data"><thead><tr><th>Code</th><th>Plan</th><th>Months</th><th>Used</th><th>Plan until</th></tr></thead>
+            <tbody>{hist.map((h) => <tr key={h.id}><td><code>{h.code}</code></td><td>{PLANS[h.plan].name}</td><td>{h.months}</td><td>{untilText(h.created_at)}</td><td>{untilText(h.plan_until)}</td></tr>)}</tbody></table></div></section>}
+      </div>
+    </>
+  );
+}

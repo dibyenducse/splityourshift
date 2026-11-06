@@ -10,6 +10,7 @@ import OwnerApp from './Owner';
 import WorkerApp from './Worker';
 import AdminApp from './Admin';
 import Onboarding from './Onboarding';
+import PlanPage from './Plan';
 import Account from './Account';
 
 /** Top bar shared by all three account types. */
@@ -81,6 +82,7 @@ export default function AppShell() {
   return (
     <Routes>
       {me.role !== 'new' && <Route path="account" element={<Account />} />}
+      {me.role === 'owner' && <Route path="plan" element={<PlanPage />} />}
       <Route path="*" element={home} />
     </Routes>
   );

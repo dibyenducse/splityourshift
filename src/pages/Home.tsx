@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
+import { PLANS, PLAN_ORDER, wantPlan } from '../lib/plans';
 
 export function SiteNav() {
   const { me } = useAuth();
@@ -31,6 +32,9 @@ const MEDIA = import.meta.env.BASE_URL + 'media/';
 const T = 245, K = 330, S = 90, D = 15, C = 160;
 
 export default function Home() {
+  const { me } = useAuth();
+  const nav = useNavigate();
+  const choose = (id: string) => { if (id === 'free') return nav(me ? '/app' : '/signup'); if (me) return nav(`/app/plan?plan=${id}`); wantPlan.set(id); nav('/signup'); };
   return (
     <>
       <SiteNav />
@@ -41,7 +45,7 @@ export default function Home() {
           <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks.</p>
           <div className="actions"><Link className="btn primary big" to="/signup">Start free</Link>
             <a className="btn big" href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>▶ Watch the 2-minute video</a></div>
-          <p className="note">Free for 1 location and up to 10 workers. No card needed.</p>
+          <p className="note">Start free with 1 location. No card needed.</p>
         </div>
         <div className="mock" aria-label="Example schedule">
           <div className="mock-head"><b>Sunrise Inn</b><span className="ltype">Hotel</span><span className="tag plain">Example week</span></div>
@@ -65,7 +69,7 @@ export default function Home() {
             Your browser can't play this video. <a href={MEDIA + 'tutorial.mp4'}>Download it</a>.
           </video></div>
           <ol className="tut-steps">
-            <li><b>Create your free account</b><span>Name, business, email, password</span></li>
+            <li><b>Create your account</b><span>Name, business, email, password</span></li>
             <li><b>Pick your business and shifts</b><span>Hotel, gas station or shop; 7–3, 3–11, 11–7 or your own</span></li>
             <li><b>Add your workers</b><span>They get an email invite; no app to download</span></li>
             <li><b>Put names into the week</b><span>Tap a name, tap a shift. Limits are checked for you</span></li>
@@ -131,11 +135,16 @@ export default function Home() {
 
       <section className="band wrap" id="pricing"><div className="inner">
         <h2>Simple pricing</h2>
-        <p className="sub">Pay per location, not per worker. Everything is free during early access.</p>
-        <div className="prices">
-          <div className="price"><h3>Free</h3><div className="amt">$0</div><ul><li>1 location</li><li>Up to 10 workers</li><li>Drag-and-drop schedule, swaps, time off</li></ul><Link className="btn" to="/signup">Start free</Link></div>
-          <div className="price pro"><h3>Pro</h3><div className="amt">$39<small> / location / month</small></div><ul><li>Unlimited workers</li><li>Multiple hotels and gas stations</li><li>Time clock with grace period and swaps</li><li>Payroll: weekly, biweekly or monthly, with payslips</li><li>Shift reports and task lists</li></ul><Link className="btn primary" to="/signup">Start free during early access</Link></div>
+        <p className="sub">Pay per business, not per worker. Start free and move up when you add locations.</p>
+        <div className="prices three">
+          {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
+            <div key={id} className={`price${id === 'plus' ? ' pro' : ''}`}>{id === 'plus' && <span className="tag ok" style={{ alignSelf: 'flex-start' }}>Most popular</span>}
+              <h3>{p.name}</h3><div className="amt">{p.price ? <>${p.price}<small> / month</small></> : 'Free'}</div>
+              <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
+              <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
+              <button className={`btn${id === 'plus' ? ' primary' : ''}`} onClick={() => choose(id)}>{id === 'free' ? 'Start free' : `Choose ${p.name}`}</button></div>); })}
         </div>
+        <p className="hint" style={{ marginTop: 12 }}>Have a coupon code? Enter it under Plan &amp; billing after you sign up.</p>
       </div></section>
 
       <section className="band alt wrap" id="about"><div className="inner">
@@ -146,6 +155,7 @@ export default function Home() {
       <section className="band wrap" id="faq"><div className="inner">
         <h2>Questions</h2>
         <div className="faq" style={{ marginTop: 18 }}>
+          <details><summary>Which plan do I need?</summary><p>Starter is free for one hotel, gas station or shop. Plus covers up to 3 locations for $39 a month, and Premium covers any number for $99 a month. Every plan has the schedule, time clock, payroll, shift reports and task lists.</p></details>
           <details><summary>Do my workers need to download an app?</summary><p>No. They get an email with a link, choose a password, and log in from any phone browser with their email or phone number.</p></details>
           <details><summary>Do I have to use the time clock?</summary><p>No. Turn it on or off for each location. With it off, workers see no clock and payroll pays the scheduled shift hours; you can still edit anyone's hours.</p></details>
           <details><summary>Can workers change the schedule?</summary><p>No. Workers can see their shifts and the schedule, set their availability, ask for time off and cancel a request that's still pending. Only the owner moves people.</p></details>

@@ -7,6 +7,8 @@ export interface Org {
   status: string; created_at: string; last_active_at: string | null; time_zone: string;
   /** How names show on the schedule. */
   name_display?: 'first' | 'last' | 'first_initial' | 'custom';
+  /** Subscription: see lib/plans.ts. plan_until null with a paid plan = no end date. */
+  plan?: 'free' | 'plus' | 'premium'; plan_until?: string | null; plan_source?: string | null;
 }
 export interface Loc {
   id: string; org_id: string; name: string; type: LocType; sort: number;

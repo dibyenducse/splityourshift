@@ -11,19 +11,21 @@ import { WeekGrid } from '../components/WeekGrid';
 import { dateShort, payRuns, periodTitle, reopenRun, type PayRun } from '../lib/payroll';
 import { AppBar } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
+import { PLANS, untilText, type PlanId } from '../lib/plans';
 
 interface Overview {
   daily: { day: string; visitors: number }[]; visitors: number; signup_views: number; signups: number; owners: number;
   hotels: number; gas: number; shops?: number; workers: number; workers_active: number; requests: number; requests_cancelled: number; published: number;
   pages: { path: string; views: number }[];
 }
-interface Account { id: string; name: string; owner_name: string | null; owner_email: string | null; types: string | null; locations: number; workers: number; created_at: string; last_active_at: string | null; status: string }
+interface Account { id: string; name: string; owner_name: string | null; owner_email: string | null; types: string | null; locations: number; workers: number; created_at: string; last_active_at: string | null; status: string;
+  plan?: PlanId; plan_until?: string | null; plan_source?: string | null; plan_now?: PlanId }
 
 export default function AdminApp() {
   const { signOut } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
-  const [tab, setTab] = useState<'overview' | 'accounts'>('overview');
+  const [tab, setTab] = useState<'overview' | 'accounts' | 'coupons'>('overview');
   const [days, setDays] = useState(14);
   const [ov, setOv] = useState<Overview | null>(null);
   const [accts, setAccts] = useState<Account[] | null>(null);
@@ -37,19 +39,21 @@ export default function AdminApp() {
   const tabs = <div className="subtabs">
     <button className={`btn small${tab === 'overview' && !open ? ' primary' : ''}`} onClick={() => { setTab('overview'); setOpen(null); }}>Overview</button>
     <button className={`btn small${tab === 'accounts' && !open ? ' primary' : ''}`} onClick={() => { setTab('accounts'); setOpen(null); }}>Owner accounts</button>
+    <button className={`btn small${tab === 'coupons' && !open ? ' primary' : ''}`} onClick={() => { setTab('coupons'); setOpen(null); }}>Coupons</button>
     {open && <button className="btn small primary">{open.name}</button>}
   </div>;
 
   let body;
   if (open) body = <AccountView a={open} onBack={() => setOpen(null)} reload={loadAccts} />;
+  else if (tab === 'coupons') body = <Coupons />;
   else if (tab === 'accounts') body = (
     <section className="panel"><div className="panel-head"><h2>Owner accounts</h2><span className="hint" style={{ margin: 0 }}>{accts?.length ?? 0} total</span></div>
-      {!accts ? <Loading /> : <div className="table-wrap"><table className="data"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
+      {!accts ? <Loading /> : <div className="table-wrap"><table className="data"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
         <tbody>{accts.map((a) => <tr key={a.id}><td>{a.name}</td><td>{a.owner_name || '—'}<div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></td><td>{a.types || '—'}</td>
-          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
+          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td>{PLANS[a.plan_now ?? 'free'].name}{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
           <td>{a.status === 'active' ? <span className="tag ok">Active</span> : <span className="tag bad">Suspended</span>}</td>
           <td><button className="btn small" onClick={() => setOpen(a)}>Open</button></td></tr>)}
-          {!accts.length && <tr><td colSpan={9}>No owners have signed up yet.</td></tr>}</tbody></table></div>}
+          {!accts.length && <tr><td colSpan={10}>No owners have signed up yet.</td></tr>}</tbody></table></div>}
     </section>);
   else body = !ov ? <Loading /> : <OverviewView ov={ov} days={days} setDays={setDays} />;
 
@@ -121,6 +125,7 @@ function AccountView({ a, onBack, reload }: { a: Account; onBack: () => void; re
         : <button className="btn small" onClick={() => setStatus('active')}>Reactivate</button>}</div>
       <div className="twocol"><div><b>{a.owner_name || '—'}</b><div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></div>
         <div><b>{b.locs.length} location{b.locs.length === 1 ? '' : 's'} · {b.emps.length} workers</b><div className="hint" style={{ margin: 0 }}>{b.locs.map((l) => `${l.name} (${TYPE_LABEL[l.type] ?? 'Other'})`).join(', ')}</div></div></div></section>
+    <PlanControl a={a} reload={reload} />
     <section className="panel"><div className="panel-head"><h2>Workers</h2></div>
       <div className="table-wrap"><table className="data"><thead><tr><th>Name</th><th>Login</th><th>Email</th><th>Phone</th><th className="num">Shifts this week</th><th className="num">Hours</th><th className="num">Rate</th><th className="num">Pay this period</th></tr></thead>
         <tbody>{b.emps.map((w) => <tr key={w.id}><td>{w.name}</td><td><StatusTag s={w.status} /></td><td>{w.email || '—'}</td><td>{w.phone || '—'}</td>
@@ -162,4 +167,87 @@ function AdminPayroll({ orgId }: { orgId: string }) {
             <ConfirmButton className="btn small danger" label="Reopen" confirmLabel="Click again" onConfirm={() => reopen(r)} /></div>}</td></tr>)}
           {!runs.length && <tr><td colSpan={7}>No payroll marked paid yet.</td></tr>}</tbody></table></div></section>
   );
+}
+
+/** Admin: set a business's plan by hand (e.g. a paying customer by invoice, or a free upgrade). */
+function PlanControl({ a, reload }: { a: Account; reload: () => void }) {
+  const toast = useToast();
+  const [f, setF] = useState({ plan: (a.plan ?? 'free') as PlanId, until: a.plan_until ? a.plan_until.slice(0, 10) : '' });
+  const save = async () => {
+    const { error } = await supabase.rpc('admin_set_plan', { p_org: a.id, p_plan: f.plan, p_until: f.plan !== 'free' && f.until ? new Date(f.until + 'T23:59:59').toISOString() : null });
+    if (error) toast(errText(error), 'error', 'Not saved'); else { toast(`${a.name} is on ${PLANS[f.plan].name}${f.plan !== 'free' ? (f.until ? ` until ${untilText(f.until + 'T12:00:00')}` : ' with no end date') : ''}.`, 'ok', 'Plan saved'); reload(); }
+  };
+  return (
+    <section className="panel"><div className="panel-head"><h2>Plan</h2><span className="tag plain">Now: {PLANS[a.plan_now ?? 'free'].name}</span></div>
+      <p className="hint">Change it by hand, for example for a customer who paid by invoice. Coupons the owner used show in Coupons.</p>
+      <div className="twocol" style={{ maxWidth: 560 }}>
+        <div className="field"><label htmlFor="ap-plan">Plan</label><select id="ap-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as PlanId })}>
+          {(['free', 'plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name}{PLANS[p].price ? ` ($${PLANS[p].price}/month)` : ' (free)'}</option>)}</select></div>
+        {f.plan !== 'free' && <div className="field"><label htmlFor="ap-until">Until (empty = no end date)</label><input id="ap-until" type="date" value={f.until} onChange={(e) => setF({ ...f, until: e.target.value })} /></div>}
+      </div>
+      <div className="actions"><button className="btn primary" onClick={save}>Save plan</button></div>
+    </section>);
+}
+
+interface Coupon { id: string; code: string; plan: PlanId; months: number; max_uses: number | null; uses: number; expires_at: string | null; active: boolean; note: string | null; created_at: string;
+  used_by: { org: string; at: string; until: string }[] }
+
+/** Admin: make coupon codes (plan + months), copy them, see who used them, turn them off. */
+function Coupons() {
+  const toast = useToast();
+  const [rows, setRows] = useState<Coupon[] | null>(null);
+  const [f, setF] = useState({ plan: 'premium' as 'plus' | 'premium', months: 1, custom: false, count: 1, uses: '1', expires: '', note: '', prefix: 'SYS' });
+  const [made, setMade] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.rpc('admin_coupons');
+    if (error) toast(errText(error), 'error', "Couldn't load coupons"); else setRows(data as Coupon[]);
+  }, [toast]);
+  useEffect(() => { load(); }, [load]);
+  const make = async () => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc('generate_coupons', { p_plan: f.plan, p_months: f.months, p_count: f.count, p_max_uses: f.uses.trim() ? Math.max(1, +f.uses) : null,
+      p_expires: f.expires ? new Date(f.expires + 'T23:59:59').toISOString() : null, p_note: f.note, p_prefix: f.prefix });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not made');
+    const codes = (data as Coupon[]).map((c) => c.code); setMade(codes); load();
+    toast(`${codes.length} code${codes.length > 1 ? 's' : ''} ready: ${PLANS[f.plan].name} for ${f.months} month${f.months > 1 ? 's' : ''}.`, 'ok', 'Coupons made');
+  };
+  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); toast('Copied.', 'ok', 'Copied'); } catch { toast('Select the code and copy it.', 'error', "Couldn't copy"); } };
+  const setActive = async (c: Coupon, active: boolean) => {
+    const { error } = await supabase.from('coupons').update({ active }).eq('id', c.id);
+    if (error) toast(errText(error), 'error', 'Not saved'); else { toast(active ? 'Coupon turned back on.' : 'Coupon turned off. It can\'t be used any more.', 'ok', 'Saved'); load(); }
+  };
+  const state = (c: Coupon) => !c.active ? ['plain', 'Off'] : c.expires_at && new Date(c.expires_at) < new Date() ? ['bad', 'Expired'] : c.max_uses !== null && c.uses >= c.max_uses ? ['plain', 'Used up'] : ['ok', 'Active'];
+  return (<>
+    <section className="panel"><div className="panel-head"><h2>Make coupon codes</h2></div>
+      <p className="hint">An owner types the code under Plan &amp; billing and gets the plan for that many months, with no card. A code works once per business.</p>
+      <div className="coupon-form">
+        <div className="field"><label htmlFor="cp-plan">Plan</label><select id="cp-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as 'plus' | 'premium' })}>
+          <option value="premium">Premium (unlimited locations)</option><option value="plus">Plus (up to 3 locations)</option></select></div>
+        <div className="field"><span className="lbl">How long</span><div className="seg" role="group" aria-label="Months">
+          {[1, 2, 3].map((m) => <button key={m} type="button" className={!f.custom && f.months === m ? 'on' : ''} onClick={() => setF({ ...f, months: m, custom: false })}>{m} month{m > 1 ? 's' : ''}</button>)}
+          <button type="button" className={f.custom ? 'on' : ''} onClick={() => setF({ ...f, custom: true })}>Other</button></div>
+          {f.custom && <input type="number" min={1} max={24} value={f.months} onChange={(e) => setF({ ...f, months: Math.max(1, Math.min(24, +e.target.value || 1)) })} aria-label="Months" style={{ marginTop: 6, maxWidth: 120 }} />}</div>
+        <div className="field"><label htmlFor="cp-count">How many codes</label><input id="cp-count" type="number" min={1} max={200} value={f.count} onChange={(e) => setF({ ...f, count: Math.max(1, Math.min(200, +e.target.value || 1)) })} /></div>
+        <div className="field"><label htmlFor="cp-uses">Businesses per code</label><input id="cp-uses" type="number" min={1} value={f.uses} onChange={(e) => setF({ ...f, uses: e.target.value })} placeholder="No limit" />
+          <span className="hint" style={{ margin: 0 }}>1 = a private code. Empty = anyone (a promo code).</span></div>
+        <div className="field"><label htmlFor="cp-exp">Use by (optional)</label><input id="cp-exp" type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} /></div>
+        <div className="field"><label htmlFor="cp-pre">Starts with</label><input id="cp-pre" type="text" maxLength={10} value={f.prefix} onChange={(e) => setF({ ...f, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} /></div>
+        <div className="field" style={{ gridColumn: '1 / -1' }}><label htmlFor="cp-note">Note (only you see it)</label><input id="cp-note" type="text" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="e.g. Lafayette hotel owners meetup" /></div>
+      </div>
+      <div className="actions"><button className="btn primary" disabled={busy} onClick={make}>{busy ? 'Making…' : `Make ${f.count} code${f.count > 1 ? 's' : ''}`}</button></div>
+      {made.length > 0 && <div className="coupon-made"><div className="panel-head"><b>New codes · {PLANS[f.plan].name}, {f.months} month{f.months > 1 ? 's' : ''}</b><button className="btn small" onClick={() => copy(made.join('\n'))}>Copy all</button></div>
+        <div className="codes">{made.map((c) => <button key={c} className="code" onClick={() => copy(c)} title="Copy">{c}</button>)}</div></div>}
+    </section>
+    <section className="panel"><div className="panel-head"><h2>All coupons</h2><span className="hint" style={{ margin: 0 }}>{rows?.length ?? 0} total</span></div>
+      {!rows ? <Loading /> : rows.length ? <div className="table-wrap"><table className="data"><thead><tr><th>Code</th><th>Plan</th><th className="num">Months</th><th>Used</th><th>Use by</th><th>Status</th><th>Note</th><th /></tr></thead>
+        <tbody>{rows.map((c) => { const [k, t] = state(c); return (<tr key={c.id}>
+          <td><button className="code" onClick={() => copy(c.code)} title="Copy">{c.code}</button></td><td>{PLANS[c.plan].name}</td><td className="num">{c.months}</td>
+          <td>{c.uses}{c.max_uses !== null ? ` of ${c.max_uses}` : ''}{c.used_by.map((u) => <div key={u.at} className="hint" style={{ margin: 0 }}>{u.org} · {untilText(u.at)}</div>)}</td>
+          <td>{c.expires_at ? untilText(c.expires_at) : '—'}</td><td><span className={`tag ${k}`}>{t}</span></td><td>{c.note ?? ''}</td>
+          <td>{c.active ? <ConfirmButton className="btn small" label="Turn off" confirmLabel="Click again" onConfirm={() => setActive(c, false)} /> : <button className="btn small" onClick={() => setActive(c, true)}>Turn on</button>}</td></tr>); })}</tbody></table></div>
+        : <p className="empty-note">No coupons yet. Make some above.</p>}
+    </section>
+  </>);
 }
