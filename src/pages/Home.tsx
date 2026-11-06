@@ -11,6 +11,7 @@ export function SiteNav() {
       <Link className="brand" to="/"><Logo /><span><b>SplitYourShift</b></span></Link>
       <nav className="navlinks" aria-label="Main">
         <a className="opt" href="#features" onClick={(e) => { e.preventDefault(); jump('features'); }}>Features</a>
+        <a className="opt" href="#video" onClick={(e) => { e.preventDefault(); jump('video'); }}>Watch video</a>
         <a className="opt" href="#how" onClick={(e) => { e.preventDefault(); jump('how'); }}>How it works</a>
         <a className="opt" href="#pricing" onClick={(e) => { e.preventDefault(); jump('pricing'); }}>Pricing</a>
         <a className="opt" href="#about" onClick={(e) => { e.preventDefault(); jump('about'); }}>About</a>
@@ -23,6 +24,10 @@ export function SiteNav() {
 
 const chip = (name: string, hue: number, dbl = false) => (
   <div className="chip" style={{ ['--h' as string]: hue }}>{name}{dbl && <span className="flag" title="Double shift: two shifts back to back">2×</span>}</div>);
+/** Set this to the YouTube link once the tutorial is uploaded there; a "Watch on YouTube" link then shows under the video. */
+const YOUTUBE_URL = '';
+const MEDIA = import.meta.env.BASE_URL + 'media/';
+
 const T = 245, K = 330, S = 90, D = 15, C = 160;
 
 export default function Home() {
@@ -34,7 +39,8 @@ export default function Home() {
           <div className="kicker">For hotels, motels, gas stations &amp; shops</div>
           <h1>The paper schedule, <em>without the paper.</em></h1>
           <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks.</p>
-          <div className="actions"><Link className="btn primary big" to="/signup">Start free</Link><Link className="btn big" to="/login">Log in</Link></div>
+          <div className="actions"><Link className="btn primary big" to="/signup">Start free</Link>
+            <a className="btn big" href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>▶ Watch the 2-minute video</a></div>
           <p className="note">Free for 1 location and up to 10 workers. No card needed.</p>
         </div>
         <div className="mock" aria-label="Example schedule">
@@ -48,6 +54,26 @@ export default function Home() {
           <div className="floating f1">Corey → Thu 11–7<small>Corey already has 5 of 5 shifts this week.</small></div>
           <div className="floating f2">Traded<small>Tiffany ↔ Corey, both stay at 5</small></div>
         </div>
+      </div></section>
+
+      <section className="band wrap" id="video"><div className="inner">
+        <h2>See how it works in 2 minutes</h2>
+        <p className="sub">Create your account, add your workers, make the week, clock in with one tap, and get payroll worked out. Step by step.</p>
+        <div className="tut">
+          <video className="tut-video" controls preload="none" playsInline poster={MEDIA + 'poster.jpg'} aria-label="SplitYourShift setup tutorial">
+            <source src={MEDIA + 'tutorial.mp4'} type="video/mp4" />
+            Your browser can't play this video. <a href={MEDIA + 'tutorial.mp4'}>Download it</a>.
+          </video>
+          <ol className="tut-steps">
+            <li><b>Create your free account</b><span>Name, business, email, password</span></li>
+            <li><b>Pick your business and shifts</b><span>Hotel, gas station or shop; 7–3, 3–11, 11–7 or your own</span></li>
+            <li><b>Add your workers</b><span>They get an email invite; no app to download</span></li>
+            <li><b>Put names into the week</b><span>Tap a name, tap a shift. Limits are checked for you</span></li>
+            <li><b>Time clock: one tap in, one tap out</b><span>Grace period, late and forgot-to-clock-out handled</span></li>
+            <li><b>Payroll is worked out</b><span>Weekly, every 2 weeks or monthly, with overtime and payslips</span></li>
+          </ol>
+        </div>
+        {YOUTUBE_URL && <p className="hint" style={{ marginTop: 12 }}><a href={YOUTUBE_URL} target="_blank" rel="noreferrer">Watch on YouTube ↗</a></p>}
       </div></section>
 
       <section className="band alt wrap" id="problem"><div className="inner">
@@ -69,18 +95,24 @@ export default function Home() {
           <div className="feat"><h3>Shifts owed</h3><p>If someone covers without a trade, SplitYourShift remembers it and suggests the payback next week.</p><div className="eg">Shea owes Dibbo 1 shift</div></div>
           <div className="feat"><h3>Time-off requests</h3><p>Workers ask from their phone. You approve and go straight to finding cover, or deny. They can cancel while it's pending.</p></div>
           <div className="feat"><h3>Your team sees their shifts</h3><p>Each worker gets their own login with their shifts, hours and estimated pay. They can look but can't change anything.</p></div>
-          <div className="feat"><h3>Pay worked out</h3><p>Set each person's hourly rate and pick weekly or every-2-weeks pay. See everyone's hours, overtime and gross pay, including extra shifts they covered.</p><div className="eg">Tiffany · 80 h × $15.50 = $1,240.00</div></div>
+          <div className="feat"><h3>One-tap time clock</h3><p>Workers tap one green circle to clock in and again to clock out. You set the grace period; late arrivals, staying late and forgotten clock-outs are handled with simple choices.</p><div className="eg">Maria clocked in 7:02 am · within 10-min grace</div></div>
+          <div className="feat"><h3>Payroll done for you</h3><p>Weekly, every 2 weeks or monthly, for each business. Hours, overtime, bonuses, deductions and printable payslips. No time clock? Pay comes from the schedule, and you can edit any hours.</p><div className="eg">Tiffany · 80 h × $15.50 = $1,240.00</div></div>
+          <div className="feat"><h3>Shift reports</h3><p>A logbook for every location. The night shift writes what happened; the morning shift and you read it, from anywhere.</p><div className="eg">Night: audit done, room 214 late checkout</div></div>
+          <div className="feat"><h3>Task lists</h3><p>Give each shift its to-do list. Workers tick tasks off on their phone and you see who did what, and when.</p><div className="eg">7–3: count the cash drawer ✓</div></div>
           <div className="feat"><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Tammy K.: 6 am – 4 pm only</div></div>
         </div>
       </div></section>
 
       <section className="band alt wrap" id="how"><div className="inner">
         <h2>Set up in about 10 minutes</h2>
-        <p className="sub">No training needed. If you can fill in the paper sheet, you can use this.</p>
+        <p className="sub">No training needed. If you can fill in the paper sheet, you can use this. <a href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>Watch the video</a> to see each step.</p>
         <ol className="how">
           <li><h3>Tell us what you run</h3><p>Hotel, gas station or shop. Add more locations later, and share workers between them.</p></li>
           <li><h3>Pick your shift pattern</h3><p>We suggest the usual one (like 7–3, 3–11, 11–7). Change start times or make 10- or 12-hour shifts.</p></li>
-          <li><h3>Drag your team in</h3><p>Add names, drag them into the week. Workers get an email invite to see their shifts.</p></li>
+          <li><h3>Add your team, fill the week</h3><p>Add names and drag them into the week. Workers get an email invite to see their shifts.</p></li>
+          <li><h3>Turn on the time clock</h3><p>Workers clock in and out from their phone. Or keep it off and pay by the schedule.</p></li>
+          <li><h3>Set your payday</h3><p>Weekly, every 2 weeks or monthly. Hours, overtime and payslips are ready on payday.</p></li>
+          <li><h3>Add reports and tasks</h3><p>A shift report logbook and a task list for each shift, if you want them.</p></li>
         </ol>
       </div></section>
 
@@ -102,7 +134,7 @@ export default function Home() {
         <p className="sub">Pay per location, not per worker. Everything is free during early access.</p>
         <div className="prices">
           <div className="price"><h3>Free</h3><div className="amt">$0</div><ul><li>1 location</li><li>Up to 10 workers</li><li>Drag-and-drop schedule, swaps, time off</li></ul><Link className="btn" to="/signup">Start free</Link></div>
-          <div className="price pro"><h3>Pro</h3><div className="amt">$39<small> / location / month</small></div><ul><li>Unlimited workers</li><li>Multiple hotels and gas stations</li><li>Shift history and payback ledger</li><li>Payroll estimate, weekly or biweekly</li></ul><Link className="btn primary" to="/signup">Start free during early access</Link></div>
+          <div className="price pro"><h3>Pro</h3><div className="amt">$39<small> / location / month</small></div><ul><li>Unlimited workers</li><li>Multiple hotels and gas stations</li><li>Time clock with grace period and swaps</li><li>Payroll: weekly, biweekly or monthly, with payslips</li><li>Shift reports and task lists</li></ul><Link className="btn primary" to="/signup">Start free during early access</Link></div>
         </div>
       </div></section>
 
@@ -115,6 +147,7 @@ export default function Home() {
         <h2>Questions</h2>
         <div className="faq" style={{ marginTop: 18 }}>
           <details><summary>Do my workers need to download an app?</summary><p>No. They get an email with a link, choose a password, and log in from any phone browser with their email or phone number.</p></details>
+          <details><summary>Do I have to use the time clock?</summary><p>No. Turn it on or off for each location. With it off, workers see no clock and payroll pays the scheduled shift hours; you can still edit anyone's hours.</p></details>
           <details><summary>Can workers change the schedule?</summary><p>No. Workers can see their shifts and the schedule, set their availability, ask for time off and cancel a request that's still pending. Only the owner moves people.</p></details>
           <details><summary>I run a motel, a gas station and a shop. Can I use one account?</summary><p>Yes. Add each location with its own shift pattern. A worker can be in both, and their weekly limit counts shifts at both.</p></details>
           <details><summary>What if a shift isn't 8 hours?</summary><p>Set any start time and any length from 2 to 16 hours, including overnight shifts.</p></details>

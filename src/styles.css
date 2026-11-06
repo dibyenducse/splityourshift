@@ -682,3 +682,12 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hrs-edit { display: inline-flex; align-items: center; gap: 4px; }
 .hrs-note { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 8px; margin-top: 4px; }
+
+/* Home: tutorial video */
+.tut { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 22px; align-items: start; }
+@media (min-width: 980px) { .tut { grid-template-columns: minmax(0, 2.1fr) minmax(250px, 1fr); } }
+.tut-video { width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; background: #0e1a24; border: 1px solid var(--line); box-shadow: 0 14px 40px rgb(0 0 0 / .14); display: block; }
+.tut-steps { margin: 0; padding: 0; list-style: none; counter-reset: tut; display: grid; gap: 10px; }
+.tut-steps li { counter-increment: tut; display: grid; grid-template-columns: 30px 1fr; column-gap: 12px; align-items: start; }
+.tut-steps li::before { content: counter(tut); grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--ok-soft); color: var(--ok); font-weight: 700; font-size: 14px; }
+.tut-steps b { font-size: 15.5px; } .tut-steps span { color: var(--muted); font-size: 14px; }
