@@ -193,7 +193,11 @@ footer.site .inner { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-con
 .badge { font-family: var(--f-mono); font-size: 12px; background: var(--bad); color: var(--surface); border-radius: 999px; padding: 0 7px; margin-left: 6px; vertical-align: 2px; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .roster-list { display: flex; flex-direction: column; gap: 6px; }
-@media (max-width: 979px) { .roster-list { flex-direction: row; overflow-x: auto; padding-bottom: 6px; } .wcard { flex: 0 0 auto; } }
+/* Phone / tablet: the schedule comes first; the staff list is a tall box that scrolls up and down, as on a PC */
+@media (max-width: 979px) {
+  .layout.two.owner > .boards { order: -1; }
+  .roster-list { max-height: min(56vh, 420px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; scrollbar-gutter: stable; }
+}
 .wcard { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .wcard:hover { border-color: var(--line-strong); }
 .wcard.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
