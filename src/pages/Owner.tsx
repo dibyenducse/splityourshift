@@ -66,7 +66,7 @@ export default function OwnerApp() {
   }, [orgId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
   // A plan picked on the home page before signing up: open its checkout once.
-  useEffect(() => { const p = wantPlan.take(); if (p === 'plus' || p === 'premium') nav(`/app/plan?plan=${p}`); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const [p, bill] = (wantPlan.take() ?? '').split('|'); if (p === 'plus' || p === 'premium') nav(`/app/plan?plan=${p}&billing=${bill === 'yearly' ? 'yearly' : 'monthly'}`); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Payroll reminder on the main screen: payday within 2 days (or past) and not marked paid yet.
   useEffect(() => {
     const soon = addDays(todayIso(), 2);

@@ -6,7 +6,8 @@ import type { Org } from '../lib/types';
 import { Loading, useToast } from '../components/ui';
 import { ProfileMenu } from '../components/Avatar';
 import { AppBar } from './AppShell';
-import { PLANS, PLAN_ORDER, locLimitText, planOf, untilText, type PlanId } from '../lib/plans';
+import { PLANS, PLAN_ORDER, dollars, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
 
@@ -23,6 +24,7 @@ export default function PlanPage() {
   const [locs, setLocs] = useState(0);
   const [hist, setHist] = useState<Redemption[]>([]);
   const [pick, setPick] = useState<PlanId | null>((['plus', 'premium'].includes(qs.get('plan') ?? '') ? qs.get('plan') : null) as PlanId | null);
+  const [billing, setBilling] = useState<Billing>(qs.get('billing') === 'yearly' ? 'yearly' : 'monthly');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -71,11 +73,12 @@ export default function PlanPage() {
             {plan.locations !== null && <span className="bar"><i style={{ width: `${Math.min(100, (locs / plan.locations) * 100)}%` }} /></span>}</div>
         </section>
 
+        <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="plan-grid">
           {PLAN_ORDER.map((id) => { const p = PLANS[id], isCur = id === cur;
             return (<div key={id} className={`plan-card${id === 'plus' ? ' pop' : ''}${pick === id ? ' on' : ''}`}>
               {id === 'plus' && <span className="tag ok plan-pop">Most popular</span>}
-              <h3>{p.name}</h3><div className="amt">{p.price ? <>${p.price}<small>/month</small></> : 'Free'}</div>
+              <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
               {isCur ? <button className="btn" disabled>Current plan</button>
@@ -85,12 +88,14 @@ export default function PlanPage() {
         </div>
 
         {sel && <section className="panel checkout" id="checkout">
-          <div className="panel-head"><h2>Checkout · {sel.name}</h2><button className="btn small" onClick={() => setPick(null)}>Cancel</button></div>
+          <div className="panel-head"><h2>Checkout · {sel.name} · {billing === 'yearly' ? 'Yearly' : 'Monthly'}</h2><button className="btn small" onClick={() => setPick(null)}>Cancel</button></div>
           <div className="co-grid">
             <div className="co-sum">
-              <div className="co-line"><span>{sel.name} plan · {locLimitText(sel.id)}</span><b>${sel.price}.00</b></div>
-              <div className="co-line"><span>Billed</span><span>Monthly</span></div>
-              <div className="co-line total"><span>Total per month</span><b>${sel.price}.00</b></div>
+              <BillingToggle value={billing} onChange={setBilling} />
+              <div className="co-line"><span>{sel.name} plan · {sel.locations === null ? 'unlimited locations' : `up to ${sel.locations} locations`}</span><b>{dollars(perMonth(sel, billing))}/month</b></div>
+              <div className="co-line"><span>Billed</span><span>{billing === 'yearly' ? 'Once a year' : 'Every month'}</span></div>
+              {billing === 'yearly' && <div className="co-line save"><span>You save (2 months free)</span><b>−{dollars(yearlySave(sel))}</b></div>}
+              <div className="co-line total"><span>{billing === 'yearly' ? 'Total per year' : 'Total per month'}</span><b>{dollars(billing === 'yearly' ? sel.yearly : sel.price)}.00</b></div>
               <p className="hint" style={{ margin: 0 }}>US dollars. Cancel any time; your data stays.</p>
             </div>
             <div className="co-pay">
@@ -103,7 +108,7 @@ export default function PlanPage() {
               </div>
               <div className="co-card" aria-disabled="true">
                 <b>Pay by card</b>
-                <p className="hint" style={{ margin: 0 }}>Card payment is coming soon. For now, use a coupon code, or email <a href={`mailto:support@splityourshift.com?subject=${encodeURIComponent(`${sel.name} plan for ${org.name}`)}`}>support@splityourshift.com</a> and we'll set up your plan.</p>
+                <p className="hint" style={{ margin: 0 }}>Card payment is coming soon. For now, use a coupon code, or email <a href={`mailto:support@splityourshift.com?subject=${encodeURIComponent(`${sel.name} plan (${billing}) for ${org.name}`)}`}>support@splityourshift.com</a> and we'll set up your plan.</p>
               </div>
             </div>
           </div>

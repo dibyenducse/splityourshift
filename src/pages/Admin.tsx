@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
@@ -25,7 +25,10 @@ export default function AdminApp() {
   const { signOut } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
-  const [tab, setTab] = useState<'overview' | 'accounts' | 'coupons'>('overview');
+  const path = useLocation().pathname;
+  // Direct links: /app/coupons and /app/accounts open those tabs.
+  const [tab, setTabState] = useState<'overview' | 'accounts' | 'coupons'>(() => path.endsWith('/coupons') ? 'coupons' : path.endsWith('/accounts') ? 'accounts' : 'overview');
+  const setTab = (t: 'overview' | 'accounts' | 'coupons') => { setTabState(t); nav(t === 'overview' ? '/app' : `/app/${t}`, { replace: true }); };
   const [days, setDays] = useState(14);
   const [ov, setOv] = useState<Overview | null>(null);
   const [accts, setAccts] = useState<Account[] | null>(null);

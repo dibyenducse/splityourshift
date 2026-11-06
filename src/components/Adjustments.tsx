@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { addDays, ago, shiftLong, todayIso } from '../lib/time';
-import { empOf } from '../lib/rules';
+import { availFor, cellKey, empOf, keysOf, parseCell, slotOf } from '../lib/rules';
 import type { Adjustment, Bundle } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
@@ -182,7 +182,7 @@ export function AdjustmentsPanel({ b, empId, owner }: { b: Bundle; empId?: strin
         <div key={l.id} className="item"><div>You owe <b>{empOf(b, l.creditor_id)?.name ?? '?'}</b> a shift</div><small>{empOf(b, l.creditor_id)?.name} covered {l.label}</small>
           {payFor === l.id ? <PaybackPicker b={b} ledgerId={l.id} onDone={() => { setPayFor(null); load(); }} />
             : <div className="actions"><button className="btn small primary" onClick={() => setPayFor(l.id)}>Pay back: pick a date and shift</button></div>}</div>))}</div></>}
-      {!owner && (ask ? <div className="option"><h4>Can't work a shift? Ask a coworker</h4>{swapForm}</div>
+      {!owner && (ask ? <div className="option swapbox"><h4>Can't work a shift? Ask a coworker</h4><SwapRequest b={b} empId={empId!} pending={rows} onSent={() => { setAsk(false); load(); }} onCancel={() => setAsk(false)} /></div>
         : <div className="actions"><button className="btn primary" onClick={() => setAsk(true)}>⇄ Ask a coworker to work one of my shifts</button></div>)}
       {upcoming.length > 0 && <><h4>Accepted swaps coming up</h4><div className="stack">{upcoming.map((a) => item(a, owner ?
         <ConfirmButton className="btn small" label="Cancel swap" confirmLabel="Tap again to cancel" onConfirm={() => update(a, 'cancel', 'Swap cancelled. Set the schedule as you need.')} /> : undefined))}</div></>}
@@ -223,4 +223,81 @@ function AcceptSwap({ b, a, busy, onGo, onCancel }: { b: Bundle; a: Adjustment; 
         <button className="btn small" onClick={onCancel}>Back</button></div>
     </div>
   );
+}
+
+/**
+ * Worker: ask a coworker to work one of my shifts, in three taps. 1) pick one of my upcoming shifts (or any date
+ * and shift), 2) pick a coworker (free / working that day / unavailable is shown), 3) check the summary and send.
+ */
+function SwapRequest({ b, empId, pending, onSent, onCancel }: { b: Bundle; empId: string; pending: Adjustment[]; onSent: () => void; onCancel: () => void }) {
+  const toast = useToast();
+  const me = empOf(b, empId);
+  const today = todayIso();
+  const myLocs = b.locs.filter((l) => me?.locs.includes(l.id)).length ? b.locs.filter((l) => me?.locs.includes(l.id)) : b.locs;
+  const mine = keysOf(b, empId).filter((k) => parseCell(k).date >= today).sort((x, y) => parseCell(x).date.localeCompare(parseCell(y).date) || (slotOf(b, x)!.start_hour - slotOf(b, y)!.start_hour)).slice(0, 12);
+  const [cell, setCell] = useState<string | null>(null);
+  const [other, setOther] = useState(false);
+  const [o, setO] = useState({ date: addDays(today, 7), loc: myLocs[0]?.id ?? '', slot: '' });
+  const [to, setTo] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const k = other ? (o.slot && o.date ? cellKey(o.slot, o.date) : null) : cell;
+  const asked = (key: string) => pending.some((a) => a.kind === 'future_swap' && a.status === 'pending' && a.from_emp === empId && a.slot_id === parseCell(key).slot && a.work_date === parseCell(key).date);
+  const loc = k ? slotOf(b, k)?.location_id : null;
+  const mates = b.emps.filter((e) => e.id !== empId && (!loc || e.locs.includes(loc))).map((e) => {
+    if (!k) return { e, state: 'ok' as const, why: '' };
+    const d = parseCell(k).date, busyThatDay = keysOf(b, e.id).find((x) => parseCell(x).date === d);
+    if (!availFor(b, e, k)) return { e, state: 'no' as const, why: "Said they can't work then" };
+    if (busyThatDay) return { e, state: 'busy' as const, why: `Working ${slotOf(b, busyThatDay) ? shiftLong(slotOf(b, busyThatDay)!.start_hour, slotOf(b, busyThatDay)!.hours) : ''} that day` };
+    return { e, state: 'ok' as const, why: 'Free then' };
+  }).sort((x, y) => ['ok', 'busy', 'no'].indexOf(x.state) - ['ok', 'busy', 'no'].indexOf(y.state) || x.e.name.localeCompare(y.e.name));
+  const label = (key: string) => { const s = slotOf(b, key)!, d = parseCell(key).date;
+    return { day: new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short' }), date: new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }),
+      time: shiftLong(s.start_hour, s.hours), where: b.locs.find((l) => l.id === s.location_id)?.name ?? '' }; };
+  const send = async () => {
+    if (!k || !to) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('request_future_swap', { p_to: to, p_slot: parseCell(k).slot, p_date: parseCell(k).date, p_note: note, p_from: null });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not sent');
+    toast(`Sent to ${empOf(b, to)?.name}. When they accept, they're on that shift and your manager is told.`, 'ok', 'Swap request sent'); onSent();
+  };
+  const slotsAt = b.slots.filter((x) => x.location_id === o.loc).sort((x, y) => x.start_hour - y.start_hour);
+  const L = k ? label(k) : null;
+  return (
+    <div className="swapreq">
+      <div className="sr-step"><span className="sr-n">1</span><div className="sr-body"><h4>Which shift can't you work?</h4>
+        <div className="sr-shifts">
+          {mine.map((key) => { const x = label(key), was = asked(key); return (
+            <button key={key} type="button" className={`sr-shift${!other && cell === key ? ' on' : ''}`} disabled={was} onClick={() => { setOther(false); setCell(key); }} aria-pressed={!other && cell === key}>
+              <span className="d">{x.day}</span><b>{x.date}</b><span className="t">{x.time}</span><span className="w">{x.where}</span>{was && <span className="tag warn">Asked</span>}</button>); })}
+          <button type="button" className={`sr-shift other${other ? ' on' : ''}`} onClick={() => { setOther(true); setCell(null); }} aria-pressed={other}>
+            <span className="d">Any</span><b>Another date</b><span className="t">even if not scheduled yet</span></button>
+        </div>
+        {!mine.length && !other && <p className="hint" style={{ margin: '6px 0 0' }}>You have no upcoming shifts on the schedule. Pick “Another date”.</p>}
+        {other && <div className="sr-other">
+          <div className="field"><label htmlFor="sr-date">Date</label><input id="sr-date" type="date" min={today} value={o.date} onChange={(e) => e.target.value && setO({ ...o, date: e.target.value })} /></div>
+          {myLocs.length > 1 && <div className="field"><label htmlFor="sr-loc">Location</label><select id="sr-loc" value={o.loc} onChange={(e) => setO({ ...o, loc: e.target.value, slot: '' })}>{myLocs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+          <div className="field"><label htmlFor="sr-slot">Shift</label><select id="sr-slot" value={o.slot} onChange={(e) => setO({ ...o, slot: e.target.value })}><option value="">Pick…</option>
+            {slotsAt.map((x) => <option key={x.id} value={x.id}>{shiftNameOf(x)} · {shiftLong(x.start_hour, x.hours)}</option>)}</select></div>
+        </div>}
+      </div></div>
+
+      <div className={`sr-step${k ? '' : ' dim'}`}><span className="sr-n">2</span><div className="sr-body"><h4>Who should work it?</h4>
+        {!k ? <p className="hint" style={{ margin: 0 }}>Pick the shift first; then you see who is free.</p>
+          : <div className="sr-mates">{mates.length ? mates.map(({ e, state, why }) => (
+            <button key={e.id} type="button" className={`sr-mate ${state}${to === e.id ? ' on' : ''}`} onClick={() => setTo(e.id)} aria-pressed={to === e.id} style={{ ['--h' as string]: e.hue }}>
+              <span className="dot" /><span className="nm">{e.name}</span><span className="st">{why}</span></button>))
+            : <p className="hint" style={{ margin: 0 }}>Nobody else works at this location yet.</p>}</div>}
+      </div></div>
+
+      <div className={`sr-step${k && to ? '' : ' dim'}`}><span className="sr-n">3</span><div className="sr-body"><h4>Send</h4>
+        {k && to && L ? <p className="sr-sum">Ask <b>{empOf(b, to)?.name}</b> to work your <b>{L.day} {L.date}</b> shift, {L.time} at {L.where}.</p>
+          : <p className="hint" style={{ margin: 0 }}>Pick a shift and a coworker.</p>}
+        <div className="field"><label htmlFor="sr-note">Note (optional)</label><input id="sr-note" type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. doctor's appointment" /></div>
+        <div className="actions" style={{ margin: 0 }}><button className="btn primary" disabled={!k || !to || busy} onClick={send}>{busy ? 'Sending…' : 'Send swap request'}</button>
+          <button className="btn" onClick={onCancel}>Cancel</button></div>
+        <span className="hint" style={{ margin: 0 }}>They can accept, decline, or choose a shift of yours to work in return. Your manager is told.</span>
+      </div></div>
+    </div>);
 }

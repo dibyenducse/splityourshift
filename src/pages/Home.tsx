@@ -1,7 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
-import { PLANS, PLAN_ORDER, wantPlan } from '../lib/plans';
+import { useState } from 'react';
+import { PLANS, PLAN_ORDER, wantPlan, type Billing } from '../lib/plans';
+import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 export function SiteNav() {
   const { me } = useAuth();
@@ -34,7 +36,8 @@ const T = 245, K = 330, S = 90, D = 15, C = 160;
 export default function Home() {
   const { me } = useAuth();
   const nav = useNavigate();
-  const choose = (id: string) => { if (id === 'free') return nav(me ? '/app' : '/signup'); if (me) return nav(`/app/plan?plan=${id}`); wantPlan.set(id); nav('/signup'); };
+  const [billing, setBilling] = useState<Billing>('monthly');
+  const choose = (id: string) => { if (id === 'free') return nav(me ? '/app' : '/signup'); if (me) return nav(`/app/plan?plan=${id}&billing=${billing}`); wantPlan.set(`${id}|${billing}`); nav('/signup'); };
   return (
     <>
       <SiteNav />
@@ -136,10 +139,11 @@ export default function Home() {
       <section className="band wrap" id="pricing"><div className="inner">
         <h2>Simple pricing</h2>
         <p className="sub">Pay per business, not per worker. Start free and move up when you add locations.</p>
+        <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="prices three">
           {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
             <div key={id} className={`price${id === 'plus' ? ' pro' : ''}`}>{id === 'plus' && <span className="tag ok" style={{ alignSelf: 'flex-start' }}>Most popular</span>}
-              <h3>{p.name}</h3><div className="amt">{p.price ? <>${p.price}<small> / month</small></> : 'Free'}</div>
+              <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
               <button className={`btn${id === 'plus' ? ' primary' : ''}`} onClick={() => choose(id)}>{id === 'free' ? 'Start free' : `Choose ${p.name}`}</button></div>); })}
