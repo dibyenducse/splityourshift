@@ -60,10 +60,10 @@ export default function Home() {
         <h2>See how it works in 2 minutes</h2>
         <p className="sub">Create your account, add your workers, make the week, clock in with one tap, and get payroll worked out. Step by step.</p>
         <div className="tut">
-          <video className="tut-video" controls preload="none" playsInline poster={MEDIA + 'poster.jpg'} aria-label="SplitYourShift setup tutorial">
+          <div className="tut-frame"><video className="tut-video" controls preload="none" playsInline poster={MEDIA + 'poster.jpg'} aria-label="SplitYourShift setup tutorial">
             <source src={MEDIA + 'tutorial.mp4'} type="video/mp4" />
             Your browser can't play this video. <a href={MEDIA + 'tutorial.mp4'}>Download it</a>.
-          </video>
+          </video></div>
           <ol className="tut-steps">
             <li><b>Create your free account</b><span>Name, business, email, password</span></li>
             <li><b>Pick your business and shifts</b><span>Hotel, gas station or shop; 7–3, 3–11, 11–7 or your own</span></li>
