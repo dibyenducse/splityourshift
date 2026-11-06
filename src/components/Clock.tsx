@@ -53,6 +53,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const openKey = open?.slot_id ? cellKey(open.slot_id, open.work_date) : null;
   const me = empOf(b, empId);
   const clockLocs = b.locs.filter((l) => me?.locs.includes(l.id) && l.time_clock !== false);
+  // the owner keeps the clock but pays by the schedule: late or extra minutes don't change pay
+  const schedPay = clockLocs.length > 0 && clockLocs.every((l) => l.pay_method === 'schedule');
   const openEnd = openKey && slotOf(b, openKey) ? shiftWindow(b, openKey).end : null;
   const forgot = !!open && !!openEnd && now > openEnd.getTime() + 30 * 60000;
 
@@ -131,15 +133,15 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
       </div>
       {!push && isIOS() && !isStandalone() && <p className="hint" style={{ textAlign: 'center', margin: '8px 0 0' }}>iPhone: tap Share → Add to Home Screen, then open SplitYourShift from your home screen to get reminders.</p>}
       {missed && <MissedPunchSheet b={b} empId={empId} onClose={() => setMissed(false)} reload={reload} />}
-      {ask?.mode === 'late' && <LateSheet b={b} empId={empId} r={ask} onClose={() => setAsk(null)} reload={reload} />}
-      {ask?.mode === 'extra' && <ExtraSheet b={b} empId={empId} r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {ask?.mode === 'late' && <LateSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {ask?.mode === 'extra' && <ExtraSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
       {ask?.mode === 'unscheduled' && <CoverAsk b={b} empId={empId} entryId={ask.entry_id} onClose={() => setAsk(null)} reload={reload} />}
     </section>
   );
 }
 
 /** Late beyond the grace period: normal payroll, ask the owner to pay from the scheduled start, or a time swap. */
-function LateSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string; r: Extract<ClockResult, { mode: 'late' }>; onClose: () => void; reload: () => void }) {
+function LateSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empId: string; schedPay?: boolean; r: Extract<ClockResult, { mode: 'late' }>; onClose: () => void; reload: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [swap, setSwap] = useState(false);
@@ -157,10 +159,10 @@ function LateSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string;
       <div className="sec"><p>{r.label}. Your real clock-in time ({clockTime(new Date())}) is saved{who ? <>; <b>{who}</b> stayed {r.covered_minutes} minutes for you</> : ''}. How should this be handled?</p></div>
       {swap ? <div className="option best"><h4>Request a time swap</h4><p>Pick when you give the time back. {who ?? 'Your coworker'} accepts, declines or proposes another time.</p>
         <TimeSwapPicker b={b} empId={empId} other={r.covered_by} minutes={m} iOwe entryId={r.entry_id} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
-        <div className="option"><h4>Normal payroll</h4><p>You're paid from your real clock-in time.</p>
-          <div><button className="btn" disabled={busy} onClick={() => choose('payroll')}>Use normal payroll</button></div></div>
-        <div className="option"><h4>Request paid adjustment</h4><p>Ask your manager to pay you from the scheduled start. They approve or keep the real time.</p>
-          <div><button className="btn" disabled={busy} onClick={() => choose('paid')}>Ask my manager</button></div></div>
+        <div className="option"><h4>Normal payroll</h4><p>{schedPay ? "Your pay follows the schedule, so being late doesn't change it. Your real clock-in time is kept." : "You're paid from your real clock-in time."}</p>
+          <div><button className="btn" disabled={busy} onClick={() => choose('payroll')}>{schedPay ? 'OK' : 'Use normal payroll'}</button></div></div>
+        {!schedPay && <div className="option"><h4>Request paid adjustment</h4><p>Ask your manager to pay you from the scheduled start. They approve or keep the real time.</p>
+          <div><button className="btn" disabled={busy} onClick={() => choose('paid')}>Ask my manager</button></div></div>}
         <div className="option best"><h4>Request time swap</h4><p>Give {m} minutes back {who ? `to ${who}` : 'to a coworker'} on a future date and shift you pick.</p>
           <div><button className="btn primary" disabled={busy} onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
       </>}
@@ -169,14 +171,14 @@ function LateSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string;
 }
 
 /** Clocked out past the shift (beyond grace): normal payroll (the extra time is paid) or a time swap. */
-function ExtraSheet({ b, empId, r, onClose, reload }: { b: Bundle; empId: string; r: Extract<ClockResult, { mode: 'extra' }>; onClose: () => void; reload: () => void }) {
+function ExtraSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empId: string; schedPay?: boolean; r: Extract<ClockResult, { mode: 'extra' }>; onClose: () => void; reload: () => void }) {
   const [swap, setSwap] = useState(false);
   return (
     <Sheet eyebrow="Clocked out" title={`You stayed ${r.extra_minutes} minutes after your shift`} onClose={onClose}>
       <div className="sec"><p>{r.label ? `${r.label}. ` : ''}Your hours are saved{r.next_name ? <>. <b>{r.next_name}</b> came late after you</> : ''}. How should the extra time be handled?</p></div>
       {swap ? <div className="option best"><h4>Future time swap</h4><p>Pick when the time is given back to you. {r.next_name ?? 'Your coworker'} accepts, declines or proposes another time.</p>
         <TimeSwapPicker b={b} empId={empId} other={r.next_emp} minutes={r.extra_minutes} entryId={undefined} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
-        <div className="option"><h4>Normal payroll</h4><p>The extra {r.extra_minutes} minutes are paid with your hours.</p>
+        <div className="option"><h4>Normal payroll</h4><p>{schedPay ? `Your pay follows the schedule, so the extra ${r.extra_minutes} minutes aren't paid. Your real clock-out time is kept.` : `The extra ${r.extra_minutes} minutes are paid with your hours.`}</p>
           <div><button className="btn" onClick={onClose}>Use normal payroll</button></div></div>
         <div className="option best"><h4>Future time swap</h4><p>{r.next_name ?? 'A coworker'} gives you {r.extra_minutes} minutes back on a date and shift you pick.</p>
           <div><button className="btn primary" onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>

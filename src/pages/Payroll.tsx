@@ -148,7 +148,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
-        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false ? 'Time clock is off here: hours come from the assigned schedule and follow every change to it. You can type in different hours for anyone.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
+        {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false || loc.pay_method === 'schedule' ? (loc.time_clock === false ? 'Time clock is off here:' : 'Paid by the schedule (the time clock is kept for records):') + ' Hours come from the assigned schedule and follow every change to it. You can type in different hours for anyone.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
         {locked && <div className="banner"><p><b>Paid and locked.</b> Marked paid {new Date(row!.run!.paid_at).toLocaleString('en-US')}. These numbers won't change, even if rates or hours change later. To correct it, write to <a href="mailto:support@splityourshift.com">support@splityourshift.com</a>; support can reopen it, and that is logged.</p></div>}
         {!locked && open.length > 0 && <div className="banner warn"><p><b>{open.map((l) => l.name).join(', ')}</b> {open.length === 1 ? 'is' : 'are'} still clocked in for this period. Those hours count after they clock out (or after you fix them in Time clock).</p></div>}
 
@@ -249,7 +249,7 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
         <summary aria-label={open ? 'Collapse payroll settings' : 'Expand payroll settings'}>
           <span className="ps-title"><h2>Payroll settings · {loc.name}</h2>
             <span className="ps-chips"><span className="tag plain">{FREQ_LABEL[f.pay_frequency]}</span><span className="tag plain">{f.overtime ? `OT after ${f.ot_after} h` : 'No overtime'}</span>
-              <span className={`tag ${f.time_clock ? 'ok' : 'warn'}`}>{f.time_clock ? `Clock on · grace ${f.grace_minutes} min` : 'Clock off · scheduled hours'}</span></span></span>
+              <span className={`tag ${f.time_clock ? 'ok' : 'warn'}`}>{f.time_clock ? (f.pay_method === 'schedule' ? 'Clock on · pay by schedule' : `Clock on · grace ${f.grace_minutes} min`) : 'Clock off · scheduled hours'}</span></span></span>
           <span className="ps-chev">{chev}</span></summary>
         {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
           {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
@@ -298,10 +298,11 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
                 {[10, 15, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}<option value={-1}>Custom…</option></select>
               {![10, 15, 30].includes(f.grace_minutes) && <label><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Custom grace minutes" /> minutes</label>}
             </div>
-            <span className="hint">Within {f.grace_minutes} minutes of the start there is no late notice. Later than that, the worker picks normal payroll, a paid adjustment (you approve) or a time swap. Real clock times are always saved.</span>
+            <span className="hint">Within {f.grace_minutes} minutes of the start there is no late notice. {f.pay_method === 'schedule' ? 'Later than that, the worker is told it was late and can offer a time swap; pay still follows the schedule.' : 'Later than that, the worker picks normal payroll, a paid adjustment (you approve) or a time swap.'} Real clock times are always saved.</span>
             <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'actual'} onChange={() => setF({ ...f, pay_method: 'actual' })} /> Pay actual clock-in to clock-out time</label>
             <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'grace'} onChange={() => setF({ ...f, pay_method: 'grace' })} /> Pay scheduled shift hours, with the grace period paid</label>
-            <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}. Work past the shift (beyond grace) and overtime are always paid; nothing is counted twice.</span>
+            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'schedule'} onChange={() => setF({ ...f, pay_method: 'schedule' })} /> Pay by the schedule only (keep the time clock for records)</label>
+            <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}. {f.pay_method === 'schedule' ? 'Workers still clock in and out, so you see who came and when; payroll pays each assigned shift, follows every schedule change, and you can edit anyone\'s hours.' : 'Work past the shift (beyond grace) and overtime are always paid; nothing is counted twice.'}</span>
           </>}
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
           {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in Time clock.</span>}

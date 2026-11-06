@@ -113,7 +113,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
             : <p className="empty-note">No shifts this week.</p>}</div></section>
 
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
-          <p className="hint">{clockOn ? 'Pay counts the hours you clocked in and out' : 'Pay counts your scheduled shift hours'}, before taxes. Your manager sets your rate.</p>
+          <p className="hint">{clockOn && !b.locs.filter((l) => w.locs.includes(l.id)).every((l) => l.pay_method === 'schedule' || l.time_clock === false) ? 'Pay counts the hours you clocked in and out' : 'Pay counts your scheduled shift hours'}, before taxes. Your manager sets your rate.</p>
           <div className="tiles">
             {pay.map((x) => <div key={x.location_id} className="tile"><div className="k">Next payday{pay.length > 1 ? ` · ${x.location_name}` : ''} · {dateShort(x.next_pay_date)}</div><div className="v">{money(x.next_net)}</div>
               <div className="s">{x.next_paid ? 'paid · ' : ''}for {periodTitle({ period_start: x.next_start, period_end: x.next_end })} · {x.next_hours} h</div></div>)}

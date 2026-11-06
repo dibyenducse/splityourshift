@@ -15,7 +15,7 @@ export interface Loc {
   // payroll schedule for this business (see src/lib/payroll.ts)
   pay_frequency?: 'weekly' | 'biweekly' | 'monthly'; pay_anchor?: string; pay_weekday?: number; pay_month_day?: number; pay_month_offset?: number; overtime?: boolean;
   ot_after?: number; ot_mode?: 'multiplier' | 'fixed'; ot_multiplier?: number; ot_fixed_rate?: number;
-  grace_minutes?: number; mutual_approval?: boolean; pay_method?: 'actual' | 'grace'; pay_grace_minutes?: number;
+  grace_minutes?: number; mutual_approval?: boolean; pay_method?: 'actual' | 'grace' | 'schedule'; pay_grace_minutes?: number;
   /** Time clock on at this location (off: no clock in/out; payroll pays scheduled hours). */
   time_clock?: boolean;
 }
