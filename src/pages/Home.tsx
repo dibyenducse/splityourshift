@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
 import { useEffect, useState } from 'react';
-import { PLANS, PLAN_ORDER, wantPlan, type Billing } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, wantPlan, type Billing } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 export function SiteNav() {
@@ -152,11 +152,11 @@ export default function Home() {
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="prices three">
           {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
-            <div key={id} className={`price${id === 'plus' ? ' pro' : ''}`}>{id === 'plus' && <span className="tag ok" style={{ alignSelf: 'flex-start' }}>Most popular</span>}
+            <div key={id} className={`price${id === POPULAR ? ' pro' : ''}`}>{id === POPULAR && <span className="tag ok" style={{ alignSelf: 'flex-start' }}>Most popular</span>}
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
-              <button className={`btn${id === 'plus' ? ' primary' : ''}`} onClick={() => choose(id)}>{`Choose ${p.name}`}</button></div>); })}
+              <button className={`btn${id === POPULAR ? ' primary' : ''}`} onClick={() => choose(id)}>{`Choose ${p.name}`}</button></div>); })}
         </div>
         <p className="hint" style={{ marginTop: 12 }}>Have a coupon code? Enter it under Plan &amp; billing after you sign up.</p>
       </div></section>

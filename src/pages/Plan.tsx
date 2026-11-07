@@ -6,7 +6,7 @@ import type { Org } from '../lib/types';
 import { Loading, useToast } from '../components/ui';
 import { ProfileMenu } from '../components/Avatar';
 import { AppBar } from './AppShell';
-import { PLANS, PLAN_ORDER, dollars, locLimitOf, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, dollars, locLimitOf, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
@@ -77,8 +77,8 @@ export default function PlanPage() {
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="plan-grid">
           {PLAN_ORDER.map((id) => { const p = PLANS[id], isCur = id === cur;
-            return (<div key={id} className={`plan-card${id === 'plus' ? ' pop' : ''}${pick === id ? ' on' : ''}`}>
-              {id === 'plus' && <span className="tag ok plan-pop">Most popular</span>}
+            return (<div key={id} className={`plan-card${id === POPULAR ? ' pop' : ''}${pick === id ? ' on' : ''}`}>
+              {id === POPULAR && <span className="tag ok plan-pop">Most popular</span>}
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>

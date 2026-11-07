@@ -11,102 +11,83 @@ import { WeekGrid } from '../components/WeekGrid';
 import { dateShort, payRuns, periodTitle, reopenRun, type PayRun } from '../lib/payroll';
 import { AppBar } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
+import { ActivityLog, Dashboard, PlansEditor, Users } from './AdminPanel';
 import { PLANS, untilText, type PlanId } from '../lib/plans';
 
-interface Overview {
-  daily: { day: string; visitors: number }[]; visitors: number; signup_views: number; signups: number; owners: number;
-  hotels: number; gas: number; shops?: number; workers: number; workers_active: number; requests: number; requests_cancelled: number; published: number;
-  pages: { path: string; views: number }[];
-}
 interface Account { id: string; name: string; owner_name: string | null; owner_email: string | null; types: string | null; locations: number; workers: number; created_at: string; last_active_at: string | null; status: string;
   plan?: PlanId; plan_until?: string | null; plan_source?: string | null; plan_now?: PlanId; location_limit?: number | null }
+
+type Section = 'dashboard' | 'businesses' | 'users' | 'plans' | 'coupons' | 'log';
+const SECTIONS: { id: Section; label: string; icon: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z' },
+  { id: 'businesses', label: 'Businesses', icon: 'M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6' },
+  { id: 'users', label: 'Users', icon: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.6' },
+  { id: 'plans', label: 'Plans & pricing', icon: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01' },
+  { id: 'coupons', label: 'Coupons', icon: 'M3 8a2 2 0 0 0 0 4v6h18v-6a2 2 0 0 1 0-4V4H3zM13 4v16' },
+  { id: 'log', label: 'Activity log', icon: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z' },
+];
 
 export default function AdminApp() {
   const { signOut } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
   const path = useLocation().pathname;
-  // Direct links: /app/coupons and /app/accounts open those tabs.
-  const [tab, setTabState] = useState<'overview' | 'accounts' | 'coupons'>(() => path.endsWith('/coupons') ? 'coupons' : path.endsWith('/accounts') ? 'accounts' : 'overview');
-  const setTab = (t: 'overview' | 'accounts' | 'coupons') => { setTabState(t); nav(t === 'overview' ? '/app' : `/app/${t}`, { replace: true }); };
-  const [days, setDays] = useState(14);
-  const [ov, setOv] = useState<Overview | null>(null);
+  // Direct links: /app/<section> (e.g. /app/coupons); /app/accounts still opens Businesses.
+  const fromPath = (): Section => { const last = path.split('/').pop() ?? ''; return last === 'accounts' ? 'businesses' : (SECTIONS.some((x) => x.id === last) ? last as Section : 'dashboard'); };
+  const [tab, setTabState] = useState<Section>(fromPath);
+  useEffect(() => { setTabState(fromPath()); setOpen(null); }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
   const [accts, setAccts] = useState<Account[] | null>(null);
   const [open, setOpen] = useState<Account | null>(null);
   const [account, setAccount] = useState(false);
+  const [q, setQ] = useState(''); const [fPlan, setFPlan] = useState(''); const [fStatus, setFStatus] = useState('');
+  const setTab = (t: Section) => { setTabState(t); setOpen(null); nav(t === 'dashboard' ? '/app' : `/app/${t}`, { replace: true }); window.scrollTo({ top: 0 }); };
 
-  useEffect(() => { supabase.rpc('admin_overview', { p_days: days }).then(({ data, error }) => { if (error) toast(errText(error), 'error', "Couldn't load"); else setOv(data as Overview); }); }, [days, toast]);
-  const loadAccts = () => supabase.rpc('admin_accounts').then(({ data, error }) => { if (error) toast(errText(error), 'error', "Couldn't load"); else setAccts(data as Account[]); });
+  const loadAccts = () => supabase.rpc('admin_accounts').then(({ data, error }) => { if (error) toast(errText(error), 'error', "Couldn't load"); else { setAccts(data as Account[]); setOpen((o) => (o ? (data as Account[]).find((x) => x.id === o.id) ?? o : o)); } });
   useEffect(() => { loadAccts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openBusiness = (id: string) => { const a = accts?.find((x) => x.id === id); if (a) { setTabState('businesses'); setOpen(a); } };
 
-  const tabs = <div className="subtabs">
-    <button className={`btn small${tab === 'overview' && !open ? ' primary' : ''}`} onClick={() => { setTab('overview'); setOpen(null); }}>Overview</button>
-    <button className={`btn small${tab === 'accounts' && !open ? ' primary' : ''}`} onClick={() => { setTab('accounts'); setOpen(null); }}>Owner accounts</button>
-    <button className={`btn small${tab === 'coupons' && !open ? ' primary' : ''}`} onClick={() => { setTab('coupons'); setOpen(null); }}>Coupons</button>
-    {open && <button className="btn small primary">{open.name}</button>}
-  </div>;
+  const shown = (accts ?? []).filter((a) => (!fPlan || (a.plan_now ?? 'free') === fPlan) && (!fStatus || a.status === fStatus)
+    && (!q.trim() || `${a.name} ${a.owner_name} ${a.owner_email} ${a.types}`.toLowerCase().includes(q.trim().toLowerCase())));
 
   let body;
   if (open) body = <AccountView a={open} onBack={() => setOpen(null)} reload={loadAccts} />;
-  else if (tab === 'coupons') body = <Coupons />;
-  else if (tab === 'accounts') body = (
-    <section className="panel"><div className="panel-head"><h2>Owner accounts</h2><span className="hint" style={{ margin: 0 }}>{accts?.length ?? 0} total</span></div>
-      {!accts ? <Loading /> : <div className="table-wrap"><table className="data"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
-        <tbody>{accts.map((a) => <tr key={a.id}><td>{a.name}</td><td>{a.owner_name || '—'}<div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></td><td>{a.types || '—'}</td>
-          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td>{PLANS[a.plan_now ?? 'free'].name}{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}{a.location_limit ? <div className="hint" style={{ margin: 0 }}>limit {a.location_limit} locations</div> : null}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
+  else if (tab === 'dashboard') body = <Dashboard openBusiness={openBusiness} />;
+  else if (tab === 'users') body = <Users />;
+  else if (tab === 'plans') body = <PlansEditor />;
+  else if (tab === 'coupons') body = <><div className="ad-head"><div><h1>Coupons</h1><p className="hint" style={{ margin: 0 }}>Codes owners type under Plan &amp; billing to get a plan for some months, with no card.</p></div></div><Coupons /></>;
+  else if (tab === 'log') body = <ActivityLog />;
+  else body = (<>
+    <div className="ad-head"><div><h1>Businesses</h1><p className="hint" style={{ margin: 0 }}>Every owner account. Open one to see its schedule and payroll, change its plan, or suspend it.</p></div></div>
+    <section className="panel">
+      <div className="ad-tools">
+        <input type="search" className="ad-search" placeholder="Search business, owner or email…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search businesses" />
+        <select value={fPlan} onChange={(e) => setFPlan(e.target.value)} aria-label="Plan"><option value="">All plans</option>{(['free', 'plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name}</option>)}</select>
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="suspended">Suspended</option></select>
+        <span className="hint" style={{ margin: 0 }}>{shown.length} of {accts?.length ?? 0}</span>
+      </div>
+      {!accts ? <Loading /> : <div className="table-wrap"><table className="data ad-table"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
+        <tbody>{shown.map((a) => <tr key={a.id} className="clickrow" onClick={() => setOpen(a)}><td><b>{a.name}</b></td><td>{a.owner_name || '—'}<div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></td><td>{a.types || '—'}</td>
+          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td><span className="tag plain">{PLANS[a.plan_now ?? 'free'].name}</span>{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}{a.location_limit ? <div className="hint" style={{ margin: 0 }}>limit {a.location_limit} locations</div> : null}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
           <td>{a.status === 'active' ? <span className="tag ok">Active</span> : <span className="tag bad">Suspended</span>}</td>
-          <td><button className="btn small" onClick={() => setOpen(a)}>Open</button></td></tr>)}
-          {!accts.length && <tr><td colSpan={10}>No owners have signed up yet.</td></tr>}</tbody></table></div>}
-    </section>);
-  else body = !ov ? <Loading /> : <OverviewView ov={ov} days={days} setDays={setDays} />;
+          <td><button className="btn small" onClick={(e) => { e.stopPropagation(); setOpen(a); }}>Open</button></td></tr>)}
+          {!shown.length && <tr><td colSpan={10}><p className="empty-note">{accts.length ? 'No businesses match.' : 'No owners have signed up yet.'}</p></td></tr>}</tbody></table></div>}
+    </section></>);
 
   return (
     <>
       <AppBar subtitle="Admin panel" onAccount={() => setAccount(true)} who={<b>Admin</b>}
-        profile={<ProfileMenu name="Admin" role="SplitYourShift admin" items={[{ label: 'Account settings', hint: 'Name, email, photo, password', onClick: () => nav('/app/account') }]} />} />
-      <div className="wrap"><div className="layout">{tabs}{body}</div></div>
+        profile={<ProfileMenu name="Admin" role="SplitYourShift admin" items={[{ label: 'Account settings', onClick: () => nav('/app/account'), icon: 'account' }]} />} />
+      <div className="wrap ad-wrap"><div className="ad-shell">
+        <nav className="ad-nav" aria-label="Admin sections">{SECTIONS.map((x) => (
+          <button key={x.id} className={`ad-navbtn${tab === x.id ? ' on' : ''}`} aria-current={tab === x.id ? 'page' : undefined} onClick={() => setTab(x.id)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={x.icon} /></svg>{x.label}</button>))}</nav>
+        <main className="ad-main">{body}</main>
+      </div></div>
       {account && <Sheet eyebrow="My account" title="Admin" onClose={() => setAccount(false)}>
-        <div className="sec"><p>You can see every owner, worker and request, but you can't change anyone's schedule.</p></div>
+        <div className="sec"><p>You can see every business, worker and request, change plans and prices, and block logins. You can't change anyone's schedule.</p></div>
         <div className="actions"><button className="btn" onClick={signOut}>Log out</button></div></Sheet>}
     </>
   );
-}
-
-function OverviewView({ ov, days, setDays }: { ov: Overview; days: number; setDays: (n: number) => void }) {
-  const W = 560, H = 190, pl = 34, pb = 22, pt = 8;
-  const vals = ov.daily.map((d) => d.visitors);
-  const max = Math.max(10, Math.ceil(Math.max(...vals, 0) / 10) * 10);
-  const bw = (W - pl) / Math.max(1, vals.length);
-  const y = (v: number) => pt + (H - pt - pb) * (1 - v / max);
-  const ticks = [0, max / 2, max];
-  const every = Math.ceil(vals.length / 7);
-  const funnel: [string, number][] = [['Visited the site', ov.visitors], ['Opened sign-up', ov.signup_views], ['Created an owner account', ov.signups], ['Scheduled shifts', ov.published]];
-  const top = Math.max(1, ov.visitors);
-  return (<>
-    <div className="actions">{[7, 14, 30, 90].map((d) => <button key={d} className={`btn small${days === d ? ' primary' : ''}`} onClick={() => setDays(d)}>Last {d} days</button>)}</div>
-    <div className="tiles">
-      <div className="tile"><div className="k">Visitors, last {days} days</div><div className="v">{ov.visitors.toLocaleString()}</div><div className="s">unique per day, admins not counted</div></div>
-      <div className="tile"><div className="k">New owner sign-ups</div><div className="v">{ov.signups}</div><div className="s">{ov.signup_views} opened the sign-up page</div></div>
-      <div className="tile"><div className="k">Owner accounts</div><div className="v">{ov.owners}</div><div className="s">{ov.hotels} hotel · {ov.gas} gas station · {ov.shops ?? 0} shop locations</div></div>
-      <div className="tile"><div className="k">Workers</div><div className="v">{ov.workers}</div><div className="s">{ov.workers_active} with a login</div></div>
-      <div className="tile"><div className="k">Time-off requests</div><div className="v">{ov.requests}</div><div className="s">{ov.requests_cancelled} cancelled by workers</div></div>
-    </div>
-    <div className="cols">
-      <section className="panel chart"><div className="panel-head"><h2>Daily visitors</h2></div><p className="hint">Unique visitors per day.</p>
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Daily visitors">
-          {ticks.map((t) => <g key={t}><line className="gridl" x1={pl} x2={W} y1={y(t)} y2={y(t)} /><text x={pl - 6} y={y(t) + 3} textAnchor="end">{t}</text></g>)}
-          {ov.daily.map((d, i) => { const x = pl + i * bw + Math.min(3, bw * 0.15), w = Math.max(1, bw - Math.min(6, bw * 0.3)); return <g key={d.day}>
-            <rect className={`bar${i === vals.length - 1 ? ' last' : ''}`} x={x} y={y(d.visitors)} width={w} height={y(0) - y(d.visitors)} rx={2}><title>{mmdd(d.day)}: {d.visitors} visitors</title></rect>
-            {i % every === every - 1 && <text x={x + w / 2} y={H - 6} textAnchor="middle">{mmdd(d.day)}</text>}</g>; })}
-        </svg></section>
-      <section className="panel"><div className="panel-head"><h2>Sign-up funnel</h2></div><p className="hint">Where visitors drop off.</p>
-        <div className="funnel">{funnel.map(([n, v]) => <div key={n} className="fstep"><span>{n}</span><b>{v.toLocaleString()}</b><div className="track"><div className="fill" style={{ width: `${Math.max(1.5, (v / top) * 100)}%` }} /></div></div>)}</div></section>
-    </div>
-    <section className="panel"><div className="panel-head"><h2>Most visited pages</h2></div>
-      <div className="table-wrap"><table className="data"><thead><tr><th>Page</th><th className="num">Views</th></tr></thead>
-        <tbody>{ov.pages.map((p) => <tr key={p.path}><td>{p.path === '/' ? '/ (home)' : p.path}</td><td className="num">{p.views}</td></tr>)}
-          {!ov.pages.length && <tr><td colSpan={2}>No visits recorded yet.</td></tr>}</tbody></table></div></section>
-  </>);
 }
 
 function AccountView({ a, onBack, reload }: { a: Account; onBack: () => void; reload: () => void }) {

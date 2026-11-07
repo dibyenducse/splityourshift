@@ -41,7 +41,7 @@ jobs:
           sed -i "s/__PROJECT_REF__/$PROJECT_REF/g" supabase/migrations/*.sql
           supabase db push --password "$SUPABASE_DB_PASSWORD"
       - name: Deploy functions
-        run: supabase functions deploy invite-worker phone-login send-reminders --project-ref "$PROJECT_REF"
+        run: supabase functions deploy invite-worker phone-login send-reminders admin-users --project-ref "$PROJECT_REF"
       - name: Push notification keys (created once, never shown)
         run: |
           if supabase secrets list --project-ref "$PROJECT_REF" | grep -q VAPID_PRIVATE_KEY; then

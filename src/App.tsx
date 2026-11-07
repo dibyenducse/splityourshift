@@ -5,6 +5,7 @@ import { whoAmI, type Me } from './lib/api';
 import { Loading, ToastProvider } from './components/ui';
 import Home from './pages/Home';
 import { Login, SetPassword, Signup } from './pages/Auth';
+import { loadPlanCatalog } from './lib/plans';
 import AppShell from './pages/AppShell';
 
 interface AuthState { me: Me | null | undefined; refresh: () => Promise<void>; signOut: () => Promise<void> }
@@ -53,6 +54,9 @@ function SetupNeeded() {
 
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const [, setPlansV] = useState(0);
+  // Prices and limits the admin set (Plans & pricing); everything re-renders with them once loaded.
+  useEffect(() => { loadPlanCatalog().then((r) => r.length && setPlansV((v) => v + 1), () => {}); }, []);
   const refresh = useCallback(async () => { setMe(await whoAmI().catch(() => null)); }, []);
   const signOut = useCallback(async () => { await supabase.auth.signOut(); setMe(null); }, []);
   useEffect(() => {

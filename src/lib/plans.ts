@@ -37,3 +37,25 @@ export const untilText = (iso: string | null | undefined) => iso ? new Date(iso)
 /** A plan picked on the home page before signing up; opened once the owner is in. */
 export const wantPlan = { set: (p: string) => { try { localStorage.setItem('sys-plan', p); } catch { /* private */ } },
   take: () => { try { const p = localStorage.getItem('sys-plan'); localStorage.removeItem('sys-plan'); return p; } catch { return null; } } };
+
+/** Row of the plan_catalog table (edited by the admin in Plans & pricing). */
+export interface CatalogRow { id: PlanId; name: string; price_month: number; price_year: number; locations: number; blurb: string; features: string[]; popular: boolean; sort: number; updated_at?: string }
+/** Which plan to highlight ("Most popular"). */
+export let POPULAR: PlanId = 'plus';
+/** Copy the admin's catalog into PLANS (the defaults above are used until it loads, or if it can't). */
+export function applyCatalog(rows: CatalogRow[]) {
+  for (const r of rows) {
+    if (!PLANS[r.id]) continue;
+    Object.assign(PLANS[r.id], { name: r.name, price: Number(r.price_month), yearly: Number(r.price_year), locations: r.locations, blurb: r.blurb, features: r.features ?? [] });
+    if (r.popular) POPULAR = r.id;
+  }
+  const order = [...rows].sort((a, b) => a.sort - b.sort).map((r) => r.id).filter((id) => PLANS[id]);
+  if (order.length === 3) PLAN_ORDER.splice(0, 3, ...order);
+}
+export async function loadPlanCatalog(): Promise<CatalogRow[]> {
+  const { supabase } = await import('./supabase');
+  const { data, error } = await supabase.from('plan_catalog').select('*').order('sort');
+  if (error || !data?.length) return [];
+  applyCatalog(data as CatalogRow[]);
+  return data as CatalogRow[];
+}
