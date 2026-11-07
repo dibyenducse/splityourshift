@@ -807,3 +807,69 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 @media (max-width: 640px) { .sr-mates { grid-template-columns: 1fr; max-height: min(46vh, 300px); } }
 .sr-search { width: 100%; max-width: 360px; min-height: 38px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: inherit; }
 @media (max-width: 640px) { .sr-shifts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Profile menu: icons, short list, Log out button */
+.pm-pop { animation: pm-in .16s ease-out; transform-origin: top right; }
+@keyframes pm-in { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pm-pop { animation: none; } }
+.pm-item.has-ico { grid-template-columns: 30px minmax(0, 1fr); align-items: center; column-gap: 8px; }
+.pm-ico { width: 30px; height: 30px; padding: 6px; border-radius: 8px; background: var(--surface-2); color: var(--muted); transition: background .15s, color .15s; }
+.pm-item:hover .pm-ico, .pm-item:focus-visible .pm-ico { background: var(--accent-soft); color: var(--accent); }
+.pm-item.primary .pm-ico { background: var(--accent-soft); color: var(--accent); }
+.pm-txt { display: grid; min-width: 0; }
+.pm-foot { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+.pm-logout { width: 100%; font: inherit; font-weight: 700; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); color: var(--bad); cursor: pointer; transition: background .15s, color .15s, transform .1s, box-shadow .15s; }
+.pm-logout .pm-ico { background: none; padding: 0; width: 18px; height: 18px; color: inherit; transition: transform .2s; }
+.pm-logout:hover, .pm-logout:focus-visible { background: var(--bad); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--bad) 30%, transparent); outline: none; }
+.pm-logout:hover .pm-ico { transform: translateX(3px); }
+.pm-logout:active { transform: scale(.98); }
+
+/* ---------------- Home: motion and polish ---------------- */
+.hero { position: relative; overflow: hidden; isolation: isolate; }
+.hero-glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.hero-glow i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; animation: glow-drift 18s ease-in-out infinite alternate; }
+.hero-glow i:nth-child(1) { width: 420px; height: 420px; left: -120px; top: -160px; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.hero-glow i:nth-child(2) { width: 360px; height: 360px; right: -80px; top: 40px; background: color-mix(in srgb, var(--ok) 45%, transparent); animation-delay: -6s; }
+.hero-glow i:nth-child(3) { width: 300px; height: 300px; left: 40%; bottom: -180px; background: color-mix(in srgb, var(--warn) 30%, transparent); animation-delay: -11s; }
+@keyframes glow-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(40px, 30px) scale(1.12); } }
+.hero h1 em { background: linear-gradient(100deg, var(--accent), var(--ok)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero .btn.primary.big { box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent); transition: transform .15s, box-shadow .15s; }
+.hero .btn.primary.big:hover { transform: translateY(-2px); box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 45%, transparent); }
+.mock { animation: mock-in .7s cubic-bezier(.2, .8, .2, 1) both .1s; }
+@keyframes mock-in { from { opacity: 0; transform: translateY(24px) rotate(-1deg); } to { opacity: 1; transform: none; } }
+.mock .chip { animation: chip-pop .45s cubic-bezier(.2, 1.4, .4, 1) both; }
+.mock tbody tr:nth-child(1) td:nth-child(2) .chip { animation-delay: .45s } .mock tbody tr:nth-child(1) td:nth-child(3) .chip { animation-delay: .55s }
+.mock tbody tr:nth-child(1) td:nth-child(4) .chip { animation-delay: .65s } .mock tbody tr:nth-child(1) td:nth-child(5) .chip { animation-delay: .75s }
+.mock tbody tr:nth-child(2) td:nth-child(2) .chip { animation-delay: .85s } .mock tbody tr:nth-child(2) td:nth-child(3) .chip { animation-delay: .95s }
+.mock tbody tr:nth-child(2) td:nth-child(4) .chip { animation-delay: 1.05s } .mock tbody tr:nth-child(2) td:nth-child(5) .chip { animation-delay: 1.15s }
+.mock tbody tr:nth-child(3) td:nth-child(2) .chip { animation-delay: 1.25s } .mock tbody tr:nth-child(3) td:nth-child(3) .chip { animation-delay: 1.35s }
+.mock tbody tr:nth-child(3) td:nth-child(4) .chip { animation-delay: 1.45s }
+@keyframes chip-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+.mock .floating { animation: float-in .5s ease-out both 1.7s, bob 4s ease-in-out infinite 2.2s; }
+.mock .f2 { animation-delay: 2s, 2.6s; }
+@keyframes float-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.perks { border-block: 1px solid var(--line); background: var(--surface); }
+.perks .inner { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; padding-block: 16px; }
+.perk { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14.5px; color: var(--fg); }
+.perk svg { color: var(--ok); flex: none; }
+.feat { transition: transform .2s ease, box-shadow .2s ease, border-color .2s; }
+.feat:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgb(0 0 0 / .08); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.feat-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--accent); background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--ok-soft) 70%, transparent)); margin-bottom: 4px; }
+.price { transition: transform .2s ease, box-shadow .2s ease; }
+.price:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgb(0 0 0 / .1); }
+.price.pro { box-shadow: 0 0 0 1px var(--accent), 0 18px 40px color-mix(in srgb, var(--accent) 22%, transparent); }
+@media (min-width: 900px) { .price.pro { transform: scale(1.03); } .price.pro:hover { transform: scale(1.03) translateY(-4px); } }
+.cta-glow { background: linear-gradient(120deg, #12324a, #155e4b, #12324a); background-size: 220% 220%; animation: cta-shift 14s ease-in-out infinite; }
+@keyframes cta-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.js-reveal .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .8, .2, 1); }
+.js-reveal .reveal.in { opacity: 1; transform: none; }
+.feats .feat.reveal:nth-child(3n + 2) { transition-delay: .08s; } .feats .feat.reveal:nth-child(3n) { transition-delay: .16s; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-glow i, .mock, .mock .chip, .mock .floating, .cta-glow { animation: none !important; }
+  .feat:hover, .price:hover { transform: none; }
+}
+@media print { .js-reveal .reveal { opacity: 1; transform: none; } }
+#pricing .inner > .hint { text-align: center; }
+.howto-tabs { flex-wrap: wrap; }

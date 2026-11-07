@@ -9,6 +9,8 @@ export interface Org {
   name_display?: 'first' | 'last' | 'first_initial' | 'custom';
   /** Subscription: see lib/plans.ts. plan_until null with a paid plan = no end date. */
   plan?: 'free' | 'plus' | 'premium'; plan_until?: string | null; plan_source?: string | null;
+  /** A custom location limit set by support (more than the plan's). */
+  location_limit?: number | null;
 }
 export interface Loc {
   id: string; org_id: string; name: string; type: LocType; sort: number;

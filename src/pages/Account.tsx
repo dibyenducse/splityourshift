@@ -92,8 +92,8 @@ export default function Account() {
   const switchView = () => { setView(workerView ? 'owner' : 'worker'); nav('/app'); };
 
   const items = [
-    ...(owner && me.empId ? [{ label: workerView ? '⇄ Switch to owner view' : '⇄ Switch to worker view', onClick: switchView, primary: true }] : []),
-    { label: workerView ? 'My shifts' : admin ? 'Admin panel' : 'Schedule', onClick: back },
+    ...(owner && me.empId ? [{ label: workerView ? 'Switch to owner view' : 'Switch to worker view', onClick: switchView, primary: true, icon: 'switch' as const }] : []),
+    { label: workerView ? 'My shifts' : admin ? 'Admin panel' : 'Schedule', onClick: back, icon: 'home' as const },
   ];
 
   return (

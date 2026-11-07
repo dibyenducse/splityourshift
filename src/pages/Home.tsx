@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PLANS, PLAN_ORDER, wantPlan, type Billing } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
@@ -18,7 +18,7 @@ export function SiteNav() {
         <a className="opt" href="#pricing" onClick={(e) => { e.preventDefault(); jump('pricing'); }}>Pricing</a>
         <a className="opt" href="#about" onClick={(e) => { e.preventDefault(); jump('about'); }}>About</a>
         {me ? <Link className="btn primary" to="/app">Open my schedule</Link>
-          : <><Link className="btn" to="/login">Log in</Link><Link className="btn primary" to="/signup">Sign up free</Link></>}
+          : <><Link className="btn" to="/login">Log in</Link><Link className="btn primary" to="/signup">Get started</Link></>}
       </nav>
     </div></div></header>
   );
@@ -32,7 +32,27 @@ const MEDIA = import.meta.env.BASE_URL + 'media/';
 
 const T = 245, K = 330, S = 90, D = 15, C = 160;
 
+/** Fade sections up as they scroll into view (skipped when the visitor prefers less motion). */
+function useReveal() {
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll('.reveal'));
+    if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) { els.forEach((e) => e.classList.add('in')); return; }
+    document.documentElement.classList.add('js-reveal');
+    const io = new IntersectionObserver((xs) => xs.forEach((x) => { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } }), { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, []);
+}
+
+const PERKS: [string, string][] = [
+  ['M7 2h10v20H7zM11 18h2', 'Works on any phone'],
+  ['M12 3v12M7 10l5 5 5-5M5 21h14', 'No app to download'],
+  ['M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'Set up in about 10 minutes'],
+  ['M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z', 'Each business sees only its own data'],
+];
+
 export default function Home() {
+  useReveal();
   const { me } = useAuth();
   const nav = useNavigate();
   const [billing, setBilling] = useState<Billing>('monthly');
@@ -40,14 +60,14 @@ export default function Home() {
   return (
     <>
       <SiteNav />
-      <section className="hero wrap"><div className="inner">
+      <section className="hero wrap"><div className="hero-glow" aria-hidden="true"><i /><i /><i /></div><div className="inner">
         <div>
           <div className="kicker">For hotels, motels, gas stations &amp; shops</div>
           <h1>The paper schedule, <em>without the paper.</em></h1>
           <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks.</p>
-          <div className="actions"><Link className="btn primary big" to="/signup">Start free</Link>
+          <div className="actions"><Link className="btn primary big" to="/signup">Get started</Link>
             <a className="btn big" href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>▶ Watch the 2-minute video</a></div>
-          <p className="note">Start free with 1 location. No card needed.</p>
+          <p className="note">Set up in minutes. No card needed to start.</p>
         </div>
         <div className="mock" aria-label="Example schedule">
           <div className="mock-head"><b>Sunrise Inn</b><span className="ltype">Hotel</span><span className="tag plain">Example week</span></div>
@@ -62,7 +82,11 @@ export default function Home() {
         </div>
       </div></section>
 
-      <section className="band wrap" id="video"><div className="inner">
+      <section className="perks wrap" aria-label="Why it's easy"><div className="inner">
+        {PERKS.map(([d, t]) => <div key={t} className="perk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>{t}</div>)}
+      </div></section>
+
+      <section className="band wrap" id="video"><div className="inner reveal">
         <h2>See how it works in 2 minutes</h2>
         <p className="sub">Create your account, add your workers, make the week, clock in with one tap, and get payroll worked out. Step by step.</p>
         <div className="tut">
@@ -82,7 +106,7 @@ export default function Home() {
         {YOUTUBE_URL && <p className="hint" style={{ marginTop: 12 }}><a href={YOUTUBE_URL} target="_blank" rel="noreferrer">Watch on YouTube ↗</a></p>}
       </div></section>
 
-      <section className="band alt wrap" id="problem"><div className="inner">
+      <section className="band alt wrap" id="problem"><div className="inner reveal">
         <h2>Built for the owner who still writes the week on paper</h2>
         <p className="sub">Most small hotels, gas stations and shops run on a printed sheet, a group text and a lot of phone calls. SplitYourShift keeps that same simple grid and adds the checks you do in your head.</p>
         <div className="compare">
@@ -95,21 +119,21 @@ export default function Home() {
         <h2>What it does</h2>
         <p className="sub">Everything an owner needs to run 24-hour shifts, and nothing a 10-person team won't use.</p>
         <div className="feats">
-          <div className="feat"><h3>Drag-and-drop week</h3><p>One grid per location. Shifts down the side, days across, same as your paper sheet. Works on a phone too.</p></div>
-          <div className="feat"><h3>Shift limits that hold</h3><p>Set each worker's weekly maximum. Trying to add one more shows an error instead of an overtime surprise.</p><div className="eg">Corey: 5/5 shifts. Can't add Thu 11–7.</div></div>
-          <div className="feat"><h3>Swap in two clicks</h3><p>Pick who takes the shift and see their week. Tap the shift to trade back and both schedules update.</p><div className="eg">Tiffany Tue 11–7 ↔ Corey Wed 11–7</div></div>
-          <div className="feat"><h3>Shifts owed</h3><p>If someone covers without a trade, SplitYourShift remembers it and suggests the payback next week.</p><div className="eg">Shea owes Dibbo 1 shift</div></div>
-          <div className="feat"><h3>Time-off requests</h3><p>Workers ask from their phone. You approve and go straight to finding cover, or deny. They can cancel while it's pending.</p></div>
-          <div className="feat"><h3>Your team sees their shifts</h3><p>Each worker gets their own login with their shifts, hours and estimated pay. They can look but can't change anything.</p></div>
-          <div className="feat"><h3>One-tap time clock</h3><p>Workers tap one green circle to clock in and again to clock out. You set the grace period; late arrivals, staying late and forgotten clock-outs are handled with simple choices.</p><div className="eg">Maria clocked in 7:02 am · within 10-min grace</div></div>
-          <div className="feat"><h3>Payroll done for you</h3><p>Weekly, every 2 weeks or monthly, for each business. Hours, overtime, bonuses, deductions and printable payslips. No time clock? Pay comes from the schedule, and you can edit any hours.</p><div className="eg">Tiffany · 80 h × $15.50 = $1,240.00</div></div>
-          <div className="feat"><h3>Shift reports</h3><p>A logbook for every location. The night shift writes what happened; the morning shift and you read it, from anywhere.</p><div className="eg">Night: audit done, room 214 late checkout</div></div>
-          <div className="feat"><h3>Task lists</h3><p>Give each shift its to-do list. Workers tick tasks off on their phone and you see who did what, and when.</p><div className="eg">7–3: count the cash drawer ✓</div></div>
-          <div className="feat"><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Tammy K.: 6 am – 4 pm only</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16v14H4zM4 10h16M9 5v14" /></svg></span><h3>Drag-and-drop week</h3><p>One grid per location. Shifts down the side, days across, same as your paper sheet. Works on a phone too.</p></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /></svg></span><h3>Shift limits that hold</h3><p>Set each worker's weekly maximum. Trying to add one more shows an error instead of an overtime surprise.</p><div className="eg">Corey: 5/5 shifts. Can't add Thu 11–7.</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h11l-3-3M17 17H6l3 3" /></svg></span><h3>Swap in two clicks</h3><p>Pick who takes the shift and see their week. Tap the shift to trade back and both schedules update.</p><div className="eg">Tiffany Tue 11–7 ↔ Corey Wed 11–7</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v8M8 12h8M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" /></svg></span><h3>Shifts owed</h3><p>If someone covers without a trade, SplitYourShift remembers it and suggests the payback next week.</p><div className="eg">Shea owes Dibbo 1 shift</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4" /></svg></span><h3>Time-off requests</h3><p>Workers ask from their phone. You approve and go straight to finding cover, or deny. They can cancel while it's pending.</p></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.6" /></svg></span><h3>Your team sees their shifts</h3><p>Each worker gets their own login with their shifts, hours and estimated pay. They can look but can't change anything.</p></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" /></svg></span><h3>One-tap time clock</h3><p>Workers tap one green circle to clock in and again to clock out. You set the grace period; late arrivals, staying late and forgotten clock-outs are handled with simple choices.</p><div className="eg">Maria clocked in 7:02 am · within 10-min grace</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5S7 4.6 7 6.5 9.2 10 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5" /></svg></span><h3>Payroll done for you</h3><p>Weekly, every 2 weeks or monthly, for each business. Hours, overtime, bonuses, deductions and printable payslips. No time clock? Pay comes from the schedule, and you can edit any hours.</p><div className="eg">Tiffany · 80 h × $15.50 = $1,240.00</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3" /></svg></span><h3>Shift reports</h3><p>A logbook for every location. The night shift writes what happened; the morning shift and you read it, from anywhere.</p><div className="eg">Night: audit done, room 214 late checkout</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l2 2 3-3M4 13l2 2 3-3M12 7h8M12 14h8M12 20h8" /></svg></span><h3>Task lists</h3><p>Give each shift its to-do list. Workers tick tasks off on their phone and you see who did what, and when.</p><div className="eg">7–3: count the cash drawer ✓</div></div>
+          <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h14v16H5zM9 12l2 2 4-4" /></svg></span><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Tammy K.: 6 am – 4 pm only</div></div>
         </div>
       </div></section>
 
-      <section className="band ink wrap" id="fit"><div className="inner">
+      <section className="band ink wrap" id="fit"><div className="inner reveal">
         <h2 style={{ color: 'var(--on-ink)' }}>Made for small businesses that run on shifts</h2>
         <p style={{ margin: '10px 0 24px', maxWidth: '40em' }}>Pick one when you sign up and your shifts are set up for you.</p>
         <div className="fit">
@@ -122,9 +146,9 @@ export default function Home() {
         </div>
       </div></section>
 
-      <section className="band wrap" id="pricing"><div className="inner">
+      <section className="band wrap" id="pricing"><div className="inner reveal">
         <h2>Simple pricing</h2>
-        <p className="sub">Pay per business, not per worker. Start free and move up when you add locations.</p>
+        <p className="sub">Pay per business, not per worker. Pay yearly and save; move up as you add locations.</p>
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="prices three">
           {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
@@ -132,20 +156,20 @@ export default function Home() {
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
-              <button className={`btn${id === 'plus' ? ' primary' : ''}`} onClick={() => choose(id)}>{id === 'free' ? 'Start free' : `Choose ${p.name}`}</button></div>); })}
+              <button className={`btn${id === 'plus' ? ' primary' : ''}`} onClick={() => choose(id)}>{`Choose ${p.name}`}</button></div>); })}
         </div>
         <p className="hint" style={{ marginTop: 12 }}>Have a coupon code? Enter it under Plan &amp; billing after you sign up.</p>
       </div></section>
 
-      <section className="band alt wrap" id="about"><div className="inner">
+      <section className="band alt wrap" id="about"><div className="inner reveal">
         <h2>About us</h2>
         <p className="about-text">SplitYourShift started from a real front-desk schedule: two hotels, three shifts a day, eleven people and a printed sheet. We're building the tool those owners asked for: simple enough for the whole team, and strict enough to stop scheduling mistakes.</p>
       </div></section>
 
-      <section className="band wrap" id="faq"><div className="inner">
+      <section className="band wrap" id="faq"><div className="inner reveal">
         <h2>Questions</h2>
         <div className="faq" style={{ marginTop: 18 }}>
-          <details><summary>Which plan do I need?</summary><p>Starter is free for one hotel, gas station or shop. Plus covers up to 3 locations for $39 a month, and Premium covers any number for $99 a month. Every plan has the schedule, time clock, payroll, shift reports and task lists.</p></details>
+          <details><summary>Which plan do I need?</summary><p>Starter covers up to 2 locations ($19 a month or $199 a year), Plus up to 5 ($39 or $399), and Premium up to 10 ($59 or $599). More than 10? Contact support@splityourshift.com. Every plan has the schedule, time clock, payroll, shift reports and task lists.</p></details>
           <details><summary>Do my workers need to download an app?</summary><p>No. They get an email with a link, choose a password, and log in from any phone browser with their email or phone number.</p></details>
           <details><summary>Do I have to use the time clock?</summary><p>No. Turn it on or off for each location. With it off, workers see no clock and payroll pays the scheduled shift hours; you can still edit anyone's hours.</p></details>
           <details><summary>Can workers change the schedule?</summary><p>No. Workers can see their shifts and the schedule, set their availability, ask for time off and cancel a request that's still pending. Only the owner moves people.</p></details>
@@ -155,9 +179,9 @@ export default function Home() {
         </div>
       </div></section>
 
-      <section className="band ink wrap"><div className="inner ctaband">
-        <div><h2>Make next week's schedule in 10 minutes</h2><p style={{ margin: '8px 0 0' }}>Start with your real shifts. It's free.</p></div>
-        <div className="actions"><Link className="btn primary big" to="/signup">Sign up free</Link><Link className="btn big" to="/login">Log in</Link></div>
+      <section className="band ink wrap cta-glow"><div className="inner ctaband reveal">
+        <div><h2>Make next week's schedule in 10 minutes</h2><p style={{ margin: '8px 0 0' }}>Start with your real shifts. No card needed to start.</p></div>
+        <div className="actions"><Link className="btn primary big" to="/signup">Get started</Link><Link className="btn big" to="/login">Log in</Link></div>
       </div></section>
 
       <footer className="site wrap"><div className="inner"><span>© {new Date().getFullYear()} SplitYourShift · Shift scheduling for hotels, gas stations and shops</span>

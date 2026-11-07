@@ -19,7 +19,7 @@ interface Overview {
   pages: { path: string; views: number }[];
 }
 interface Account { id: string; name: string; owner_name: string | null; owner_email: string | null; types: string | null; locations: number; workers: number; created_at: string; last_active_at: string | null; status: string;
-  plan?: PlanId; plan_until?: string | null; plan_source?: string | null; plan_now?: PlanId }
+  plan?: PlanId; plan_until?: string | null; plan_source?: string | null; plan_now?: PlanId; location_limit?: number | null }
 
 export default function AdminApp() {
   const { signOut } = useAuth();
@@ -53,7 +53,7 @@ export default function AdminApp() {
     <section className="panel"><div className="panel-head"><h2>Owner accounts</h2><span className="hint" style={{ margin: 0 }}>{accts?.length ?? 0} total</span></div>
       {!accts ? <Loading /> : <div className="table-wrap"><table className="data"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
         <tbody>{accts.map((a) => <tr key={a.id}><td>{a.name}</td><td>{a.owner_name || '—'}<div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></td><td>{a.types || '—'}</td>
-          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td>{PLANS[a.plan_now ?? 'free'].name}{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
+          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td>{PLANS[a.plan_now ?? 'free'].name}{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}{a.location_limit ? <div className="hint" style={{ margin: 0 }}>limit {a.location_limit} locations</div> : null}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
           <td>{a.status === 'active' ? <span className="tag ok">Active</span> : <span className="tag bad">Suspended</span>}</td>
           <td><button className="btn small" onClick={() => setOpen(a)}>Open</button></td></tr>)}
           {!accts.length && <tr><td colSpan={10}>No owners have signed up yet.</td></tr>}</tbody></table></div>}
@@ -175,9 +175,9 @@ function AdminPayroll({ orgId }: { orgId: string }) {
 /** Admin: set a business's plan by hand (e.g. a paying customer by invoice, or a free upgrade). */
 function PlanControl({ a, reload }: { a: Account; reload: () => void }) {
   const toast = useToast();
-  const [f, setF] = useState({ plan: (a.plan ?? 'free') as PlanId, until: a.plan_until ? a.plan_until.slice(0, 10) : '' });
+  const [f, setF] = useState({ plan: (a.plan ?? 'free') as PlanId, until: a.plan_until ? a.plan_until.slice(0, 10) : '', limit: a.location_limit ? String(a.location_limit) : '' });
   const save = async () => {
-    const { error } = await supabase.rpc('admin_set_plan', { p_org: a.id, p_plan: f.plan, p_until: f.plan !== 'free' && f.until ? new Date(f.until + 'T23:59:59').toISOString() : null });
+    const { error } = await supabase.rpc('admin_set_plan', { p_org: a.id, p_plan: f.plan, p_until: f.plan !== 'free' && f.until ? new Date(f.until + 'T23:59:59').toISOString() : null, p_limit: f.limit.trim() ? Math.max(1, Math.round(+f.limit)) : null });
     if (error) toast(errText(error), 'error', 'Not saved'); else { toast(`${a.name} is on ${PLANS[f.plan].name}${f.plan !== 'free' ? (f.until ? ` until ${untilText(f.until + 'T12:00:00')}` : ' with no end date') : ''}.`, 'ok', 'Plan saved'); reload(); }
   };
   return (
@@ -187,6 +187,7 @@ function PlanControl({ a, reload }: { a: Account; reload: () => void }) {
         <div className="field"><label htmlFor="ap-plan">Plan</label><select id="ap-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as PlanId })}>
           {(['free', 'plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name}{PLANS[p].price ? ` ($${PLANS[p].price}/month)` : ' (free)'}</option>)}</select></div>
         {f.plan !== 'free' && <div className="field"><label htmlFor="ap-until">Until (empty = no end date)</label><input id="ap-until" type="date" value={f.until} onChange={(e) => setF({ ...f, until: e.target.value })} /></div>}
+        <div className="field"><label htmlFor="ap-limit">Location limit (empty = the plan's)</label><input id="ap-limit" type="number" min={1} max={1000} value={f.limit} placeholder={String(PLANS[f.plan].locations ?? '')} onChange={(e) => setF({ ...f, limit: e.target.value })} /></div>
       </div>
       <div className="actions"><button className="btn primary" onClick={save}>Save plan</button></div>
     </section>);

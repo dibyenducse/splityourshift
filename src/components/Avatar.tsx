@@ -3,7 +3,14 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { useToast } from './ui';
 
-export interface MenuItem { label: string; hint?: string; onClick: () => void; primary?: boolean }
+export type MenuIcon = 'switch' | 'account' | 'plan' | 'video' | 'timeoff' | 'home';
+export interface MenuItem { label: string; hint?: string; onClick: () => void; primary?: boolean; icon?: MenuIcon }
+const ICON: Record<MenuIcon | 'logout', string> = {
+  switch: 'M7 7h11l-3-3M17 17H6l3 3', account: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  plan: 'M3 7h18v10H3zM3 11h18M7 15h3', video: 'M4 5h16v14H4zM10 9l5 3-5 3z', timeoff: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15l6 0',
+  home: 'M3 11l9-7 9 7M5 10v10h14V10', logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
+};
+const Ico = ({ k }: { k: MenuIcon | 'logout' }) => <svg className="pm-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[k]} /></svg>;
 
 const initials = (name: string) => name.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
 const hueOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -95,8 +102,9 @@ export function ProfileMenu({ name, role, items }: { name: string; role: string;
           <Avatar name={name} url={me?.avatarUrl} size={48} />
           <div><b>{name}</b><span>{role}</span><small>{me?.email}</small></div>
         </div>
-        {items.map((it) => <button key={it.label} role="menuitem" className={`pm-item${it.primary ? ' primary' : ''}`} onClick={go(it.onClick)}>{it.label}{it.hint && <small>{it.hint}</small>}</button>)}
-        <button role="menuitem" className="pm-item danger-text" onClick={go(signOut)}>Log out</button>
+        {items.map((it) => <button key={it.label} role="menuitem" className={`pm-item${it.primary ? ' primary' : ''}${it.icon ? ' has-ico' : ''}`} onClick={go(it.onClick)}>
+          {it.icon && <Ico k={it.icon} />}<span className="pm-txt">{it.label}{it.hint && <small>{it.hint}</small>}</span></button>)}
+        <div className="pm-foot"><button role="menuitem" className="pm-logout" onClick={go(signOut)}><Ico k="logout" />Log out</button></div>
       </div>}
     </div>
   );

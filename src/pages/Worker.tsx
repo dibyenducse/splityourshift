@@ -81,15 +81,10 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
       <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={preview ? undefined : notes} onNotes={preview ? undefined : () => setSheet('notes')}
         onAccount={preview ? preview.onExit : () => nav('/app/account')} who={preview ? <>‹ Back to owner view</> : <>{w.name} · <b>Worker</b></>}
         profile={preview ? undefined : <ProfileMenu name={w.name} role={`${self ? 'Owner, working as a worker' : 'Worker'} · ${b.org.name}`} items={[
-          ...(self ? [{ label: '⇄ Switch to owner view', hint: 'Schedule, time clock, payroll', onClick: self.onExit, primary: true }] : []),
-          { label: 'Account settings', hint: 'Name, email, photo, password, availability', onClick: () => nav('/app/account') },
-          { label: 'My shifts', hint: rangeTitle(week, addDays(week, 6)), onClick: () => { setView('home'); setTimeout(() => jump('my-shifts'), 50); } },
-          { label: 'Shift reports', hint: 'The logbook: write and read reports', onClick: () => setView('reports') },
-          { label: 'My tasks', onClick: () => setView('tasks') },
-          { label: 'Request time off', onClick: () => setSheet('request') },
-          { label: 'Swap a shift', hint: 'Ask a coworker to work one of your shifts', onClick: () => { setView('home'); setTimeout(() => jump('swaps'), 80); } },
-          { label: 'My payslips', hint: 'Every paid payday', onClick: () => { setView('home'); setTimeout(() => jump('my-payslips'), 50); } },
-          { label: '▶ How-to videos', hint: 'Clocking in and shift swaps', onClick: () => setHowto(true) },
+          ...(self ? [{ label: 'Switch to owner view', hint: 'Schedule, time clock, payroll', onClick: self.onExit, primary: true, icon: 'switch' as const }] : []),
+          { label: 'Account settings', onClick: () => nav('/app/account'), icon: 'account' as const },
+          { label: 'Request time off', onClick: () => setSheet('request'), icon: 'timeoff' as const },
+          { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' as const },
         ]} />}
         nav={<nav className="topnav" aria-label="Sections">{([['home', 'My shifts'], ['reports', 'Shift reports'], ['tasks', 'My tasks']] as const).map(([v, t]) =>
           <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>{t}</button>)}</nav>} />

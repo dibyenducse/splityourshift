@@ -1,4 +1,4 @@
-import { PLANS, dollars, perMonth, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { PLANS, bestSavePct, dollars, perMonth, yearlySave, type Billing, type PlanId } from '../lib/plans';
 
 /** Monthly / Yearly switch in one box; yearly shows what it saves. */
 export function BillingToggle({ value, onChange }: { value: Billing; onChange: (b: Billing) => void }) {
@@ -7,7 +7,7 @@ export function BillingToggle({ value, onChange }: { value: Billing; onChange: (
       {(['monthly', 'yearly'] as const).map((b) => (
         <button key={b} type="button" role="radio" aria-checked={value === b} className={value === b ? 'on' : ''} onClick={() => onChange(b)}>
           <b>{b === 'monthly' ? 'Monthly' : 'Yearly'}</b>
-          <small>{b === 'monthly' ? 'Pay every month' : 'Save 2 months'}</small>
+          <small>{b === 'monthly' ? 'Pay every month' : `Save up to ${bestSavePct()}%`}</small>
         </button>))}
     </div>
   );
@@ -16,11 +16,10 @@ export function BillingToggle({ value, onChange }: { value: Billing; onChange: (
 /** Big price for a plan card: per month, and for yearly the total billed once a year. */
 export function PlanPrice({ id, billing }: { id: PlanId; billing: Billing }) {
   const p = PLANS[id];
-  if (!p.price) return <><div className="amt">Free</div><div className="amt-sub">No card needed</div></>;
   return (<>
     <div className="amt">{dollars(perMonth(p, billing))}<small>/month</small></div>
     <div className="amt-sub">{billing === 'yearly'
-      ? <><s>{dollars(p.price)}</s> · {dollars(p.yearly)} billed yearly · <b className="save">save {dollars(yearlySave(p))}</b></>
+      ? <><s>{dollars(p.price)}</s> · {dollars(p.yearly)} billed yearly · <b className="save">save {dollars(Math.round(yearlySave(p)))}</b></>
       : <>billed monthly · or {dollars(perMonth(p, 'yearly'))}/month yearly</>}</div>
   </>);
 }

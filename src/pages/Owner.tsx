@@ -24,7 +24,7 @@ import Payroll from './Payroll';
 import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
 import { HowToSheet } from '../components/HowTo';
-import { PLANS, planOf, wantPlan } from '../lib/plans';
+import { PLANS, locLimitOf, planOf, wantPlan } from '../lib/plans';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
@@ -264,7 +264,7 @@ export default function OwnerApp() {
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
             {!r.next_paid && <>{rangeTitle(r.next_start, r.next_end)}: {money(r.payable)} for {r.employees} employee{r.employees === 1 ? '' : 's'}.</>}</p>
           <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); setTab('payroll'); }}>Open payroll</button></div>)}
-        {(() => { const p = planOf(b.org), lim = PLANS[p].locations; return lim !== null && b.locs.length > lim && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
+        {(() => { const p = planOf(b.org), lim = locLimitOf(b.org); return lim !== null && b.locs.length > lim && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
           <p><b>{(b.org.plan ?? 'free') !== 'free' && p === 'free' ? `Your ${PLANS[b.org.plan ?? 'free'].name} plan has ended.` : `You have ${b.locs.length} locations on the ${PLANS[p].name} plan.`}</b> Everything keeps working, but you can't add more locations until you choose a bigger plan.</p>
           <button className="btn small primary" onClick={() => nav('/app/plan')}>See plans</button></div>; })()}
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
@@ -272,7 +272,7 @@ export default function OwnerApp() {
         <WeekGrid b={b} week={week} editable onCell={onCell} undoHint={undoHint} onUndo={doUndo} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
           onClearWeek={(l) => { const ch: Changes = {}; for (const s of b.slots.filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
             commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
-        <div className="actions no-print"><button className="btn" onClick={() => { const lim = PLANS[planOf(b.org)].locations; if (lim !== null && b.locs.length >= lim) nav('/app/plan?need=locations'); else setAdding(true); }}>+ Add a hotel, gas station or shop</button>
+        <div className="actions no-print"><button className="btn" onClick={() => { const lim = locLimitOf(b.org); if (lim !== null && b.locs.length >= lim) nav('/app/plan?need=locations'); else setAdding(true); }}>+ Add a hotel, gas station or shop</button>
           {b.locs.length > 0 && <button className="btn danger" onClick={() => setSheet({ type: 'delloc' })}>Delete a location</button>}</div>
       </main>
     </div>
@@ -284,18 +284,10 @@ export default function OwnerApp() {
         onAccount={() => nav('/app/account')} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         nav={tabs}
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
-          { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
-          { label: 'Account settings', hint: 'Name, email, photo, password, time zone', onClick: () => nav('/app/account') },
-          { label: '▶ How-to videos', hint: 'Payroll, time clock rules, swaps, clocking in', onClick: () => setHowto(true) },
-          { label: 'Plan & billing', hint: `${PLANS[planOf(b.org)].name} plan · coupons`, onClick: () => nav('/app/plan') },
-          { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
-          { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },
-          { label: 'Time clock', hint: 'Who is on the clock, hour fixes', onClick: () => setTab('time') },
-          { label: 'Shift swaps', hint: 'Swap any date and shift; pending, accepted, done', onClick: () => { setTab('time'); setTimeout(() => document.getElementById('swaps')?.scrollIntoView({ behavior: 'smooth' }), 80); } },
-          { label: 'Shift reports', hint: 'The logbook your workers write', onClick: () => setTab('reports') },
-          { label: 'Tasks', hint: 'Task lists for each shift', onClick: () => setTab('tasks') },
-          { label: 'Add a worker', onClick: () => { setTab('schedule'); addWorker(); } },
-          { label: 'Print this week', onClick: () => { setTab('schedule'); setTimeout(() => printBoards(), 50); } },
+          { label: 'Switch to worker view', hint: 'Your own shifts and time clock', onClick: () => goWorker(), primary: true, icon: 'switch' },
+          { label: 'Account settings', onClick: () => nav('/app/account'), icon: 'account' },
+          { label: 'Plan & billing', hint: `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
+          { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' },
         ]} />} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}

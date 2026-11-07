@@ -6,7 +6,7 @@ import type { Org } from '../lib/types';
 import { Loading, useToast } from '../components/ui';
 import { ProfileMenu } from '../components/Avatar';
 import { AppBar } from './AppShell';
-import { PLANS, PLAN_ORDER, dollars, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { PLANS, PLAN_ORDER, dollars, locLimitOf, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
@@ -42,6 +42,7 @@ export default function PlanPage() {
   if (!me || me.role !== 'owner') return <Loading text="Plan & billing is for business owners." />;
   if (!org) return <Loading />;
   const cur = planOf(org), plan = PLANS[cur];
+  const lim = locLimitOf(org);
   const ended = (org.plan ?? 'free') !== 'free' && cur === 'free';
   const need = qs.get('need') === 'locations';
   const sel = pick ? PLANS[pick] : null;
@@ -63,14 +64,14 @@ export default function PlanPage() {
         profile={<ProfileMenu name={org.owner_name || me.email} role={`Owner · ${org.name}`} items={[{ label: 'Account settings', onClick: () => nav('/app/account') }, { label: 'Back to my schedule', onClick: () => nav('/app') }]} />} />
       <div className="wrap account plan-page">
         <h1 className="acct-title">Plan &amp; billing</h1>
-        {need && <div className="banner warn"><p><b>Your {plan.name} plan includes {locLimitText(cur)}.</b> Choose a bigger plan to add another hotel, gas station or shop.</p></div>}
+        {need && <div className="banner warn"><p><b>Your plan includes {lim} locations.</b> {cur === 'premium' || org.location_limit ? <>For more, email <a href="mailto:support@splityourshift.com?subject=More%20locations">support@splityourshift.com</a> and we'll set it up.</> : 'Choose a bigger plan to add another hotel, gas station or shop.'}</p></div>}
         {ended && <div className="banner warn"><p><b>Your {PLANS[(org.plan ?? 'free') as PlanId].name} plan ended on {untilText(org.plan_until)}.</b> Everything is still here. To add locations beyond Starter again, use a new coupon.</p></div>}
 
         <section className="panel plan-now">
-          <div><span className="kicker">Your plan</span><h2>{plan.name}{plan.price ? <small> · ${plan.price}/month</small> : <small> · Free</small>}</h2>
-            <p className="hint" style={{ margin: 0 }}>{cur === 'free' ? 'Free, no end date.' : org.plan_until ? `Active until ${untilText(org.plan_until)}${org.plan_source === 'coupon' ? ' (coupon)' : ''}.` : org.plan_source === 'early_access' ? 'Early access: no end date.' : 'No end date.'}</p></div>
-          <div className="plan-meter"><b>{locs}</b> of {plan.locations ?? '∞'} location{plan.locations === 1 ? '' : 's'} used
-            {plan.locations !== null && <span className="bar"><i style={{ width: `${Math.min(100, (locs / plan.locations) * 100)}%` }} /></span>}</div>
+          <div><span className="kicker">Your plan</span><h2>{plan.name}<small> · {dollars(plan.price)}/month or {dollars(plan.yearly)}/year</small></h2>
+            <p className="hint" style={{ margin: 0 }}>{cur === 'free' ? 'Every new account starts on Starter.' : org.plan_until ? `Active until ${untilText(org.plan_until)}${org.plan_source === 'coupon' ? ' (coupon)' : ''}.` : org.plan_source === 'early_access' ? 'Early access: no end date.' : 'No end date.'}</p></div>
+          <div className="plan-meter"><b>{locs}</b> of {lim ?? '∞'} location{lim === 1 ? '' : 's'} used{org.location_limit ? ' (custom limit)' : ''}
+            {lim !== null && <span className="bar"><i style={{ width: `${Math.min(100, (locs / lim) * 100)}%` }} /></span>}</div>
         </section>
 
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
@@ -82,7 +83,7 @@ export default function PlanPage() {
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
               {isCur ? <button className="btn" disabled>Current plan</button>
-                : id === 'free' ? <span className="hint" style={{ margin: 0, textAlign: 'center' }}>Every account starts here</span>
+                : id === 'free' ? <span className="hint" style={{ margin: 0, textAlign: 'center' }}>Included with every account</span>
                 : <button className={`btn${pick === id ? ' primary' : ''}`} onClick={() => setPick(id)}>{pick === id ? 'Selected' : `Choose ${p.name}`}</button>}
             </div>); })}
         </div>
@@ -94,7 +95,7 @@ export default function PlanPage() {
               <BillingToggle value={billing} onChange={setBilling} />
               <div className="co-line"><span>{sel.name} plan · {sel.locations === null ? 'unlimited locations' : `up to ${sel.locations} locations`}</span><b>{dollars(perMonth(sel, billing))}/month</b></div>
               <div className="co-line"><span>Billed</span><span>{billing === 'yearly' ? 'Once a year' : 'Every month'}</span></div>
-              {billing === 'yearly' && <div className="co-line save"><span>You save (2 months free)</span><b>−{dollars(yearlySave(sel))}</b></div>}
+              {billing === 'yearly' && <div className="co-line save"><span>You save with yearly</span><b>−{dollars(Math.round(yearlySave(sel)))}</b></div>}
               <div className="co-line total"><span>{billing === 'yearly' ? 'Total per year' : 'Total per month'}</span><b>{dollars(billing === 'yearly' ? sel.yearly : sel.price)}.00</b></div>
               <p className="hint" style={{ margin: 0 }}>US dollars. Cancel any time; your data stays.</p>
             </div>
