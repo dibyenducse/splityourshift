@@ -201,6 +201,9 @@ function SwapRequest({ b, empId, owner, pending, onSent }: { b: Bundle; empId?: 
   const [to, setTo] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [q1, setQ1] = useState(''); const [q2, setQ2] = useState('');
+  const hit = (name: string, q: string) => !q.trim() || name.toLowerCase().includes(q.trim().toLowerCase());
+  const search = (n: number, q: string, set: (v: string) => void, id: string) => n > 8 && <input id={id} className="sr-search" type="search" value={q} onChange={(e) => set(e.target.value)} placeholder={`Search ${n} workers…`} aria-label="Search workers" />;
   const reset = (keepFrom = true) => { if (!keepFrom) setFrom(owner ? '' : empId ?? ''); setCell(null); setOther(false); setTo(''); setNote(''); };
   const k = from ? (other ? (o.slot && o.date ? cellKey(o.slot, o.date) : null) : cell) : null;
   const asked = (key: string) => pending.some((a) => a.kind === 'future_swap' && a.status === 'pending' && a.from_emp === from && a.slot_id === parseCell(key).slot && a.work_date === parseCell(key).date);
@@ -229,7 +232,8 @@ function SwapRequest({ b, empId, owner, pending, onSent }: { b: Bundle; empId?: 
   return (
     <div className="swapreq">
       {owner && <div className="sr-step"><span className="sr-n">1</span><div className="sr-body"><h4>Whose shift?</h4>
-        <div className="sr-mates">{b.emps.map((e) => { const n = keysOf(b, e.id).filter((x) => parseCell(x).date >= today).length; return (
+        {search(b.emps.length, q1, setQ1, 'sr-q1')}
+        <div className="sr-mates">{b.emps.filter((e) => hit(e.name, q1) || e.id === from).map((e) => { const n = keysOf(b, e.id).filter((x) => parseCell(x).date >= today).length; return (
           <button key={e.id} type="button" className={`sr-mate ok${from === e.id ? ' on' : ''}`} onClick={() => { setFrom(e.id); setCell(null); setOther(false); setTo(''); }} aria-pressed={from === e.id} style={{ ['--h' as string]: e.hue }}>
             <span className="dot" /><span className="nm">{e.name}</span><span className="st" style={{ color: 'var(--muted)', fontWeight: 500 }}>{n} upcoming shift{n === 1 ? '' : 's'}</span></button>); })}</div>
       </div></div>}
@@ -254,10 +258,10 @@ function SwapRequest({ b, empId, owner, pending, onSent }: { b: Bundle; empId?: 
 
       <div className={`sr-step${k ? '' : ' dim'}`}><span className="sr-n">{n0 + 2}</span><div className="sr-body"><h4>Who should work it?</h4>
         {!k ? <p className="hint" style={{ margin: 0 }}>Pick the shift first; then you see who is free.</p>
-          : <div className="sr-mates">{mates.length ? mates.map(({ e, state, why }) => (
+          : <>{search(mates.length, q2, setQ2, 'sr-q2')}<div className="sr-mates">{mates.length ? mates.filter(({ e }) => hit(e.name, q2) || e.id === to).map(({ e, state, why }) => (
             <button key={e.id} type="button" className={`sr-mate ${state}${to === e.id ? ' on' : ''}`} onClick={() => setTo(e.id)} aria-pressed={to === e.id} style={{ ['--h' as string]: e.hue }}>
               <span className="dot" /><span className="nm">{e.name}</span><span className="st">{why}</span></button>))
-            : <p className="hint" style={{ margin: 0 }}>Nobody else works at this location yet.</p>}</div>}
+            : <p className="hint" style={{ margin: 0 }}>Nobody else works at this location yet.</p>}</div></>}
       </div></div>
 
       <div className={`sr-step${k && to ? '' : ' dim'}`}><span className="sr-n">{n0 + 3}</span><div className="sr-body"><h4>Send</h4>

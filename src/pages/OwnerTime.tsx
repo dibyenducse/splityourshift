@@ -44,7 +44,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
 
   return (
     <div className="layout">{tabs}
-      <section className="panel"><div className="panel-head"><h2>On the clock now</h2><span className="clock-tools"><HowToButton topic="clock" /><span className={`lamp${open.length ? ' on' : ''}`} /></span></div>
+      <section className="panel"><div className="panel-head"><h2>On the clock now</h2><span className="clock-tools"><HowToButton topic="clockrules" label="Clock rules and pay" /><span className={`lamp${open.length ? ' on' : ''}`} /></span></div>
         <p className="hint">Workers clock in from their phone. A reminder goes to their phone when the shift starts and ends.</p>
         <div className="stack">{open.length ? open.map((e) => { const w = empOf(b, e.employee_id); const hrs = (now - new Date(e.clock_in).getTime()) / 36e5; return (
           <div key={e.id} className="oncard"><span className="lamp on" /><span className="main"><b>{w?.name ?? '?'}</b><span>Since {clockTime(e.clock_in)} · {shiftOf(e)}</span></span>

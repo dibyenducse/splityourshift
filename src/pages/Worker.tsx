@@ -89,7 +89,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           { label: 'Request time off', onClick: () => setSheet('request') },
           { label: 'Swap a shift', hint: 'Ask a coworker to work one of your shifts', onClick: () => { setView('home'); setTimeout(() => jump('swaps'), 80); } },
           { label: 'My payslips', hint: 'Every paid payday', onClick: () => { setView('home'); setTimeout(() => jump('my-payslips'), 50); } },
-          { label: '▶ How-to videos', hint: 'Swaps and the time clock', onClick: () => setHowto(true) },
+          { label: '▶ How-to videos', hint: 'Clocking in and shift swaps', onClick: () => setHowto(true) },
         ]} />}
         nav={<nav className="topnav" aria-label="Sections">{([['home', 'My shifts'], ['reports', 'Shift reports'], ['tasks', 'My tasks']] as const).map(([v, t]) =>
           <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>{t}</button>)}</nav>} />
@@ -144,7 +144,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         </fieldset>
       </div></div>}
 
-      {howto && <HowToSheet topics={['swap', 'clock']} onClose={() => setHowto(false)} />}
+      {howto && <HowToSheet topics={['clock', 'swap']} onClose={() => setHowto(false)} />}
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
       {sheet === 'request' && <TimeOffSheet b={b} empId={w.id} onClose={() => setSheet(null)} reload={reload} />}
     </>

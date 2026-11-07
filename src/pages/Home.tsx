@@ -14,8 +14,7 @@ export function SiteNav() {
       <Link className="brand" to="/"><Logo /><span><b>SplitYourShift</b></span></Link>
       <nav className="navlinks" aria-label="Main">
         <a className="opt" href="#features" onClick={(e) => { e.preventDefault(); jump('features'); }}>Features</a>
-        <a className="opt" href="#video" onClick={(e) => { e.preventDefault(); jump('video'); }}>Watch video</a>
-        <a className="opt" href="#how" onClick={(e) => { e.preventDefault(); jump('how'); }}>How it works</a>
+        <a className="opt" href="#video" onClick={(e) => { e.preventDefault(); jump('video'); }}>How it works</a>
         <a className="opt" href="#pricing" onClick={(e) => { e.preventDefault(); jump('pricing'); }}>Pricing</a>
         <a className="opt" href="#about" onClick={(e) => { e.preventDefault(); jump('about'); }}>About</a>
         {me ? <Link className="btn primary" to="/app">Open my schedule</Link>
@@ -108,19 +107,6 @@ export default function Home() {
           <div className="feat"><h3>Task lists</h3><p>Give each shift its to-do list. Workers tick tasks off on their phone and you see who did what, and when.</p><div className="eg">7–3: count the cash drawer ✓</div></div>
           <div className="feat"><h3>Availability first</h3><p>Workers mark the days and hours they can work. If you drag someone into a time they said they can't, you get a warning.</p><div className="eg">Tammy K.: 6 am – 4 pm only</div></div>
         </div>
-      </div></section>
-
-      <section className="band alt wrap" id="how"><div className="inner">
-        <h2>Set up in about 10 minutes</h2>
-        <p className="sub">No training needed. If you can fill in the paper sheet, you can use this. <a href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>Watch the video</a> to see each step.</p>
-        <ol className="how">
-          <li><h3>Tell us what you run</h3><p>Hotel, gas station or shop. Add more locations later, and share workers between them.</p></li>
-          <li><h3>Pick your shift pattern</h3><p>We suggest the usual one (like 7–3, 3–11, 11–7). Change start times or make 10- or 12-hour shifts.</p></li>
-          <li><h3>Add your team, fill the week</h3><p>Add names and drag them into the week. Workers get an email invite to see their shifts.</p></li>
-          <li><h3>Turn on the time clock</h3><p>Workers clock in and out from their phone. Or keep it off and pay by the schedule.</p></li>
-          <li><h3>Set your payday</h3><p>Weekly, every 2 weeks or monthly. Hours, overtime and payslips are ready on payday.</p></li>
-          <li><h3>Add reports and tasks</h3><p>A shift report logbook and a task list for each shift, if you want them.</p></li>
-        </ol>
       </div></section>
 
       <section className="band ink wrap" id="fit"><div className="inner">

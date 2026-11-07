@@ -131,7 +131,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
       </section>
 
       <section className="panel">
-        <div className="panel-head"><h2>{loc.name} payroll</h2><span className="clock-tools"><HowToButton topic="payroll" />{row && <span className={`tag ${tagFor[status]}`}>{status === 'Paid' ? `Paid · ${dateShort(row.pay_date)}` : `${status} · pay ${dateShort(row.pay_date)}`}</span>}</span></div>
+        <div className="panel-head"><h2>{loc.name} payroll</h2><span className="clock-tools">{row && <span className={`tag ${tagFor[status]}`}>{status === 'Paid' ? `Paid · ${dateShort(row.pay_date)}` : `${status} · pay ${dateShort(row.pay_date)}`}</span>}</span></div>
         <div className="payctl">
           {b.locs.length > 1 && <div className="field"><label htmlFor="pr-loc">Business</label>
             <select id="pr-loc" value={loc.id} onChange={(e) => setLocId(e.target.value)}>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
@@ -250,7 +250,7 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           <span className="ps-title"><h2>Payroll settings · {loc.name}</h2>
             <span className="ps-chips"><span className="tag plain">{FREQ_LABEL[f.pay_frequency]}</span><span className="tag plain">{f.overtime ? `OT after ${f.ot_after} h` : 'No overtime'}</span>
               <span className={`tag ${f.time_clock ? 'ok' : 'warn'}`}>{f.time_clock ? (f.pay_method === 'schedule' ? 'Clock on · pay by schedule' : `Clock on · grace ${f.grace_minutes} min`) : 'Clock off · scheduled hours'}</span></span></span>
-          <span className="ps-chev">{chev}</span></summary>
+          <span className="clock-tools"><HowToButton topic="payroll" /><span className="ps-chev">{chev}</span></span></summary>
         {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
           {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
             <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}{l.time_clock === false ? ' · clock off' : ''}</small></button>)}</div>}

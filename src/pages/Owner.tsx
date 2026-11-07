@@ -286,7 +286,7 @@ export default function OwnerApp() {
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
           { label: '⇄ Switch to worker view', hint: 'Your own shifts, clock in and out, time off, pay', onClick: () => goWorker(), primary: true },
           { label: 'Account settings', hint: 'Name, email, photo, password, time zone', onClick: () => nav('/app/account') },
-          { label: '▶ How-to videos', hint: 'Payroll, time clock, swaps', onClick: () => setHowto(true) },
+          { label: '▶ How-to videos', hint: 'Payroll, time clock rules, swaps, clocking in', onClick: () => setHowto(true) },
           { label: 'Plan & billing', hint: `${PLANS[planOf(b.org)].name} plan · coupons`, onClick: () => nav('/app/plan') },
           { label: 'Payroll', hint: 'Paydays, payslips, history', onClick: () => setTab('payroll') },
           { label: 'Schedule', hint: rangeTitle(week, addDays(week, 6)), onClick: () => setTab('schedule') },

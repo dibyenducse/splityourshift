@@ -801,3 +801,9 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 .clock-tools { display: inline-flex; align-items: center; gap: 8px; }
 .sheet .tut-video { max-height: 70vh; }
 @media (min-width: 641px) { .sheet:has(.howto-player) { width: min(860px, 92vw); } }
+
+/* Swap menu: long worker lists scroll inside a box, like the staff list */
+.sr-mates { max-height: 248px; overflow-y: auto; overscroll-behavior: contain; padding: 3px; margin: -3px; scrollbar-gutter: stable; align-content: start; }
+@media (max-width: 640px) { .sr-mates { grid-template-columns: 1fr; max-height: min(46vh, 300px); } }
+.sr-search { width: 100%; max-width: 360px; min-height: 38px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: inherit; }
+@media (max-width: 640px) { .sr-shifts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
