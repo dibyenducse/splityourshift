@@ -259,12 +259,12 @@ td.cell .ph { display: flex; align-items: center; justify-content: center; heigh
 .flag { font-family: var(--f-mono); font-size: 10px; padding: 1px 4px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); flex: none; }
 
 body.dragging, body.dragging * { cursor: grabbing !important; }
-body.dragging td.cell.drop-ok { background: var(--ok-soft); }
-body.dragging td.cell.drop-warn { background: var(--warn-soft); }
-body.dragging td.cell.drop-bad { background: var(--bad-soft); }
-body.dragging td.cell.drop-bad .chip, body.dragging td.cell.drop-bad .ph { opacity: .55; }
+body.dragging .drop-ok[data-cell] { background: var(--ok-soft); }
+body.dragging .drop-warn[data-cell] { background: var(--warn-soft); }
+body.dragging .drop-bad[data-cell] { background: var(--bad-soft); }
+body.dragging .drop-bad[data-cell] .chip, body.dragging .drop-bad[data-cell] .ph { opacity: .55; }
 td.cell.hover { outline: 2px solid var(--accent); outline-offset: -3px; }
-body.dragging td.cell.drop-bad.hover { outline-color: var(--bad); }
+body.dragging .drop-bad.hover[data-cell] { outline-color: var(--bad); }
 .chip.lifting { opacity: .35; }
 body.picking .owner td.cell:hover { outline: 2px solid var(--accent); outline-offset: -3px; }
 .ghost { position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none; padding: 8px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow); font-weight: 700; max-width: 260px; }
@@ -954,3 +954,27 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
   .ad-table tbody td:last-child .actions { justify-content: flex-start !important; flex-wrap: wrap !important; }
   .ad-table .num::before { content: attr(data-l); }
 }
+
+/* Split shift: a day's box holds its parts, stacked */
+td.cell.split { padding: 3px; vertical-align: top; }
+td.cell.split .part { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px; padding: 2px 3px; border-radius: 7px; cursor: pointer; border: 1px dashed transparent; }
+td.cell.split .part + .part { margin-top: 3px; }
+td.cell.split .part:hover, td.cell.split .part:focus-visible { border-color: var(--line-strong); background: var(--surface-2); outline: none; }
+td.cell.split .ptime { font-family: var(--f-mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+td.cell.split .part .chip { min-height: 26px; padding: 2px 6px; font-size: 12.5px; }
+td.cell.split .part .ph { min-height: 26px; font-size: 12px; padding: 2px; }
+body.dragging .part.hover[data-cell] { outline: 2px solid var(--accent); }
+/* Split form in the shift sheet */
+.split-form { display: grid; gap: 10px; }
+.split-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; gap: 2px; background: var(--surface); }
+.split-bar span { display: flex; align-items: center; padding: 0 6px; font-size: 11px; font-family: var(--f-mono); color: var(--muted); background: var(--surface-2); min-width: 0; overflow: hidden; white-space: nowrap; }
+.split-bar span.on { background: hsl(var(--h) var(--chip-s) var(--chip-l)); color: hsl(var(--h) 45% var(--chip-tl)); }
+.split-cuts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.split-cut { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.split-cut select { width: auto; min-height: 36px; }
+.split-parts { display: grid; gap: 6px; }
+.split-part { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); font: inherit; color: var(--fg); text-align: left; }
+.split-part .when { display: grid; } .split-part .when small { color: var(--muted); font-size: 12px; }
+.split-part select { min-height: 36px; }
+.split-part.link { cursor: pointer; } .split-part.link:hover { border-color: var(--accent); } .split-part.me { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.split-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }

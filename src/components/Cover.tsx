@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { addDays, ago, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, evaluate, keysOf, parseCell, slotLabel } from '../lib/rules';
+import { cellKey, empOf, evaluate, keysOf, parseCell, slotLabel, slotById } from '../lib/rules';
 import type { Bundle, Req } from '../lib/types';
 import { Sheet, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
@@ -17,7 +17,7 @@ export function TimeOffSheet({ b, empId, onClose, reload }: { b: Bundle; empId: 
   const [f, setF] = useState({ loc: locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1), reason: '' });
   const [busy, setBusy] = useState(false);
   const slots = b.slots.filter((s) => s.location_id === f.loc).sort((x, y) => x.start_hour - y.start_hour);
-  const pick = (k: string) => { const { slot, date } = parseCell(k); setF({ ...f, slot, date, loc: b.slots.find((s) => s.id === slot)?.location_id ?? f.loc }); };
+  const pick = (k: string) => { const { slot, date } = parseCell(k); setF({ ...f, slot, date, loc: slotById(b, slot)?.location_id ?? f.loc }); };
   const send = async () => {
     if (!f.slot || !f.date) return toast('Pick the date and the shift.', 'error', 'Missing');
     setBusy(true);
@@ -96,7 +96,7 @@ export function CoverSheet({ b, req, onClose, reload }: { b: Bundle; req: Req; o
     setOffers((data ?? []) as Offer[]);
   }, [req.id]);
   useEffect(() => { load(); }, [load]);
-  const slot = b.slots.find((s) => s.id === req.slot_id);
+  const slot = slotById(b, req.slot_id);
   const k = req.slot_id ? cellKey(req.slot_id, req.work_date) : null;
   const off = empOf(b, req.employee_id), cover = empOf(b, req.covered_by);
   const people = b.emps.filter((e) => e.id !== req.employee_id && (!slot || e.locs.includes(slot.location_id)))

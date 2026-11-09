@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { disablePush, enablePush, isIOS, isStandalone, pushIsOn, pushSupported } from '../lib/push';
 import { DAY_SHORT, addDays, mmdd, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slotOf } from '../lib/rules';
+import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slotOf, slotById } from '../lib/rules';
 import type { Bundle, TimeEntry, TimeFix } from '../lib/types';
 import { Sheet, useToast } from './ui';
 import { TimeSwapPicker } from './Adjustments';
@@ -197,7 +197,7 @@ function CoverAsk({ b, empId, entryId, onClose, reload }: { b: Bundle; empId: st
   const myLocs = b.locs.filter((l) => me?.locs.includes(l.id) && l.time_clock !== false);
   const [loc, setLoc] = useState(myLocs[0]?.id ?? b.locs[0]?.id ?? '');
   const days = [addDays(todayIso(), -1), todayIso()];
-  const cells = b.slots.flatMap((s) => days.map((d) => cellKey(s.id, d)))
+  const cells = [...b.slots.flatMap((s) => days.map((d) => cellKey(s.id, d))), ...(b.parts ?? []).filter((p) => days.includes(p.only_date!)).map((p) => cellKey(p.id, p.only_date!))]
     .filter((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime() && b.assign[k] !== empId; })
     .sort((x, y) => shiftWindow(b, x).start.getTime() - shiftWindow(b, y).start.getTime());
   const taken = (k: string) => b.entries.find((e) => e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date);
@@ -293,7 +293,7 @@ export function HoursList({ b, empId, weeks, onCancel }: { b: Bundle; empId: str
   const fx = b.fixes.filter((f) => f.employee_id === empId && f.work_date >= from && f.work_date < to && f.status !== 'approved');
   const label = (e: TimeEntry | TimeFix) => {
     const dow = DAY_SHORT[(new Date(e.work_date + 'T00:00:00Z').getUTCDay() + 6) % 7];
-    const s = e.slot_id ? b.slots.find((x) => x.id === e.slot_id) : undefined;
+    const s = e.slot_id ? slotById(b, e.slot_id) : undefined;
     return `${dow} ${mmdd(e.work_date)}${s ? ` · ${locName(b, s.location_id)} ${shiftLong(s.start_hour, s.hours)}` : ''}`;
   };
   if (!es.length && !fx.length) return <p className="empty-note">No clocked hours in this pay period yet.</p>;

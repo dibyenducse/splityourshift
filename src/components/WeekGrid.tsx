@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { DAY_LONG, addDays, mmdd, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, shortName, swapOf, valid, type Changes, type Result } from '../lib/rules';
+import { TYPE_LABEL, absEnd, absStart, availFor, cellKey, empOf, parseCell, partsOf, shortName, swapOf, valid, type Changes, type Result } from '../lib/rules';
 import type { Bundle, Loc } from '../lib/types';
 import { ConfirmButton } from './ui';
 
@@ -43,11 +43,42 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
   for (const r of b.reqs) if (r.status === 'approved' && r.slot_id) offs[cellKey(r.slot_id, r.work_date)] = r;
   const locs = b.locs.filter((l) => !onlyLocs || onlyLocs.includes(l.id));
   if (!locs.length) return <p className="empty-note">No locations yet.</p>;
+  /** What one schedule box shows: the worker's chip with its status marks, or Open / Needs cover. */
+  const cellInner = (k: string) => {
+                        const w = empOf(b, b.assign[k]);
+                        let inner;
+                        if (w) {
+                          const st = absStart(b, k), en = absEnd(b, k);
+                          const dbl = (ranges[w.id] || []).some(([a, z]) => z === st || a === en);
+                          const cls = meId ? (w.id === meId ? ' me' : ' dim') : '';
+                          const entry = b.entries.find((x) => x.employee_id === w.id && x.slot_id === parseCell(k).slot && x.work_date === parseCell(k).date);
+                          const sw = swapOf(b, k), ts = (b.swaps ?? []).find((x) => x.kind === 'late_swap' && x.ret_slot === parseCell(k).slot && x.ret_date === parseCell(k).date), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
+                          const off = offs[k], covering = off && off.employee_id !== w.id ? empOf(b, off.employee_id)?.name ?? 'someone' : null, offSelf = off && off.employee_id === w.id;
+                          const status = [onNow && 'on the clock now', entry?.clock_out && 'clocked in and out', sw && `swapped from ${empOf(b, sw.orig)?.name ?? '?'}`, dbl && 'double shift', pending.has(k) && 'asked for this shift off', unavail && 'unavailable at this time'].filter(Boolean);
+                          inner = (
+                            <div className={`chip${cls}`} style={{ ['--h' as string]: w.hue }} title={`${w.name}${status.length ? ` · ${status.join(' · ')}` : ''}`} {...(editable ? { 'data-drag': '', 'data-wid': w.id, 'data-key': k } : {})}>
+                              <span className="chip-row">
+                                <span className="cname">{shortName(b, w)}</span>
+                                {onNow && <span className="sdot" aria-label="On the clock now" />}
+                                {sw && <span className="flag swap" aria-label={`Swapped from ${empOf(b, sw.orig)?.name ?? '?'}`}>⇄</span>}
+                                {covering && !sw && <span className="flag cover" title={`Coverage assigned: covering ${covering}'s time off`}>cover</span>}
+                                {offSelf && <span className="flag off" title="Time off approved">off</span>}
+                                {ts && <span className="flag swap" title={`Time swap: ${empOf(b, ts.from_emp)?.name ?? '?'} works ${ts.minutes} min of ${empOf(b, ts.to_emp)?.name ?? '?'}'s time`}>⏱</span>}
+                                {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
+                                {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
+                                {entry?.clock_out && <span className="flag ok" title="Clocked in and out">✓</span>}
+                                {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)" aria-label="Unavailable">⊘</span>}
+                              </span>
+                            </div>);
+                        } else if (offs[k]) inner = <span className="ph needs" title={`${empOf(b, offs[k].employee_id)?.name ?? 'Someone'} has approved time off`}>Needs cover<small>{shortName(b, empOf(b, offs[k].employee_id) ?? { id: '', name: '?' })} off</small></span>;
+                        else inner = <span className="ph">Open</span>;
+                        return inner;
+  };
   return (
     <>
       {locs.map((l) => {
         const slots = b.slots.filter((s) => s.location_id === l.id).sort((x, y) => x.start_hour - y.start_hour || x.sort - y.sort);
-        const filled = slots.reduce((n, s) => n + DAY_LONG.filter((_, d) => b.assign[cellKey(s.id, addDays(week, d))]).length, 0);
+        const filled = slots.reduce((n, s) => n + DAY_LONG.filter((_, d) => { const dt = addDays(week, d), ps = partsOf(b, s.id, dt); return ps.length ? ps.every((p) => b.assign[cellKey(p.id, dt)]) : b.assign[cellKey(s.id, dt)]; }).length, 0);
         const open = slots.length * 7 - filled;
         const lens = [...new Set(slots.map((s) => s.hours))];
         return (
@@ -78,33 +109,18 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                       <th className="sh" scope="row"><b>{shiftShort(s.start_hour, s.hours)}</b><small>{shiftLong(s.start_hour, s.hours)} · {s.hours}h</small></th>
                       {DAY_LONG.map((_, d) => {
                         const k = cellKey(s.id, addDays(week, d));
+                        const parts = partsOf(b, s.id, addDays(week, d));
+                        if (parts.length) return (
+                          <td key={d} className="cell split" aria-label={`${DAY_LONG[d]}: split into ${parts.length} parts`}>
+                            {parts.map((p) => { const pk = cellKey(p.id, p.only_date!), pw = empOf(b, b.assign[pk]); return (
+                              <div key={p.id} className="part" {...(editable ? { tabIndex: 0, 'data-cell': pk } : {})}
+                                onClick={editable && onCell ? (e) => { e.stopPropagation(); onCell(pk); } : undefined}
+                                onKeyDown={editable && onCell ? (e) => { if (e.key === 'Enter') onCell(pk); } : undefined}
+                                aria-label={`${shiftLong(p.start_hour, p.hours)}: ${pw ? pw.name : 'open'}`}>
+                                <span className="ptime">{shiftShort(p.start_hour, p.hours)}</span>{cellInner(pk)}</div>); })}
+                          </td>);
+                        const inner = cellInner(k);
                         const w = empOf(b, b.assign[k]);
-                        let inner;
-                        if (w) {
-                          const st = absStart(b, k), en = absEnd(b, k);
-                          const dbl = (ranges[w.id] || []).some(([a, z]) => z === st || a === en);
-                          const cls = meId ? (w.id === meId ? ' me' : ' dim') : '';
-                          const entry = b.entries.find((x) => x.employee_id === w.id && x.slot_id === s.id && x.work_date === parseCell(k).date);
-                          const sw = swapOf(b, k), ts = (b.swaps ?? []).find((x) => x.kind === 'late_swap' && x.ret_slot === s.id && x.ret_date === parseCell(k).date), onNow = entry && !entry.clock_out, unavail = editable && !availFor(b, w, k);
-                          const off = offs[k], covering = off && off.employee_id !== w.id ? empOf(b, off.employee_id)?.name ?? 'someone' : null, offSelf = off && off.employee_id === w.id;
-                          const status = [onNow && 'on the clock now', entry?.clock_out && 'clocked in and out', sw && `swapped from ${empOf(b, sw.orig)?.name ?? '?'}`, dbl && 'double shift', pending.has(k) && 'asked for this shift off', unavail && 'unavailable at this time'].filter(Boolean);
-                          inner = (
-                            <div className={`chip${cls}`} style={{ ['--h' as string]: w.hue }} title={`${w.name}${status.length ? ` · ${status.join(' · ')}` : ''}`} {...(editable ? { 'data-drag': '', 'data-wid': w.id, 'data-key': k } : {})}>
-                              <span className="chip-row">
-                                <span className="cname">{shortName(b, w)}</span>
-                                {onNow && <span className="sdot" aria-label="On the clock now" />}
-                                {sw && <span className="flag swap" aria-label={`Swapped from ${empOf(b, sw.orig)?.name ?? '?'}`}>⇄</span>}
-                                {covering && !sw && <span className="flag cover" title={`Coverage assigned: covering ${covering}'s time off`}>cover</span>}
-                                {offSelf && <span className="flag off" title="Time off approved">off</span>}
-                                {ts && <span className="flag swap" title={`Time swap: ${empOf(b, ts.from_emp)?.name ?? '?'} works ${ts.minutes} min of ${empOf(b, ts.to_emp)?.name ?? '?'}'s time`}>⏱</span>}
-                                {dbl && <span className="flag" title="Back-to-back double shift">2×</span>}
-                                {pending.has(k) && <span className="flag" title="Asked for this shift off">off?</span>}
-                                {entry?.clock_out && <span className="flag ok" title="Clocked in and out">✓</span>}
-                                {unavail && <span className="flag" title="This worker said they can't work at this time (their availability)" aria-label="Unavailable">⊘</span>}
-                              </span>
-                            </div>);
-                        } else if (offs[k]) inner = <span className="ph needs" title={`${empOf(b, offs[k].employee_id)?.name ?? 'Someone'} has approved time off`}>Needs cover<small>{shortName(b, empOf(b, offs[k].employee_id) ?? { id: '', name: '?' })} off</small></span>;
-                        else inner = <span className="ph">Open</span>;
                         return (
                           <td key={d} className="cell" {...(editable ? { tabIndex: 0, 'data-cell': k } : {})}
                             onClick={editable && onCell ? () => onCell(k) : undefined}
@@ -168,7 +184,7 @@ export function useDragDrop(opts: {
       document.body.classList.add('dragging');
       if (drag.src.classList.contains('chip')) drag.src.classList.add('lifting');
       trash.hidden = !drag.from;
-      document.querySelectorAll<HTMLElement>('td[data-cell]').forEach((td) => {
+      document.querySelectorAll<HTMLElement>('[data-cell]').forEach((td) => {
         const ch = changesFor(td.dataset.cell!); if (!ch) return;
         const r = ref.current.check(ch);
         const cls = r.errors.length ? 'drop-bad' : r.warnings.length ? 'drop-warn' : 'drop-ok';
@@ -182,9 +198,9 @@ export function useDragDrop(opts: {
       const o = ref.current;
       ghost.style.transform = `translate(${drag.lx + 14}px, ${drag.ly + 14}px)`;
       const under = document.elementFromPoint(drag.lx, drag.ly) as HTMLElement | null;
-      const td = under?.closest<HTMLElement>('td[data-cell]');
+      const td = under?.closest<HTMLElement>('[data-cell]');
       const overTrash = !!(under && drag.from && (under.closest('.trash') || under.closest('#roster')));
-      document.querySelectorAll('td.cell.hover').forEach((x) => x.classList.remove('hover'));
+      document.querySelectorAll('[data-cell].hover').forEach((x) => x.classList.remove('hover'));
       trash.classList.toggle('hover', overTrash);
       let sub = drag.from ? 'Drop on a shift to move or trade' : 'Drop on a shift', cls = '';
       if (td) {

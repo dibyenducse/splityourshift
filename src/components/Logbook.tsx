@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { addDays, shiftLong, todayIso } from '../lib/time';
-import { empOf } from '../lib/rules';
+import { empOf, slotById } from '../lib/rules';
 import type { Bundle, Slot } from '../lib/types';
 import { ConfirmButton, Sheet, useToast } from './ui';
 
@@ -39,7 +39,7 @@ export function ShiftReportsBook({ b, empId, owner }: { b: Bundle; empId?: strin
   const today = reportDayNow(b.org.time_zone);
   const PAGE = 40;
 
-  const shiftOf = (r: Report): ShiftName | null => r.shift_name ?? (r.slot_id ? (b.slots.find((s) => s.id === r.slot_id) ? shiftNameOf(b.slots.find((s) => s.id === r.slot_id)!) : null) : null);
+  const shiftOf = (r: Report): ShiftName | null => r.shift_name ?? (r.slot_id ? (slotById(b, r.slot_id) ? shiftNameOf(slotById(b, r.slot_id)!) : null) : null);
   const title = (r: Report) => `${b.locs.find((l) => l.id === r.location_id)?.name ?? 'Report'}${shiftOf(r) ? ` – ${shiftOf(r)} Shift` : ''}`;
 
   const load = useCallback(async (append = false) => {

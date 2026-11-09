@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Sheet } from './ui';
 
-export type HowToTopic = 'payroll' | 'clockrules' | 'swapowner' | 'swap' | 'clock';
+export type HowToTopic = 'payroll' | 'clockrules' | 'swapowner' | 'split' | 'swap' | 'clock';
 /** Short how-to videos recorded from the app (public/media/how-*.mp4). */
 export const HOWTOS: Record<HowToTopic, { title: string; tab: string; length: string; blurb: string }> = {
   payroll: { title: 'How payroll works', tab: 'Payroll', length: '1:25', blurb: 'Pay schedule, overtime, how hours are paid, bonuses, edits and payday.' },
   clockrules: { title: 'Time clock rules and pay', tab: 'Clock rules', length: '1:29', blurb: 'Clock on or off, the grace period, the three ways to pay, and approving late clock-ins.' },
   swapowner: { title: 'Shift swaps for owners', tab: 'Swaps', length: '1:13', blurb: 'Set up swaps for any worker, approve them, see every swap and track shifts owed.' },
+  split: { title: 'Split a shift for one day', tab: 'Split a shift', length: '1:12', blurb: 'Give part of a shift to someone else on one day, without changing your regular shifts.' },
   swap: { title: 'Shift swaps for workers', tab: 'Workers: swaps', length: '1:24', blurb: 'Ask a coworker to work your shift; they accept; the schedule updates.' },
   clock: { title: 'How to clock in and out', tab: 'Workers: clocking in', length: '1:02', blurb: 'One tap in and out, coming late, staying late and forgetting to clock out.' },
 };
@@ -23,7 +24,7 @@ function Player({ topic }: { topic: HowToTopic }) {
 }
 
 /** A sheet with one how-to video, or (without `topic`) all of them to pick from. */
-export function HowToSheet({ topic, topics = ['payroll', 'clockrules', 'swapowner', 'clock', 'swap'], onClose }: { topic?: HowToTopic; topics?: HowToTopic[]; onClose: () => void }) {
+export function HowToSheet({ topic, topics = ['payroll', 'clockrules', 'swapowner', 'split', 'clock', 'swap'], onClose }: { topic?: HowToTopic; topics?: HowToTopic[]; onClose: () => void }) {
   const [t, setT] = useState<HowToTopic>(topic ?? topics[0]);
   return (
     <Sheet eyebrow="How it works" title={HOWTOS[t].title} onClose={onClose}>

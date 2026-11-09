@@ -9,7 +9,11 @@ export type Changes = Record<string, string | null>;
 export interface Issue { short: string; msg: string }
 export interface Result { errors: Issue[]; warnings: Issue[] }
 
-export function slotOf(b: Bundle, k: string): Slot | undefined { return b.slots.find((s) => s.id === parseCell(k).slot); }
+/** A shift by id: a regular one, or a one-day part of a split shift. */
+export const slotById = (b: Bundle, id: string | null | undefined): Slot | undefined => (id ? b.slots.find((s) => s.id === id) ?? b.parts?.find((s) => s.id === id) : undefined);
+export function slotOf(b: Bundle, k: string): Slot | undefined { return slotById(b, parseCell(k).slot); }
+/** The parts a shift is split into on one day (empty if it isn't split). */
+export const partsOf = (b: Bundle, slotId: string, date: string) => (b.parts ?? []).filter((p) => p.parent_slot === slotId && p.only_date === date).sort((x, y) => x.start_hour - y.start_hour);
 export const empOf = (b: Bundle, id: string | null | undefined) => (id ? b.emps.find((e) => e.id === id) : undefined);
 export const locName = (b: Bundle, id: string) => b.locs.find((l) => l.id === id)?.name ?? '?';
 export const valid = (b: Bundle, k: string) => !!slotOf(b, k);
@@ -116,7 +120,7 @@ export function payFor(b: Bundle, e: Emp, weeks: string[]) {
     // where the time clock is off, or pay follows the schedule, the scheduled shift hours are the hours paid
     const bySched = (locId: string | null | undefined) => { const l = b.locs.find((x) => x.id === locId); return !!l && (l.time_clock === false || l.pay_method === 'schedule'); };
     const offHours = ks.filter((k) => bySched(slotOf(b, k)!.location_id)).reduce((n, k) => n + slotOf(b, k)!.hours, 0);
-    const clocked = es.filter((x) => !bySched(x.slot_id ? b.slots.find((s) => s.id === x.slot_id)?.location_id : x.location_id));
+    const clocked = es.filter((x) => !bySched(x.slot_id ? slotById(b, x.slot_id)?.location_id : x.location_id));
     const h = round2(clocked.reduce((n, x) => n + entryHours(x), 0) + offHours);
     hours += h;
     reg += useOt ? Math.min(OT_LIMIT, h) : h; ot += useOt ? Math.max(0, h - OT_LIMIT) : 0;

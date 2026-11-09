@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { DAY_SHORT, addDays, mmdd, rangeTitle, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, round2 } from '../lib/rules';
+import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, round2, slotById } from '../lib/rules';
 import type { Bundle, TimeEntry } from '../lib/types';
 import { ConfirmButton, Sheet, useToast } from '../components/ui';
 import { clockTime, shiftWindow } from '../components/Clock';
@@ -21,12 +21,12 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
   const weekEntries = b.entries.filter((e) => e.work_date >= week && e.work_date < addDays(week, 7)).sort((x, y) => x.clock_in.localeCompare(y.clock_in));
   const now = Date.now();
   // Scheduled shifts this week that have ended with nobody clocked in.
-  const missing = b.slots.flatMap((s) => Array.from({ length: 7 }, (_, d) => cellKey(s.id, addDays(week, d))))
+  const missing = [...b.slots.flatMap((s) => Array.from({ length: 7 }, (_, d) => cellKey(s.id, addDays(week, d)))), ...(b.parts ?? []).map((p) => cellKey(p.id, p.only_date!))]
     .filter((k) => b.assign[k] && shiftWindow(b, k).end.getTime() < now && !b.entries.some((e) => e.employee_id === b.assign[k] && e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date)
       && !b.reqs.some((r) => r.status === 'approved' && r.slot_id === parseCell(k).slot && r.work_date === parseCell(k).date))
     .sort();
   const shiftOf = (e: { slot_id: string | null; work_date: string }) => {
-    const s = e.slot_id ? b.slots.find((x) => x.id === e.slot_id) : undefined;
+    const s = e.slot_id ? slotById(b, e.slot_id) : undefined;
     const dow = DAY_SHORT[(new Date(e.work_date + 'T00:00:00Z').getUTCDay() + 6) % 7];
     return `${dow} ${mmdd(e.work_date)}${s ? ` · ${locName(b, s.location_id)} ${shiftLong(s.start_hour, s.hours)}` : ''}`;
   };

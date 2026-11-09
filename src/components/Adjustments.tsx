@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { addDays, ago, shiftLong, todayIso } from '../lib/time';
-import { availFor, cellKey, empOf, keysOf, parseCell, slotOf } from '../lib/rules';
+import { availFor, cellKey, empOf, keysOf, parseCell, slotOf, slotById } from '../lib/rules';
 import type { Adjustment, Bundle } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
@@ -40,7 +40,7 @@ export function TimeSwapPicker({ b, empId, other, minutes, iOwe, entryId, counte
   const toast = useToast();
   const me = empOf(b, empId);
   const locs = b.locs.filter((l) => me?.locs.includes(l.id)).length ? b.locs.filter((l) => me?.locs.includes(l.id)) : b.locs;
-  const first = counter?.ret_slot ? b.slots.find((x) => x.id === counter.ret_slot) : undefined;
+  const first = counter?.ret_slot ? slotById(b, counter.ret_slot) : undefined;
   const [f, setF] = useState({ other: other ?? '', minutes, date: counter?.ret_date ?? addDays(todayIso(), 1), loc: first?.location_id ?? locs[0]?.id ?? '', slot: counter?.ret_slot ?? '' });
   const [busy, setBusy] = useState(false);
   const mates = b.emps.filter((e) => e.id !== empId && e.locs.some((l) => locs.some((x) => x.id === l)));
@@ -158,7 +158,7 @@ function AcceptSwap({ b, a, busy, onGo, onCancel }: { b: Bundle; a: Adjustment; 
   const who = empOf(b, a.from_emp)?.name ?? 'They';
   const [mode, setMode] = useState<'cover' | 'swap'>('cover');
   const [later, setLater] = useState(true);
-  const [loc, setLoc] = useState(b.slots.find((x) => x.id === a.slot_id)?.location_id ?? b.locs[0]?.id ?? '');
+  const [loc, setLoc] = useState(slotById(b, a.slot_id)?.location_id ?? b.locs[0]?.id ?? '');
   const [slot, setSlot] = useState('');
   const [date, setDate] = useState(addDays(todayIso(), 7));
   const slots = b.slots.filter((x) => x.location_id === loc).sort((x, y) => x.start_hour - y.start_hour);

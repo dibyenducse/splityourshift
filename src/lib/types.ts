@@ -21,7 +21,9 @@ export interface Loc {
   /** Time clock on at this location (off: no clock in/out; payroll pays scheduled hours). */
   time_clock?: boolean;
 }
-export interface Slot { id: string; org_id: string; location_id: string; start_hour: number; hours: number; sort: number; active: boolean }
+export interface Slot { id: string; org_id: string; location_id: string; start_hour: number; hours: number; sort: number; active: boolean;
+  /** A one-day part of a split shift: the day it exists and the shift it was split from. */
+  only_date?: string | null; parent_slot?: string | null }
 export interface Avail { dow: number; mode: 'any' | 'hours' | 'off'; from_hour: number; to_hour: number }
 export interface Emp {
   id: string; org_id: string; user_id: string | null; name: string; email: string | null; phone: string | null;
@@ -58,6 +60,8 @@ export interface TimeFix {
 /** Everything needed to draw and check one business's schedule. assign maps "slotId|YYYY-MM-DD" → employee id. */
 export interface Bundle {
   org: Org; locs: Loc[]; slots: Slot[]; emps: Emp[];
+  /** One-day parts of split shifts (not shown as their own rows). */
+  parts?: Slot[];
   assign: Record<string, string>; reqs: Req[]; ledger: LedgerRow[];
   entries: TimeEntry[]; fixes: TimeFix[];
   /** Accepted swaps / takeovers on shifts in the loaded weeks (to mark swapped shifts). */

@@ -40,11 +40,14 @@ function must<T>(res: { data: T | null; error: unknown }): T {
 /** Loads one business. `full` = owner/admin (rates, phones, login status); workers get coworker names only. */
 export async function loadBundle(orgId: string, week: string, full: boolean, myEmpId?: string): Promise<Bundle> {
   const from = addDays(week, -21), to = addDays(week, 34);
-  const [org, locs, slots] = await Promise.all([
+  const [org, locs, allSlots] = await Promise.all([
     supabase.from('organizations').select('*').eq('id', orgId).single().then(must<Org>),
     supabase.from('locations').select('*').eq('org_id', orgId).order('sort').order('created_at').then(must<Loc[]>),
     supabase.from('shift_slots').select('*').eq('org_id', orgId).eq('active', true).order('start_hour').then(must<Slot[]>),
   ]);
+  // regular shifts are the rows; one-day parts of split shifts are kept apart
+  const slots = allSlots.filter((s) => !s.only_date);
+  const parts = allSlots.filter((s) => s.only_date && s.only_date >= from && s.only_date <= to);
   let rows: Partial<Emp>[];
   if (full) rows = must(await supabase.from('employees').select('*').eq('org_id', orgId).order('name'));
   else {
@@ -81,7 +84,7 @@ export async function loadBundle(orgId: string, week: string, full: boolean, myE
   });
   const assign: Record<string, string> = {};
   for (const x of asg) assign[cellKey(x.slot_id, x.work_date)] = x.employee_id;
-  return { org, locs, slots, emps, assign, reqs, ledger, entries, fixes, swaps: [...swaps, ...timeSwaps] };
+  return { org, locs, slots, parts, emps, assign, reqs, ledger, entries, fixes, swaps: [...swaps, ...timeSwaps] };
 }
 
 export async function applyChanges(orgId: string, changes: Changes, allowOver = false) {

@@ -23,6 +23,7 @@ import TimeClock from './OwnerTime';
 import Payroll from './Payroll';
 import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
+import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
 import { PLANS, locLimitOf, planOf, wantPlan } from '../lib/plans';
 
@@ -270,7 +271,7 @@ export default function OwnerApp() {
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
         <WeekGrid b={b} week={week} editable onCell={onCell} undoHint={undoHint} onUndo={doUndo} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
-          onClearWeek={(l) => { const ch: Changes = {}; for (const s of b.slots.filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
+          onClearWeek={(l) => { const ch: Changes = {}; for (const s of [...b.slots, ...(b.parts ?? [])].filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
             commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
         <div className="actions no-print"><button className="btn" onClick={() => { const lim = locLimitOf(b.org); if (lim !== null && b.locs.length >= lim) nav('/app/plan?need=locations'); else setAdding(true); }}>+ Add a hotel, gas station or shop</button>
           {b.locs.length > 0 && <button className="btn danger" onClick={() => setSheet({ type: 'delloc' })}>Delete a location</button>}</div>
@@ -354,6 +355,9 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
             {rows.length ? rows.map(({ x, r, n }) => <button key={x.id} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: x.id }, `${x.name} now works ${slotLabel(b, s.key)}.`, { allowOver: true })) close(); }}>
               <span className="dot" style={{ ['--h' as string]: x.hue }} /><span className="main"><b>{x.name}</b><span>{n}/{x.max_shifts} shifts this week</span></span>{statusTag(r)}</button>) : <p className="empty-note">Add workers first.</p>}
           </div></div>}
+        {slotOf(b, s.key)?.only_date
+          ? <PartInfo b={b} k={s.key} onDone={async () => { await reload(); close(); }} onOpen={(k) => set({ type: 'shift', key: k })} />
+          : <SplitShift b={b} k={s.key} week={week} onDone={async () => { await reload(); close(); }} />}
       </Sheet>);
   }
 
@@ -435,7 +439,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   if (s.type === 'delloc') return (
     <Sheet eyebrow="Locations" title="Delete a location" onClose={close}>
       <div className="sec"><p>Deleting a location removes its shifts and its whole schedule, including past weeks. Workers stay in your staff list. This can't be undone.</p></div>
-      <div className="list">{b.locs.map((l) => { const n = Object.keys(b.assign).filter((k) => b.slots.find((x) => x.id === parseCell(k).slot)?.location_id === l.id).length;
+      <div className="list">{b.locs.map((l) => { const n = Object.keys(b.assign).filter((k) => slotOf(b, k)?.location_id === l.id).length;
         return (<div key={l.id} className="row"><span className="main"><b>{l.name}</b><span>{TYPE_LABEL[l.type] ?? 'Location'} · {n} shift{n === 1 ? '' : 's'} on the schedule</span></span>
           <ConfirmButton className="btn small danger" label="Delete" confirmLabel={`Click again to delete ${l.name}`} onConfirm={async () => {
             const { error } = await supabase.from('locations').delete().eq('id', l.id);

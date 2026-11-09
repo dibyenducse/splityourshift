@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { DAY_LONG, addDays, mmdd, shiftLong, shiftShort, todayIso } from '../lib/time';
-import { empOf } from '../lib/rules';
+import { empOf, slotById } from '../lib/rules';
 import type { Bundle, Slot } from '../lib/types';
 import { ConfirmButton, useToast } from './ui';
 import { clockTime } from './Clock';
@@ -96,7 +96,7 @@ export function TaskManager({ b }: { b: Bundle }) {
   }, [b.org.id]);
   useEffect(() => { load(); }, [load]);
   const slots = useMemo(() => b.slots.filter((s) => s.location_id === f.loc).sort((x, y) => shiftOrder(x) - shiftOrder(y)), [b.slots, f.loc]);
-  const slotName = (t: Task) => { const s = b.slots.find((x) => x.id === t.slot_id); return s ? shiftShort(s.start_hour, s.hours) : 'Every shift'; };
+  const slotName = (t: Task) => { const s = slotById(b, t.slot_id); return s ? shiftShort(s.start_hour, s.hours) : 'Every shift'; };
   const add = async () => {
     if (!f.title.trim()) return toast('Write the task first.', 'error', 'Missing');
     const { error } = await supabase.from('shift_tasks').insert({ org_id: b.org.id, location_id: f.loc, slot_id: f.slot || null, title: f.title.trim(), notes: f.notes.trim() || null,
