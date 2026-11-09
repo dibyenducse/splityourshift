@@ -13,7 +13,7 @@ export function SiteNav() {
     <header className="topbar"><div className="wrap"><div className="inner" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px 16px', width: '100%' }}>
       <Link className="brand" to="/"><Logo /><span><b>SplitYourShift</b></span></Link>
       <nav className="navlinks" aria-label="Main">
-        <a className="opt" href="#features" onClick={(e) => { e.preventDefault(); jump('features'); }}>Features</a>
+        <a className="opt" href="#strengths" onClick={(e) => { e.preventDefault(); jump('strengths'); }}>Features</a>
         <a className="opt" href="#video" onClick={(e) => { e.preventDefault(); jump('video'); }}>How it works</a>
         <a className="opt" href="#pricing" onClick={(e) => { e.preventDefault(); jump('pricing'); }}>Pricing</a>
         <a className="opt" href="#about" onClick={(e) => { e.preventDefault(); jump('about'); }}>About</a>
@@ -33,7 +33,7 @@ const chip = (name: string, hue: number, o: { dbl?: boolean; sw?: boolean } = {}
 const YOUTUBE_URL = '';
 const MEDIA = import.meta.env.BASE_URL + 'media/';
 
-const T = 245, K = 330, S = 90, M = 15, C = 160, P = 200;
+const T = 245, K = 330, S = 90, M = 15, C = 160;
 
 /** Fade sections up as they scroll into view (skipped when the visitor prefers less motion). */
 function useReveal() {
@@ -67,7 +67,7 @@ export default function Home() {
         <div>
           <div className="kicker">For hotels, motels, gas stations &amp; shops</div>
           <h1>The paper schedule, <em>without the paper.</em></h1>
-          <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks.</p>
+          <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks. Someone can only stay until 2? Split the shift for that day.</p>
           <div className="actions"><Link className="btn primary big" to="/signup">Get started</Link>
             <a className="btn big" href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>▶ Watch the 2-minute video</a></div>
           <p className="note">Set up in minutes. No card needed to start.</p>
@@ -78,7 +78,7 @@ export default function Home() {
           <div className="tablewrap"><table><thead><tr><th className="sh" /><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th></tr></thead><tbody>
             <tr><th className="sh">7–3</th><td>{chip('Tiffany', T)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Tammy K.', K)}</td><td>{chip('Shea', S, { dbl: true })}</td></tr>
             <tr><th className="sh">3–11</th><td>{chip('Marcus', M, { dbl: true })}</td><td>{chip('Marcus', M)}</td><td>{chip('Corey', C, { dbl: true })}</td><td>{chip('Shea', S, { dbl: true })}</td></tr>
-            <tr><th className="sh">11–7</th><td>{chip('Marcus', M, { dbl: true })}</td><td>{chip('Tiffany', T, { sw: true })}</td><td>{chip('Corey', C, { dbl: true, sw: true })}</td><td>{chip('Priya', P)}</td></tr>
+            <tr><th className="sh">11–7</th><td>{chip('Marcus', M, { dbl: true })}</td><td>{chip('Tiffany', T, { sw: true })}</td><td>{chip('Corey', C, { dbl: true, sw: true })}</td><td>{chip('Corey', C)}</td></tr>
           </tbody></table></div>
           <div className="floating f1">Corey → Fri 7–3<small>Corey already has 5 of 5 shifts this week.</small></div>
           <div className="floating f2">⇄ Swapped<small>Tiffany Tue 11–7 ↔ Corey Wed 11–7</small></div>
@@ -118,10 +118,40 @@ export default function Home() {
         </div>
       </div></section>
 
-      <section className="band wrap" id="features"><div className="inner">
-        <h2>What it does</h2>
+      <section className="band wrap spot" id="strengths"><div className="inner">
+        <div className="kicker">Why owners switch</div>
+        <h2>What makes SplitYourShift different</h2>
+        <p className="sub">Real shifts are messy. These are the things owners tell us they couldn't do on paper, or in other apps.</p>
+        <div className="spot-hero reveal">
+          <div className="spot-copy">
+            <span className="spot-tag">✂ Built for real shifts</span>
+            <h3>Split any shift, any day</h3>
+            <p>Someone can only stay until 2? Click the shift, cut it, and give the rest to someone else. Just for that day: your regular shifts don't change. Works for overnight shifts too.</p>
+            <ul className="spot-list"><li>Cut on any hour, into up to 4 parts</li><li>Each part is a real shift: clock in, swaps and payroll</li><li>Join it back with one tap</li></ul>
+          </div>
+          <div className="spot-viz" aria-hidden="true">
+            <div className="sv-head"><b>Tuesday</b><span>9 am – 9 pm</span></div>
+            <div className="sv-bar"><span style={{ flex: 5, ['--h' as string]: 245 }}>9 am</span><span style={{ flex: 4, ['--h' as string]: 160 }}>2 pm</span><span style={{ flex: 3, ['--h' as string]: 15 }}>6 pm</span></div>
+            <div className="sv-parts">
+              <div className="chip" style={{ ['--h' as string]: 245 }}><span className="sv-t">9–2</span>Tiffany</div>
+              <div className="chip" style={{ ['--h' as string]: 160 }}><span className="sv-t">2–6</span>Corey</div>
+              <div className="chip" style={{ ['--h' as string]: 15 }}><span className="sv-t">6–9</span>Marcus</div>
+            </div>
+            <span className="sv-cut">✂</span>
+          </div>
+        </div>
+        <div className="spot-grid">
+          <div className="spot-card reveal"><span className="spot-ico">⏱</span><h3>One-tap time clock</h3><p>Workers tap one green circle to clock in and out. Grace period, late arrivals and forgotten clock-outs are handled for you.</p></div>
+          <div className="spot-card reveal"><span className="spot-ico">$</span><h3>Payroll that adds itself up</h3><p>Weekly, every 2 weeks or monthly. Hours from the clock or the schedule, overtime and payslips, ready on payday.</p></div>
+          <div className="spot-card reveal"><span className="spot-ico">⇄</span><h3>Swaps without phone calls</h3><p>Workers ask a coworker in three taps and see who is free. When they agree, the schedule updates and you're told.</p></div>
+        </div>
+      </div></section>
+
+      <section className="band alt wrap" id="features"><div className="inner">
+        <h2>Everything else it does</h2>
         <p className="sub">Everything an owner needs to run 24-hour shifts, and nothing a 10-person team won't use.</p>
         <div className="feats">
+          <div className="feat reveal feat-new"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" /></svg></span><h3>Split any shift <span className="tag ok">New</span></h3><p>Give part of a shift to someone else on one day: 9–2 for one person, 2–9 for another. Overnight shifts too.</p><div className="eg">Tue 9–9 → Tiffany 9–2 · Corey 2–9</div></div>
           <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16v14H4zM4 10h16M9 5v14" /></svg></span><h3>Drag-and-drop week</h3><p>One grid per location. Shifts down the side, days across, same as your paper sheet. Works on a phone too.</p></div>
           <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /></svg></span><h3>Shift limits that hold</h3><p>Set each worker's weekly maximum. Trying to add one more shows an error instead of an overtime surprise.</p><div className="eg">Corey: 5/5 shifts. Can't add Thu 11–7.</div></div>
           <div className="feat reveal"><span className="feat-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h11l-3-3M17 17H6l3 3" /></svg></span><h3>Swap in two clicks</h3><p>Pick who takes the shift and see their week. Tap the shift to trade back and both schedules update.</p><div className="eg">Tiffany Tue 11–7 ↔ Corey Wed 11–7</div></div>

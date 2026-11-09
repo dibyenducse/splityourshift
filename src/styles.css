@@ -989,3 +989,38 @@ body.dragging .part.hover[data-cell] { outline: 2px solid var(--accent); }
 .sheet .list.pick-list { max-height: min(42vh, 320px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 12px; padding: 4px; background: var(--surface-2); scrollbar-gutter: stable; }
 .sheet .list.pick-list .row { background: var(--surface); }
 .mock tbody tr:nth-child(3) td:nth-child(5) .chip { animation-delay: 1.55s }
+
+/* Home: "What makes SplitYourShift different" */
+.spot .sub { margin-bottom: 22px; }
+.spot-hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: center; padding: 26px; border-radius: 20px; position: relative; overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 90%, transparent), color-mix(in srgb, var(--ok-soft) 80%, transparent)); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); }
+@media (min-width: 900px) { .spot-hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); padding: 34px 38px; } }
+.spot-tag { display: inline-block; font-weight: 800; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, var(--accent), var(--ok)); padding: 5px 11px; border-radius: 999px; }
+.spot-copy h3 { font-size: clamp(26px, 3.4vw, 36px); margin: 12px 0 8px; line-height: 1.1; }
+.spot-copy p { font-size: 16.5px; color: var(--muted); margin: 0 0 12px; max-width: 34em; }
+.spot-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.spot-list li { display: flex; gap: 8px; align-items: baseline; font-weight: 600; }
+.spot-list li::before { content: '✓'; color: var(--ok); font-weight: 800; }
+.spot-viz { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: 0 18px 40px rgb(0 0 0 / .1); display: grid; gap: 12px; }
+.sv-head { display: flex; justify-content: space-between; align-items: baseline; } .sv-head b { font-family: var(--f-display); font-size: 19px; } .sv-head span { color: var(--muted); font-family: var(--f-mono); font-size: 13px; }
+.sv-bar { display: flex; gap: 3px; height: 34px; border-radius: 9px; overflow: hidden; }
+.sv-bar span { display: flex; align-items: center; padding: 0 8px; font-family: var(--f-mono); font-size: 11.5px; background: hsl(var(--h) var(--chip-s) var(--chip-l)); color: hsl(var(--h) 45% var(--chip-tl)); transform-origin: left; }
+.sv-parts { display: grid; gap: 6px; }
+.sv-parts .chip { justify-content: flex-start; gap: 10px; min-height: 38px; }
+.sv-t { font-family: var(--f-mono); font-size: 11.5px; font-weight: 500; opacity: .8; }
+.sv-cut { position: absolute; top: 58px; left: calc(5 / 12 * (100% - 36px) + 18px); transform: translate(-50%, -50%) rotate(90deg); font-size: 22px; color: var(--accent); background: var(--surface); border-radius: 50%; width: 34px; height: 34px; display: grid; place-items: center; box-shadow: 0 2px 8px rgb(0 0 0 / .15); }
+.spot-hero.in .sv-bar span { animation: sv-grow .7s cubic-bezier(.2, .8, .2, 1) both; } .spot-hero.in .sv-bar span:nth-child(2) { animation-delay: .25s; } .spot-hero.in .sv-bar span:nth-child(3) { animation-delay: .5s; }
+.spot-hero.in .sv-parts .chip { animation: chip-pop .45s cubic-bezier(.2, 1.4, .4, 1) both; } .spot-hero.in .sv-parts .chip:nth-child(1) { animation-delay: .7s; } .spot-hero.in .sv-parts .chip:nth-child(2) { animation-delay: .85s; } .spot-hero.in .sv-parts .chip:nth-child(3) { animation-delay: 1s; }
+.spot-hero.in .sv-cut { animation: sv-snip 1.2s ease-in-out .3s both; }
+@keyframes sv-grow { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sv-snip { 0% { opacity: 0; transform: translate(-50%, -140%) rotate(90deg); } 50% { opacity: 1; transform: translate(-50%, -50%) rotate(90deg) scale(1.2); } 100% { opacity: 1; transform: translate(-50%, -50%) rotate(90deg); } }
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+.spot-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 6px; align-content: start; transition: transform .2s, box-shadow .2s; }
+.spot-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgb(0 0 0 / .08); }
+.spot-card h3 { font-size: 19px; margin: 4px 0 0; } .spot-card p { color: var(--muted); margin: 0; }
+.spot-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; font-weight: 800; color: var(--accent); background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--ok-soft) 70%, transparent)); }
+.feat-new { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent); }
+.feat-new h3 .tag { vertical-align: middle; margin-left: 6px; font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .spot-hero .sv-bar span, .spot-hero .sv-parts .chip, .spot-hero .sv-cut { animation: none !important; } }
+.sv-parts .chip { flex-direction: row; } .sv-cut { top: 64px; }
+.sv-bar span:nth-child(2) { padding-left: 24px; }
