@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { ago, money } from '../lib/time';
 import { ConfirmButton, Loading, useToast } from '../components/ui';
-import { PLANS, applyCatalog, dollars, untilText, type CatalogRow, type PlanId } from '../lib/plans';
+import { PLANS, TRIAL, applyCatalog, dollars, untilText, type CatalogRow, type PlanId } from '../lib/plans';
 
 // ---------------------------------------------------------------- dashboard
 
@@ -194,6 +194,7 @@ export function PlansEditor() {
   };
   return (<>
     <div className="ad-head"><div><h1>Plans &amp; pricing</h1><p className="hint" style={{ margin: 0 }}>Change names, prices, location limits and what each plan lists. It updates the website, the checkout and the limits right away.</p></div></div>
+    <TrialSettings />
     <div className="ad-plans">{rows.map((r) => { const save12 = r.price_month * 12 - r.price_year, pct = r.price_month ? Math.round((save12 / (r.price_month * 12)) * 100) : 0; return (
       <section key={r.id} className={`panel ad-plan${r.popular ? ' pop' : ''}`}>
         <div className="panel-head"><h2>{r.name || '—'}</h2>{r.popular && <span className="tag ok">Most popular</span>}</div>
@@ -213,11 +214,47 @@ export function PlansEditor() {
   </>);
 }
 
+/** Free trial every new business gets: length (0 = no trial) and which plan it unlocks. */
+function TrialSettings() {
+  const toast = useToast();
+  const [f, setF] = useState<{ days: number; plan: PlanId } | null>(null);
+  const [stats, setStats] = useState<{ on: number; ended: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    supabase.from('app_settings').select('trial_days, trial_plan').maybeSingle().then(({ data }) => setF({ days: data?.trial_days ?? 14, plan: (data?.trial_plan ?? 'premium') as PlanId }));
+    supabase.from('organizations').select('plan_until').eq('plan_source', 'trial').then(({ data }) => {
+      const now = Date.now(), rows = data ?? [];
+      setStats({ on: rows.filter((r) => r.plan_until && new Date(r.plan_until).getTime() > now).length, ended: rows.filter((r) => !r.plan_until || new Date(r.plan_until).getTime() <= now).length });
+    });
+  }, []);
+  if (!f) return null;
+  const save = async () => {
+    if (!(f.days >= 0 && f.days <= 365)) return toast('Use 0 to 365 days.', 'error', 'Not saved');
+    setBusy(true);
+    const { error } = await supabase.from('app_settings').update({ trial_days: Math.round(f.days), trial_plan: f.plan }).eq('id', true);
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    Object.assign(TRIAL, { days: Math.round(f.days), plan: f.plan });
+    toast(f.days > 0 ? `New businesses get ${f.days} days of ${PLANS[f.plan].name}. Businesses already on a trial keep their end date.` : 'New businesses start on Starter with no trial.', 'ok', 'Free trial saved');
+  };
+  return (
+    <section className="panel ad-trial">
+      <div className="panel-head"><h2>Free trial</h2>{stats && <span className="tag plain">{stats.on} on a trial now · {stats.ended} trials ended</span>}</div>
+      <p className="hint">Every new business starts with this trial: all features of the plan, no card. When it ends they move to Starter; nothing is deleted. Extend or end one business's trial under Businesses → open it → Plan.</p>
+      <div className="ad-fields">
+        <div className="field"><label htmlFor="tr-days">Trial length (days, 0 = no trial)</label><input id="tr-days" type="number" min={0} max={365} value={f.days} onChange={(e) => setF({ ...f, days: +e.target.value })} /></div>
+        <div className="field"><label htmlFor="tr-plan">Trial plan</label><select id="tr-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as PlanId })}>
+          {(['plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name} (up to {PLANS[p].locations} locations)</option>)}</select></div>
+        <div className="field ad-trial-save"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save trial'}</button></div>
+      </div>
+    </section>);
+}
+
 // ---------------------------------------------------------------- activity log
 
 interface Audit { id: number; admin_email: string | null; action: string; target_type: string | null; target_name: string | null; detail: Record<string, unknown> | null; created_at: string }
 const ACTION: Record<string, string> = {
-  'plan.edit': 'Edited a plan', 'business.suspend': 'Suspended a business', 'business.reactivate': 'Reactivated a business', 'business.plan': 'Changed a business plan',
+  'plan.edit': 'Edited a plan', 'business.suspend': 'Suspended a business', 'business.reactivate': 'Reactivated a business', 'business.plan': 'Changed a business plan', 'business.trial': 'Changed a free trial', 'trial.settings': 'Changed the free trial',
   'coupon.create': 'Made a coupon', 'coupon.on': 'Turned a coupon on', 'coupon.off': 'Turned a coupon off',
   'user.block': 'Blocked a user', 'user.unblock': 'Unblocked a user', 'user.reset': 'Sent a password reset',
 };

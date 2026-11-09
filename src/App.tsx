@@ -4,7 +4,7 @@ import { authLanding, configured, landingTokens, supabase } from './lib/supabase
 import { whoAmI, type Me } from './lib/api';
 import { Loading, ToastProvider } from './components/ui';
 import Home from './pages/Home';
-import { Login, SetPassword, Signup } from './pages/Auth';
+import { Join, Login, SetPassword, Signup } from './pages/Auth';
 import { loadPlanCatalog } from './lib/plans';
 import AppShell from './pages/AppShell';
 
@@ -31,6 +31,7 @@ function Routed() {
         <Route path="/login" element={me ? <Navigate to="/app" replace /> : <Login />} />
         <Route path="/signup" element={me ? <Navigate to="/app" replace /> : <Signup />} />
         <Route path="/set-password" element={<SetPassword />} />
+        <Route path="/join/:code" element={<Join />} />
         <Route path="/app/*" element={me === undefined ? <Loading /> : me ? <AppShell /> : <Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

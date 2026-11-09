@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { sendInvite } from '../lib/api';
@@ -27,6 +27,9 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
   const [people, setPeople] = useState<Person[]>([blank(), blank(), blank()]);
   const [also, setAlso] = useState<string[]>([]);
   const [invite, setInvite] = useState(true);
+  // Signed up with Google: there's no business name yet, so ask for it on the first step.
+  const [biz, setBiz] = useState(''); const [needBiz, setNeedBiz] = useState(false);
+  useEffect(() => { if (mode === 'new') supabase.auth.getUser().then(({ data: { user } }) => { if (!user?.user_metadata?.business) setNeedBiz(true); }); }, [mode]);
   const [busy, setBusy] = useState(false);
 
   const pickType = (t: LocType) => {
@@ -45,7 +48,7 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
         const { data: { user } } = await supabase.auth.getUser();
         const meta = user?.user_metadata ?? {};
         const { data, error } = await supabase.from('organizations').insert({
-          owner_id: me.userId, name: meta.business || 'My business', owner_name: meta.name || null, pay_anchor: mondayOf(todayIso()),
+          owner_id: me.userId, name: biz.trim() || meta.business || 'My business', owner_name: meta.name || meta.full_name || null, pay_anchor: mondayOf(todayIso()),
           time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago',
         }).select('id').single();
         if (error) throw error;
@@ -89,12 +92,13 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
   let body;
   if (step === 1) body = (<>
     <h2>What do you run?</h2><p className="lead">We'll suggest the usual shift pattern. You can change everything later.</p>
+    {needBiz && <div className="field" style={{ maxWidth: 420 }}><label htmlFor="wz-biz">Business name</label><input type="text" id="wz-biz" value={biz} onChange={(e) => setBiz(e.target.value)} placeholder="e.g. Patel Hospitality" autoComplete="organization" /></div>}
     <div className="choices">
       <button className="choice" aria-pressed={type === 'hotel'} onClick={() => pickType('hotel')}><b>Hotel or motel</b><span>Front desk, night audit, housekeeping.</span></button>
       <button className="choice" aria-pressed={type === 'gas'} onClick={() => pickType('gas')}><b>Gas station</b><span>Cashiers, often open 24 hours.</span></button>
       <button className="choice" aria-pressed={type === 'shop'} onClick={() => pickType('shop')}><b>Shop or store</b><span>Convenience store, grocery, retail, salon.</span></button>
     </div>
-    <div className="wiz-foot">{back}<button className="btn primary" disabled={!type} onClick={() => setStep(2)}>Continue</button></div>
+    <div className="wiz-foot">{back}<button className="btn primary" disabled={!type || (needBiz && !biz.trim())} onClick={() => setStep(2)}>Continue</button></div>
   </>);
   else if (step === 2 && type) body = (<>
     <h2>Set up your shifts</h2><p className="lead">Pick a pattern for this {TYPE_LABEL[type].toLowerCase()}. Each shift becomes one row on your weekly schedule.</p>
@@ -107,7 +111,7 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     <div className="wiz-foot">{back}<button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button></div>
   </>);
   else body = (<>
-    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password; they don't sign up themselves. Leave a row empty to skip it.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
+    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password. Leave a row empty to skip it, or skip them all: after setup you'll get a join link to share, and workers add themselves.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
     {existing.length > 0 && <fieldset className="field"><legend>Workers you already have who also work at {locName}</legend><div className="checks">
       {existing.map((w) => <label key={w.id}><input type="checkbox" checked={also.includes(w.id)} onChange={(e) => setAlso(e.target.checked ? [...also, w.id] : also.filter((x) => x !== w.id))} /> {w.name}</label>)}</div></fieldset>}
     <div className="stack">

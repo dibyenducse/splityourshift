@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
 import { useEffect, useState } from 'react';
-import { PLANS, PLAN_ORDER, POPULAR, wantPlan, type Billing } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, TRIAL, wantPlan, type Billing } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 export function SiteNav() {
@@ -70,7 +70,7 @@ export default function Home() {
           <p className="lead">Drag your people into shifts, and SplitYourShift stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks. Someone can only stay until 2? Split the shift for that day.</p>
           <div className="actions"><Link className="btn primary big" to="/signup">Get started</Link>
             <a className="btn big" href="#video" onClick={(e) => { e.preventDefault(); document.getElementById('video')?.scrollIntoView({ behavior: 'smooth' }); }}>▶ Watch the 2-minute video</a></div>
-          <p className="note">Set up in minutes. No card needed to start.</p>
+          <p className="note">{TRIAL.days > 0 ? `Free for ${TRIAL.days} days, every feature. No card needed.` : 'Set up in minutes. No card needed to start.'}</p>
         </div>
         <div className="mock" aria-label="Example schedule">
           <div className="mock-head"><b>Sunrise Inn</b><span className="ltype">Hotel</span><span className="tag plain">Example week</span></div>
@@ -182,6 +182,7 @@ export default function Home() {
       <section className="band wrap" id="pricing"><div className="inner reveal">
         <h2>Simple pricing</h2>
         <p className="sub">Pay per business, not per worker. Pay yearly and save; move up as you add locations.</p>
+        {TRIAL.days > 0 && <p className="trial-ribbon"><b>{TRIAL.days}-day free trial</b> with every {PLANS[TRIAL.plan].name} feature. No card needed; pick a plan when it ends.</p>}
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="prices three">
           {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
@@ -203,7 +204,7 @@ export default function Home() {
         <h2>Questions</h2>
         <div className="faq" style={{ marginTop: 18 }}>
           <details><summary>Which plan do I need?</summary><p>Starter covers up to 2 locations ($19 a month or $199 a year), Plus up to 5 ($39 or $399), and Premium up to 10 ($59 or $599). More than 10? Contact support@splityourshift.com. Every plan has the schedule, time clock, payroll, shift reports and task lists.</p></details>
-          <details><summary>Do my workers need to download an app?</summary><p>No. They get an email with a link, choose a password, and log in from any phone browser with their email or phone number.</p></details>
+          <details><summary>Do my workers need to download an app?</summary><p>No. You share one join link; they open it on their phone, sign up with their name, email and a password (or Google), and they are on your staff list. Then they log in from any phone browser.</p></details>
           <details><summary>Do I have to use the time clock?</summary><p>No. Turn it on or off for each location. With it off, workers see no clock and payroll pays the scheduled shift hours; you can still edit anyone's hours.</p></details>
           <details><summary>Can I split a shift for just one day?</summary><p>Yes. Click the shift, cut it on any hour (overnight shifts too) and give each part to someone. Your regular shifts don't change, and each part works with the time clock, swaps and payroll.</p></details>
           <details><summary>Can workers change the schedule?</summary><p>No. Workers can see their shifts and the schedule, set their availability, ask for time off and ask a coworker to swap a shift. Only the owner moves people.</p></details>
@@ -214,7 +215,7 @@ export default function Home() {
       </div></section>
 
       <section className="band ink wrap cta-glow"><div className="inner ctaband reveal">
-        <div><h2>Make next week's schedule in 10 minutes</h2><p style={{ margin: '8px 0 0' }}>Start with your real shifts. No card needed to start.</p></div>
+        <div><h2>Make next week's schedule in 10 minutes</h2><p style={{ margin: '8px 0 0' }}>Start with your real shifts. {TRIAL.days > 0 ? `Free for ${TRIAL.days} days, no card needed.` : 'No card needed to start.'}</p></div>
         <div className="actions"><Link className="btn primary big" to="/signup">Get started</Link><Link className="btn big" to="/login">Log in</Link></div>
       </div></section>
 

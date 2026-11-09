@@ -41,7 +41,16 @@ jobs:
           sed -i "s/__PROJECT_REF__/$PROJECT_REF/g" supabase/migrations/*.sql
           supabase db push --password "$SUPABASE_DB_PASSWORD"
       - name: Deploy functions
-        run: supabase functions deploy invite-worker phone-login send-reminders admin-users --project-ref "$PROJECT_REF"
+        run: supabase functions deploy invite-worker phone-login send-reminders admin-users import-schedule --project-ref "$PROJECT_REF"
+      - name: Claude key for "Import from a photo" (only if the ANTHROPIC_API_KEY repository secret is set)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            supabase secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --project-ref "$PROJECT_REF" >/dev/null && echo "Claude key set."
+          else
+            echo "::notice::No ANTHROPIC_API_KEY secret. Photo import stays off until you add it (GitHub secret or Supabase → Edge Functions → Secrets)."
+          fi
       - name: Push notification keys (created once, never shown)
         run: |
           if supabase secrets list --project-ref "$PROJECT_REF" | grep -q VAPID_PRIVATE_KEY; then

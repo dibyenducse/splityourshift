@@ -52,8 +52,17 @@ export function applyCatalog(rows: CatalogRow[]) {
   const order = [...rows].sort((a, b) => a.sort - b.sort).map((r) => r.id).filter((id) => PLANS[id]);
   if (order.length === 3) PLAN_ORDER.splice(0, 3, ...order);
 }
+/** Free trial for new businesses (the admin sets it in Plans & pricing). */
+export const TRIAL: { days: number; plan: PlanId } = { days: 14, plan: 'premium' };
+/** Days left of this business's free trial, or null when it isn't on one. 0 = the trial ended. */
+export function trialLeft(org: Pick<Org, 'plan_source' | 'plan_until'> | null | undefined): number | null {
+  if (org?.plan_source !== 'trial' || !org.plan_until) return null;
+  return Math.max(0, Math.ceil((new Date(org.plan_until).getTime() - Date.now()) / 86_400_000));
+}
 export async function loadPlanCatalog(): Promise<CatalogRow[]> {
   const { supabase } = await import('./supabase');
+  const { data: t } = await supabase.from('app_settings').select('trial_days, trial_plan').maybeSingle();
+  if (t) Object.assign(TRIAL, { days: t.trial_days, plan: t.trial_plan });
   const { data, error } = await supabase.from('plan_catalog').select('*').order('sort');
   if (error || !data?.length) return [];
   applyCatalog(data as CatalogRow[]);

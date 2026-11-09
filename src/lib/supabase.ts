@@ -5,6 +5,15 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export const configured = Boolean(url && key);
 
+/** Sign-in providers switched on in Supabase (Auth → Providers), e.g. { google: true }. Read once. */
+let providers: Promise<Record<string, boolean>> | null = null;
+export function authProviders(): Promise<Record<string, boolean>> {
+  providers ??= configured
+    ? fetch(`${url}/auth/v1/settings`, { headers: { apikey: key! } }).then((r) => (r.ok ? r.json() : {})).then((j: { external?: Record<string, boolean> }) => j?.external ?? {}).catch(() => ({}))
+    : Promise.resolve({});
+  return providers;
+}
+
 // Email links (invite, password reset, sign-up confirmation) land on the site with tokens in the URL hash.
 // Read them before the router sees the hash, then swap the hash for an app route so tokens never stay in history.
 const landingHash = typeof window !== 'undefined' ? window.location.hash : '';

@@ -6,7 +6,7 @@ import type { Org } from '../lib/types';
 import { Loading, useToast } from '../components/ui';
 import { ProfileMenu } from '../components/Avatar';
 import { AppBar } from './AppShell';
-import { PLANS, PLAN_ORDER, POPULAR, dollars, locLimitOf, locLimitText, perMonth, planOf, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, dollars, locLimitOf, locLimitText, perMonth, planOf, trialLeft, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
@@ -65,18 +65,18 @@ export default function PlanPage() {
       <div className="wrap account plan-page">
         <h1 className="acct-title">Plan &amp; billing</h1>
         {need && <div className="banner warn"><p><b>Your plan includes {lim} locations.</b> {cur === 'premium' || org.location_limit ? <>For more, email <a href="mailto:support@splityourshift.com?subject=More%20locations">support@splityourshift.com</a> and we'll set it up.</> : 'Choose a bigger plan to add another hotel, gas station or shop.'}</p></div>}
-        {ended && <div className="banner warn"><p><b>Your {PLANS[(org.plan ?? 'free') as PlanId].name} plan ended on {untilText(org.plan_until)}.</b> Everything is still here. To add locations beyond Starter again, use a new coupon.</p></div>}
+        {ended && <div className="banner warn"><p><b>{org.plan_source === 'trial' ? `Your free trial ended on ${untilText(org.plan_until)}.` : `Your ${PLANS[(org.plan ?? 'free') as PlanId].name} plan ended on ${untilText(org.plan_until)}.`}</b> Everything is still here. To add locations beyond Starter again, choose a plan below.</p></div>}
 
         <section className="panel plan-now">
-          <div><span className="kicker">Your plan</span><h2>{plan.name}<small> · {dollars(plan.price)}/month or {dollars(plan.yearly)}/year</small></h2>
-            <p className="hint" style={{ margin: 0 }}>{cur === 'free' ? 'Every new account starts on Starter.' : org.plan_until ? `Active until ${untilText(org.plan_until)}${org.plan_source === 'coupon' ? ' (coupon)' : ''}.` : org.plan_source === 'early_access' ? 'Early access: no end date.' : 'No end date.'}</p></div>
+          <div><span className="kicker">Your plan</span><h2>{plan.name}{trialLeft(org) ? <span className="tag ok trial-tag">Free trial</span> : null}<small> · {dollars(plan.price)}/month or {dollars(plan.yearly)}/year</small></h2>
+            <p className="hint" style={{ margin: 0 }}>{trialLeft(org) ? `Free trial: ${trialLeft(org)} day${trialLeft(org) === 1 ? '' : 's'} left, until ${untilText(org.plan_until)}. Every feature is on. Choose a plan before it ends to keep your locations.` : cur === 'free' ? 'Starter: up to 2 locations, every feature.' : org.plan_until ? `Active until ${untilText(org.plan_until)}${org.plan_source === 'coupon' ? ' (coupon)' : ''}.` : org.plan_source === 'early_access' ? 'Early access: no end date.' : 'No end date.'}</p></div>
           <div className="plan-meter"><b>{locs}</b> of {lim ?? '∞'} location{lim === 1 ? '' : 's'} used{org.location_limit ? ' (custom limit)' : ''}
             {lim !== null && <span className="bar"><i style={{ width: `${Math.min(100, (locs / lim) * 100)}%` }} /></span>}</div>
         </section>
 
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="plan-grid">
-          {PLAN_ORDER.map((id) => { const p = PLANS[id], isCur = id === cur;
+          {PLAN_ORDER.map((id) => { const p = PLANS[id], isCur = id === cur && !trialLeft(org);
             return (<div key={id} className={`plan-card${id === POPULAR ? ' pop' : ''}${pick === id ? ' on' : ''}`}>
               {id === POPULAR && <span className="tag ok plan-pop">Most popular</span>}
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />

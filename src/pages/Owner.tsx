@@ -25,12 +25,13 @@ import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
 import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
-import { PLANS, locLimitOf, planOf, wantPlan } from '../lib/plans';
+import { AddTeamSheet } from '../components/AddTeam';
+import { PLANS, locLimitOf, planOf, trialLeft, untilText, wantPlan } from '../lib/plans';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'cover'; id: string } | null;
+  | { type: 'notes' } | { type: 'cover'; id: string } | { type: 'addteam' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const UserIcon = () => (
@@ -219,7 +220,7 @@ export default function OwnerApp() {
     <div className="layout two owner">
       <aside className="rail">
         <section className="panel" id="roster">
-          <div className="panel-head"><h2>Staff</h2><button className="mini" onClick={addWorker}>+ Add worker</button></div>
+          <div className="panel-head"><h2>Staff</h2><button className="mini" onClick={() => setSheet({ type: 'addteam' })}>+ Add worker</button></div>
           <p className="hint">Drag a name onto a shift, or tap a name and then a shift. The number is shifts this week out of their limit. Open a profile to send a login invite.</p>
           <div className="roster-list">
             {staff.length ? staff.map((w) => { const n = countWeek(b, w.id, week); return (
@@ -229,7 +230,7 @@ export default function OwnerApp() {
                 {w.user_id === me!.userId ? <span className="lstat you">you</span> : w.status !== 'active' && <span className={`lstat ${w.status}`}>{w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'expired' : 'no login'}</span>}
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
                 <button className="iconbtn" onClick={() => setSheet({ type: 'profile', id: w.id })} title="View Profile" aria-label={`View ${w.name}'s profile`}><UserIcon /></button>
-              </div>); }) : <p className="empty-note">No workers yet.</p>}
+              </div>); }) : <div className="empty-note">No workers yet. <button className="btn small primary" onClick={() => setSheet({ type: 'addteam' })}>Send your team a join link</button></div>}
           </div>
         </section>
         <section className="panel">
@@ -265,8 +266,12 @@ export default function OwnerApp() {
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
             {!r.next_paid && <>{rangeTitle(r.next_start, r.next_end)}: {money(r.payable)} for {r.employees} employee{r.employees === 1 ? '' : 's'}.</>}</p>
           <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); setTab('payroll'); }}>Open payroll</button></div>)}
+        {(() => { const left = trialLeft(b.org), lim0 = locLimitOf(b.org); if (left === null || (left === 0 && lim0 !== null && b.locs.length > lim0)) return null; const tp = PLANS[(b.org.plan ?? 'premium') as keyof typeof PLANS];
+          return <div className={`banner trial-bar no-print${left === 0 ? ' warn' : left <= 3 ? ' soon' : ''}`} style={{ marginBottom: 10 }}>
+            <p>{left > 0 ? <><b>Free trial: {left} day{left === 1 ? '' : 's'} left</b> of {tp.name}, until {untilText(b.org.plan_until)}. Every feature is on.</> : <><b>Your free trial has ended.</b> Everything is still here. Choose a plan to keep adding locations.</>}</p>
+            <button className="btn small primary" onClick={() => nav('/app/plan')}>{left > 0 ? 'See plans' : 'Choose a plan'}</button></div>; })()}
         {(() => { const p = planOf(b.org), lim = locLimitOf(b.org); return lim !== null && b.locs.length > lim && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
-          <p><b>{(b.org.plan ?? 'free') !== 'free' && p === 'free' ? `Your ${PLANS[b.org.plan ?? 'free'].name} plan has ended.` : `You have ${b.locs.length} locations on the ${PLANS[p].name} plan.`}</b> Everything keeps working, but you can't add more locations until you choose a bigger plan.</p>
+          <p><b>{(b.org.plan ?? 'free') !== 'free' && p === 'free' ? (b.org.plan_source === 'trial' ? 'Your free trial has ended.' : `Your ${PLANS[b.org.plan ?? 'free'].name} plan has ended.`) : `You have ${b.locs.length} locations on the ${PLANS[p].name} plan.`}</b> Everything keeps working, but you can't add more locations until you choose a bigger plan.</p>
           <button className="btn small primary" onClick={() => nav('/app/plan')}>See plans</button></div>; })()}
         {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts.'}</p>
           {prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}</div>}
@@ -287,13 +292,14 @@ export default function OwnerApp() {
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[
           { label: 'Switch to worker view', hint: 'Your own shifts and time clock', onClick: () => goWorker(), primary: true, icon: 'switch' },
           { label: 'Account settings', onClick: () => nav('/app/account'), icon: 'account' },
-          { label: 'Plan & billing', hint: `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
+          { label: 'Plan & billing', hint: trialLeft(b.org) ? `${PLANS[planOf(b.org)].name} trial · ${trialLeft(b.org)} days left` : `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' },
         ]} />} />
       <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
-      {sheet && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
+      {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} week={week} onClose={() => setSheet(null)} reload={reload} onManual={addWorker} />}
+      {sheet && sheet.type !== 'addteam' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
   );
 }

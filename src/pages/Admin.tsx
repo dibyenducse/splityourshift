@@ -46,7 +46,7 @@ export default function AdminApp() {
   useEffect(() => { loadAccts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openBusiness = (id: string) => { const a = accts?.find((x) => x.id === id); if (a) { setTabState('businesses'); setOpen(a); } };
 
-  const shown = (accts ?? []).filter((a) => (!fPlan || (a.plan_now ?? 'free') === fPlan) && (!fStatus || a.status === fStatus)
+  const shown = (accts ?? []).filter((a) => (!fPlan || (fPlan === 'trial' ? a.plan_source === 'trial' && a.plan_now !== 'free' : fPlan === 'trial_ended' ? a.plan_source === 'trial' && a.plan_now === 'free' : (a.plan_now ?? 'free') === fPlan)) && (!fStatus || a.status === fStatus)
     && (!q.trim() || `${a.name} ${a.owner_name} ${a.owner_email} ${a.types}`.toLowerCase().includes(q.trim().toLowerCase())));
 
   let body;
@@ -61,13 +61,13 @@ export default function AdminApp() {
     <section className="panel">
       <div className="ad-tools">
         <input type="search" className="ad-search" placeholder="Search business, owner or email…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search businesses" />
-        <select value={fPlan} onChange={(e) => setFPlan(e.target.value)} aria-label="Plan"><option value="">All plans</option>{(['free', 'plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name}</option>)}</select>
+        <select value={fPlan} onChange={(e) => setFPlan(e.target.value)} aria-label="Plan"><option value="">All plans</option>{(['free', 'plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name}</option>)}<option value="trial">On free trial</option><option value="trial_ended">Trial ended</option></select>
         <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="suspended">Suspended</option></select>
         <span className="hint" style={{ margin: 0 }}>{shown.length} of {accts?.length ?? 0}</span>
       </div>
       {!accts ? <Loading /> : <div className="table-wrap"><table className="data ad-table"><thead><tr><th>Business</th><th>Owner</th><th>Type</th><th className="num">Locations</th><th className="num">Workers</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Status</th><th /></tr></thead>
         <tbody>{shown.map((a) => <tr key={a.id} className="clickrow" onClick={() => setOpen(a)}><td><b>{a.name}</b></td><td>{a.owner_name || '—'}<div className="hint" style={{ margin: 0 }}>{a.owner_email}</div></td><td>{a.types || '—'}</td>
-          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td><span className="tag plain">{PLANS[a.plan_now ?? 'free'].name}</span>{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}{a.location_limit ? <div className="hint" style={{ margin: 0 }}>limit {a.location_limit} locations</div> : null}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
+          <td className="num">{a.locations}</td><td className="num">{a.workers}</td><td><span className="tag plain">{PLANS[a.plan_now ?? 'free'].name}</span>{a.plan_source === 'trial' && <span className="tag ok" style={{ marginLeft: 4 }}>{a.plan_now !== 'free' ? 'Trial' : 'Trial ended'}</span>}{a.plan_now && a.plan_now !== 'free' && <div className="hint" style={{ margin: 0 }}>{a.plan_until ? `until ${untilText(a.plan_until)}` : a.plan_source === 'early_access' ? 'early access' : 'no end date'}</div>}{a.location_limit ? <div className="hint" style={{ margin: 0 }}>limit {a.location_limit} locations</div> : null}</td><td>{new Date(a.created_at).toLocaleDateString()}</td><td>{a.last_active_at ? ago(a.last_active_at) : '—'}</td>
           <td>{a.status === 'active' ? <span className="tag ok">Active</span> : <span className="tag bad">Suspended</span>}</td>
           <td><button className="btn small" onClick={(e) => { e.stopPropagation(); setOpen(a); }}>Open</button></td></tr>)}
           {!shown.length && <tr><td colSpan={10}><p className="empty-note">{accts.length ? 'No businesses match.' : 'No owners have signed up yet.'}</p></td></tr>}</tbody></table></div>}
@@ -161,6 +161,10 @@ function PlanControl({ a, reload }: { a: Account; reload: () => void }) {
     const { error } = await supabase.rpc('admin_set_plan', { p_org: a.id, p_plan: f.plan, p_until: f.plan !== 'free' && f.until ? new Date(f.until + 'T23:59:59').toISOString() : null, p_limit: f.limit.trim() ? Math.max(1, Math.round(+f.limit)) : null });
     if (error) toast(errText(error), 'error', 'Not saved'); else { toast(`${a.name} is on ${PLANS[f.plan].name}${f.plan !== 'free' ? (f.until ? ` until ${untilText(f.until + 'T12:00:00')}` : ' with no end date') : ''}.`, 'ok', 'Plan saved'); reload(); }
   };
+  const trial = async (days: number) => {
+    const { error } = await supabase.rpc('admin_trial', { p_org: a.id, p_days: days });
+    if (error) toast(errText(error), 'error', 'Not changed'); else { toast(days ? `${a.name}'s trial is ${days} days longer.` : `${a.name}'s trial has ended. They're on Starter now.`, 'ok', 'Trial updated'); reload(); }
+  };
   return (
     <section className="panel"><div className="panel-head"><h2>Plan</h2><span className="tag plain">Now: {PLANS[a.plan_now ?? 'free'].name}</span></div>
       <p className="hint">Change it by hand, for example for a customer who paid by invoice. Coupons the owner used show in Coupons.</p>
@@ -171,6 +175,10 @@ function PlanControl({ a, reload }: { a: Account; reload: () => void }) {
         <div className="field"><label htmlFor="ap-limit">Location limit (empty = the plan's)</label><input id="ap-limit" type="number" min={1} max={1000} value={f.limit} placeholder={String(PLANS[f.plan].locations ?? '')} onChange={(e) => setF({ ...f, limit: e.target.value })} /></div>
       </div>
       <div className="actions"><button className="btn primary" onClick={save}>Save plan</button></div>
+      <div className="sec ad-trial-row"><h4>Free trial</h4>
+        <p>{a.plan_source === 'trial' ? (a.plan_until && new Date(a.plan_until).getTime() > Date.now() ? `On a free trial of ${PLANS[a.plan ?? 'premium'].name} until ${untilText(a.plan_until)}.` : `Their trial ended ${untilText(a.plan_until)}.`) : 'Not on a trial.'}</p>
+        <div className="actions">{[7, 14, 30].map((d) => <button key={d} className="btn small" onClick={() => trial(d)}>{a.plan_source === 'trial' ? `+${d} days` : `Give ${d}-day trial`}</button>)}
+          {a.plan_source === 'trial' && a.plan_until && new Date(a.plan_until).getTime() > Date.now() && <ConfirmButton className="btn small danger" label="End trial now" confirmLabel="Click again to end" onConfirm={() => trial(0)} />}</div></div>
     </section>);
 }
 
