@@ -111,7 +111,10 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
     <div className="wiz-foot">{back}<button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button></div>
   </>);
   else body = (<>
-    <h2>Add your workers</h2><p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password. Leave a row empty to skip it, or skip them all: after setup you'll get a join link to share, and workers add themselves.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
+    <h2>Add your workers</h2>
+    <div className="imp-promo"><span aria-hidden="true">📷</span><div><b>Have your schedule on paper or in another app?</b><small>Skip typing. Finish setup and take a photo of it: we add your workers, any missing shift times and who works when.</small></div>
+      <button className="btn primary" disabled={busy} onClick={() => { try { localStorage.setItem('sys-import', '1'); } catch { /* private */ } finish(); }}>Finish and import a photo</button></div>
+    <p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password. Leave a row empty to skip it, or skip them all: after setup you'll get a join link to share, and workers add themselves.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
     {existing.length > 0 && <fieldset className="field"><legend>Workers you already have who also work at {locName}</legend><div className="checks">
       {existing.map((w) => <label key={w.id}><input type="checkbox" checked={also.includes(w.id)} onChange={(e) => setAlso(e.target.checked ? [...also, w.id] : also.filter((x) => x !== w.id))} /> {w.name}</label>)}</div></fieldset>}
     <div className="stack">

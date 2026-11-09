@@ -1,5 +1,8 @@
 :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 body { margin: 0; }
+/* Phones: the page itself never pans sideways (wide tables scroll inside their own box). */
+html { overflow-x: hidden; overscroll-behavior-x: none; }
+@supports (overflow: clip) { html, body { overflow-x: clip; } }
 img { max-width: 100%; }
 /* Layout: public home → log in / sign up → role-locked app. App: staff rail + one week grid per location; sheets slide in from the right (bottom on phones). */
 :root {
@@ -827,7 +830,7 @@ td.cell .ph.needs { flex-direction: column; gap: 1px; line-height: 1.15; color: 
 
 /* ---------------- Home: motion and polish ---------------- */
 .hero { position: relative; overflow: hidden; isolation: isolate; }
-.hero-glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.hero-glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; contain: paint; }
 .hero-glow i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; animation: glow-drift 18s ease-in-out infinite alternate; }
 .hero-glow i:nth-child(1) { width: 420px; height: 420px; left: -120px; top: -160px; background: color-mix(in srgb, var(--accent) 55%, transparent); }
 .hero-glow i:nth-child(2) { width: 360px; height: 360px; right: -80px; top: 40px; background: color-mix(in srgb, var(--ok) 45%, transparent); animation-delay: -6s; }
@@ -1086,3 +1089,9 @@ table.data.imp-shifts { table-layout: fixed; width: 100%; min-width: 0; }
 .imp-shifts tr.off { opacity: .5; }
 .imp-shifts small { display: block; }
 .bad-t { color: var(--bad); }
+
+.imp-promo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; margin: 4px 0 6px; border: 2px solid var(--accent); border-radius: 14px; background: var(--accent-soft); }
+.imp-promo > span { font-size: 28px; }
+.imp-promo > div { flex: 1 1 240px; display: flex; flex-direction: column; gap: 2px; }
+.imp-promo small { color: var(--muted); font-size: 14px; }
+.btn.imp-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
