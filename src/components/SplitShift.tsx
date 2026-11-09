@@ -7,15 +7,17 @@ import { useToast } from './ui';
 import { HowToButton } from './HowTo';
 
 const hourText = (h: number) => { const x = h % 24; return `${x % 12 || 12} ${x < 12 ? 'am' : 'pm'}`; };
+/** In the cut list, mark hours after midnight (the shift's day stays the same). */
+const cutText = (h: number) => `${hourText(h)}${h >= 24 ? ' (after midnight)' : ''}`;
 
 /**
  * Split one day of a shift into parts with their own times and people (e.g. 9–2 for Ann, 2–9 for Ben).
- * Only this day changes; the regular shift pattern stays. Cuts are on the hour, before midnight.
+ * Only this day changes; the regular shift pattern stays. Cuts are on the hour; overnight shifts can be cut after midnight.
  */
 export function SplitShift({ b, k, week, onDone }: { b: Bundle; k: string; week: string; onDone: () => void }) {
   const toast = useToast();
   const s = slotOf(b, k)!, { slot, date } = parseCell(k);
-  const start = s.start_hour, end = s.start_hour + s.hours, lastCut = Math.min(end, 24) - 1;
+  const start = s.start_hour, end = s.start_hour + s.hours, lastCut = end - 1;
   const choices = Array.from({ length: Math.max(0, lastCut - start) }, (_, i) => start + 1 + i);
   const [open, setOpen] = useState(false);
   const [cuts, setCuts] = useState<number[]>(() => [Math.min(lastCut, start + Math.max(1, Math.round(s.hours / 2)))]);
@@ -44,7 +46,7 @@ export function SplitShift({ b, k, week, onDone }: { b: Bundle; k: string; week:
       <div className="split-cuts">{sorted.map((c, i) => (
         <label key={i} className="split-cut">Split at
           <select value={c} onChange={(e) => { const n = [...sorted]; n[i] = +e.target.value; setCuts(n); }} aria-label={`Cut ${i + 1}`}>
-            {choices.map((h) => <option key={h} value={h}>{hourText(h)}</option>)}</select>
+            {choices.map((h) => <option key={h} value={h}>{cutText(h)}</option>)}</select>
           {sorted.length > 1 && <button type="button" className="btn icon" aria-label="Remove this cut" onClick={() => { setCuts(sorted.filter((_, j) => j !== i)); setEmps(emps.filter((_, j) => j !== i + 1)); }}>×</button>}
         </label>))}
         {sorted.length < 3 && sorted.length < choices.length && <button type="button" className="btn small" onClick={addCut}>+ Another cut</button>}
