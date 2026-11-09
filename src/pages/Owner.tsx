@@ -351,7 +351,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
           <div className="actions"><button className="btn primary" onClick={() => set({ type: 'swap', key: s.key })}>Swap or find cover</button>
             <button className="btn" onClick={() => set({ type: 'profile', id: w.id })}>{w.name}'s profile</button>
             <button className="btn danger" onClick={() => commit({ [s.key]: null }, `${w.name} removed from ${slotLabel(b, s.key)}. The shift is open.`)}>Leave shift open</button></div></div>
-          : <div className="sec"><h4>Who can take it</h4><p>Best fits first: no conflicts, then fewest shifts this week.</p><div className="list">
+          : <div className="sec"><h4>Who can take it</h4><p>Best fits first: no conflicts, then fewest shifts this week.</p><div className="list pick-list">
             {rows.length ? rows.map(({ x, r, n }) => <button key={x.id} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: x.id }, `${x.name} now works ${slotLabel(b, s.key)}.`, { allowOver: true })) close(); }}>
               <span className="dot" style={{ ['--h' as string]: x.hue }} /><span className="main"><b>{x.name}</b><span>{n}/{x.max_shifts} shifts this week</span></span>{statusTag(r)}</button>) : <p className="empty-note">Add workers first.</p>}
           </div></div>}
@@ -370,7 +370,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
       <Sheet eyebrow="Swap or cover" title={`Replace ${ow.name}`} onClose={close}>
         {slotCard(s.key)}
         <div className="sec"><h4>Who will take {ow.name}'s shift?</h4><p>"Can cover" means they can take it now, even as an extra shift over their weekly limit; {ow.name} pays it back later. The trade count is how many of their shifts {ow.name} could work in return right away.</p>
-          <div className="list">{rows.map(({ x, r, t, n }) => { const can = !r.errors.length; return (
+          <div className="list pick-list">{rows.map(({ x, r, t, n }) => { const can = !r.errors.length; return (
             <button key={x.id} className="row" disabled={!can && !t} onClick={() => set({ type: 'swap-with', key: s.key, other: x.id })}>
               <span className="dot" style={{ ['--h' as string]: x.hue }} /><span className="main"><b>{x.name}</b><span>{n}/{x.max_shifts} this week · {t} shift{t === 1 ? '' : 's'} to trade</span></span>
               {can ? (r.warnings.length ? <span className="tag warn">Can cover · {r.warnings[0].short}</span> : <span className="tag ok">Can cover</span>) : <span className="tag bad">{r.errors[0].short}</span>}</button>); })}</div></div>

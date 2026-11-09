@@ -24,13 +24,16 @@ export function SiteNav() {
   );
 }
 
-const chip = (name: string, hue: number, dbl = false) => (
-  <div className="chip" style={{ ['--h' as string]: hue }}>{name}{dbl && <span className="flag" title="Double shift: two shifts back to back">2×</span>}</div>);
+/** A name in the example schedule; `dbl` marks a back-to-back double shift, `sw` a swapped shift. */
+const chip = (name: string, hue: number, o: { dbl?: boolean; sw?: boolean } = {}) => (
+  <div className={`chip${o.dbl ? ' dbl' : ''}${o.sw ? ' sw' : ''}`} style={{ ['--h' as string]: hue }}
+    title={[name, o.dbl && 'double shift (two shifts back to back)', o.sw && 'swapped shift'].filter(Boolean).join(' · ')}>
+    <span className="chip-row"><span className="cname">{name}</span>{o.sw && <span className="flag swap">⇄</span>}{o.dbl && <span className="flag">2×</span>}</span></div>);
 /** Set this to the YouTube link once the tutorial is uploaded there; a "Watch on YouTube" link then shows under the video. */
 const YOUTUBE_URL = '';
 const MEDIA = import.meta.env.BASE_URL + 'media/';
 
-const T = 245, K = 330, S = 90, D = 15, C = 160;
+const T = 245, K = 330, S = 90, M = 15, C = 160, P = 200;
 
 /** Fade sections up as they scroll into view (skipped when the visitor prefers less motion). */
 function useReveal() {
@@ -71,14 +74,14 @@ export default function Home() {
         </div>
         <div className="mock" aria-label="Example schedule">
           <div className="mock-head"><b>Sunrise Inn</b><span className="ltype">Hotel</span><span className="tag plain">Example week</span></div>
-          <p className="mock-key"><span className="flag">2×</span> double shift: the same person works two shifts back to back</p>
+          <p className="mock-key"><span><span className="flag">2×</span> double shift (back to back)</span><span><span className="flag swap">⇄</span> swapped shift</span></p>
           <div className="tablewrap"><table><thead><tr><th className="sh" /><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th></tr></thead><tbody>
-            <tr><th className="sh">7–3</th><td>{chip('Tiffany', T)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Tammy K.', K)}</td><td>{chip('Shea', S, true)}</td></tr>
-            <tr><th className="sh">3–11</th><td>{chip('Dibbo', D, true)}</td><td>{chip('Dibbo', D)}</td><td>{chip('Corey', C, true)}</td><td>{chip('Shea', S, true)}</td></tr>
-            <tr><th className="sh">11–7</th><td>{chip('Dibbo', D, true)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Corey', C, true)}</td><td className="drop" /></tr>
+            <tr><th className="sh">7–3</th><td>{chip('Tiffany', T)}</td><td>{chip('Tiffany', T)}</td><td>{chip('Tammy K.', K)}</td><td>{chip('Shea', S, { dbl: true })}</td></tr>
+            <tr><th className="sh">3–11</th><td>{chip('Marcus', M, { dbl: true })}</td><td>{chip('Marcus', M)}</td><td>{chip('Corey', C, { dbl: true })}</td><td>{chip('Shea', S, { dbl: true })}</td></tr>
+            <tr><th className="sh">11–7</th><td>{chip('Marcus', M, { dbl: true })}</td><td>{chip('Tiffany', T, { sw: true })}</td><td>{chip('Corey', C, { dbl: true, sw: true })}</td><td>{chip('Priya', P)}</td></tr>
           </tbody></table></div>
-          <div className="floating f1">Corey → Thu 11–7<small>Corey already has 5 of 5 shifts this week.</small></div>
-          <div className="floating f2">Traded<small>Tiffany ↔ Corey, both stay at 5</small></div>
+          <div className="floating f1">Corey → Fri 7–3<small>Corey already has 5 of 5 shifts this week.</small></div>
+          <div className="floating f2">⇄ Swapped<small>Tiffany Tue 11–7 ↔ Corey Wed 11–7</small></div>
         </div>
       </div></section>
 
