@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
+  <url>
+    <loc>https://splityourshift.com/</loc>
+    <lastmod>2026-11-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <video:video>
+      <video:thumbnail_loc>https://splityourshift.com/media/poster.jpg</video:thumbnail_loc>
+      <video:title>Set up your shift schedule in 2 minutes</video:title>
+      <video:description>How to create a SplitYourShift account, add workers, make the week, use the one-tap time clock and get payroll worked out.</video:description>
+      <video:content_loc>https://splityourshift.com/media/tutorial.mp4</video:content_loc>
+      <video:duration>151</video:duration>
+    </video:video>
+  </url>
+</urlset>

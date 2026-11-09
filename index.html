@@ -3,8 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="description" content="SplitYourShift: drag-and-drop shift scheduling for hotels, gas stations and shops." />
-    <title>SplitYourShift</title>
+    <title>Shift Scheduling App for Hotels &amp; Gas Stations | SplitYourShift</title>
+    <meta name="description" content="Make next week's schedule in minutes. Drag-and-drop shifts, split any shift for one day, one-tap time clock, swaps and payroll for hotels, motels, gas stations and shops. No app to download." />
+    <meta name="keywords" content="shift scheduling app, employee scheduling, hotel staff schedule, gas station schedule, retail shift planner, time clock app, small business payroll, shift swap app, split shift" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://splityourshift.com/" />
+    <!-- Google Search Console: paste the verification tag here, e.g. <meta name="google-site-verification" content="…" /> -->
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SplitYourShift" />
+    <meta property="og:title" content="SplitYourShift – Shift scheduling, time clock and payroll for small businesses" />
+    <meta property="og:description" content="Drag-and-drop schedules, split any shift for one day, one-tap time clock, swaps and payroll. Built for hotels, gas stations and shops." />
+    <meta property="og:url" content="https://splityourshift.com/" />
+    <meta property="og:image" content="https://splityourshift.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SplitYourShift: a weekly shift schedule with workers' names in each shift" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SplitYourShift – Shift scheduling for hotels, gas stations and shops" />
+    <meta name="twitter:description" content="Schedules, split shifts, a one-tap time clock, swaps and payroll in one simple app." />
+    <meta name="twitter:image" content="https://splityourshift.com/og-image.png" />
+
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
@@ -14,9 +33,101 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+    <!-- Structured data for Google (product, business, FAQ). Keep prices in step with Admin → Plans & pricing. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://splityourshift.com/#org",
+          "name": "SplitYourShift",
+          "url": "https://splityourshift.com/",
+          "logo": "https://splityourshift.com/icon-512.png",
+          "email": "support@splityourshift.com"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://splityourshift.com/#site",
+          "url": "https://splityourshift.com/",
+          "name": "SplitYourShift",
+          "publisher": { "@id": "https://splityourshift.com/#org" },
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "SplitYourShift",
+          "url": "https://splityourshift.com/",
+          "applicationCategory": "BusinessApplication",
+          "applicationSubCategory": "Employee scheduling",
+          "operatingSystem": "Web, iOS, Android",
+          "description": "Shift scheduling, split shifts, a one-tap time clock, shift swaps and payroll for hotels, motels, gas stations and shops.",
+          "image": "https://splityourshift.com/og-image.png",
+          "publisher": { "@id": "https://splityourshift.com/#org" },
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "USD",
+            "lowPrice": "19",
+            "highPrice": "59",
+            "offerCount": "3",
+            "description": "Starter, Plus and Premium monthly plans; yearly plans cost less."
+          },
+          "featureList": [
+            "Drag-and-drop weekly schedule",
+            "Split any shift for one day, including overnight shifts",
+            "One-tap time clock with grace period",
+            "Shift swaps and time-off requests",
+            "Weekly, biweekly or monthly payroll with overtime and payslips",
+            "Shift reports and task lists"
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            { "@type": "Question", "name": "Do my workers need to download an app?", "acceptedAnswer": { "@type": "Answer", "text": "No. They get an email with a link, choose a password, and log in from any phone browser with their email or phone number." } },
+            { "@type": "Question", "name": "Do I have to use the time clock?", "acceptedAnswer": { "@type": "Answer", "text": "No. Turn it on or off for each location. With it off, workers see no clock and payroll pays the scheduled shift hours; you can still edit anyone's hours." } },
+            { "@type": "Question", "name": "Can I split a shift for just one day?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Click the shift, cut it on any hour (overnight shifts too) and give each part to someone. Your regular shifts don't change, and each part works with the time clock, swaps and payroll." } },
+            { "@type": "Question", "name": "Can workers change the schedule?", "acceptedAnswer": { "@type": "Answer", "text": "No. Workers can see their shifts and the schedule, set their availability, ask for time off and ask a coworker to swap a shift. Only the owner moves people." } },
+            { "@type": "Question", "name": "I run a motel, a gas station and a shop. Can I use one account?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Add each location with its own shift pattern. A worker can work at more than one, and their weekly limit counts shifts at all of them." } },
+            { "@type": "Question", "name": "Where is my data kept?", "acceptedAnswer": { "@type": "Answer", "text": "In a secure cloud database hosted in the US. Each business only sees its own data, and workers only see what their owner shares." } }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- What search engines (and visitors without JavaScript) see first; the app replaces it as soon as it loads. -->
+      <main style="max-width:880px;margin:0 auto;padding:40px 20px;font-family:'Source Sans 3',system-ui,sans-serif;color:#1b2733;line-height:1.55">
+        <p style="font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1d5f8a;font-size:14px">For hotels, motels, gas stations &amp; shops</p>
+        <h1 style="font-size:40px;line-height:1.1;margin:8px 0 16px">The paper schedule, without the paper.</h1>
+        <p>SplitYourShift is a simple shift scheduling app for small businesses that run on shifts. Drag your people into shifts, and it stops the mistakes: no sixth shift for someone capped at five, nobody at two desks at once. When someone needs a day off, you see who can cover in two clicks. Someone can only stay until 2? Split the shift for that day.</p>
+        <p><a href="#/signup">Get started</a> · <a href="#/login">Log in</a></p>
+        <h2>What makes SplitYourShift different</h2>
+        <h3>Split any shift, any day</h3>
+        <p>Cut a shift on any hour into up to four parts and give each part to a different worker, just for that day. Overnight shifts too. Each part works with the time clock, swaps and payroll.</p>
+        <h3>One-tap time clock</h3>
+        <p>Workers clock in and out from their phone with one tap. You set the grace period; late arrivals, staying late and forgotten clock-outs are handled with simple choices.</p>
+        <h3>Payroll that adds itself up</h3>
+        <p>Weekly, every two weeks or monthly for each business: hours from the time clock or from the schedule, overtime, bonuses, deductions and printable payslips.</p>
+        <h3>Shift swaps without phone calls</h3>
+        <p>Workers ask a coworker to take a shift and see who is free. When they agree, the schedule updates and the owner is told.</p>
+        <h2>Everything else</h2>
+        <ul>
+          <li>Drag-and-drop weekly schedule for each location, on a computer or a phone</li>
+          <li>Weekly shift limits and availability checks</li>
+          <li>Time-off requests with a list of who can cover</li>
+          <li>Shifts owed after emergency covers, paid back on any later date</li>
+          <li>Shift report logbook and task lists for each shift</li>
+          <li>Each worker gets their own login with their shifts and pay</li>
+        </ul>
+        <h2>Pricing</h2>
+        <p>Pay per business, not per worker. Starter covers up to 2 locations, Plus up to 5 and Premium up to 10. Pay monthly, or yearly and save.</p>
+        <p>Questions? <a href="mailto:support@splityourshift.com">support@splityourshift.com</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
