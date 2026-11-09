@@ -1024,3 +1024,4 @@ body.dragging .part.hover[data-cell] { outline: 2px solid var(--accent); }
 @media (prefers-reduced-motion: reduce) { .spot-hero .sv-bar span, .spot-hero .sv-parts .chip, .spot-hero .sv-cut { animation: none !important; } }
 .sv-parts .chip { flex-direction: row; } .sv-cut { top: 64px; }
 .sv-bar span:nth-child(2) { padding-left: 24px; }
+.future-trade { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-strong); } .future-trade h4 { margin: 0; } .future-trade .field { margin: 0; }

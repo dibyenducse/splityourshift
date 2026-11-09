@@ -96,7 +96,7 @@ export default function OwnerApp() {
   }, [orgId, reload]);
 
   // Apply schedule changes: check locally (instant), save through apply_changes (the database re-checks), roll back on error.
-  const commit = useCallback(async (changes: Changes, message: string, opts: { ledger?: Record<string, unknown>; settle?: string; skipUndo?: boolean; shakeKey?: string; allowOver?: boolean } = {}) => {
+  const commit = useCallback(async (changes: Changes, message: string, opts: { ledger?: Record<string, unknown>; settle?: string; skipUndo?: boolean; shakeKey?: string; allowOver?: boolean; onLedger?: (id: string) => Promise<void> } = {}) => {
     if (!b) return false;
     const r = evaluate(b, changes, { allowOver: opts.allowOver });
     if (r.errors.length) {
@@ -110,7 +110,7 @@ export default function OwnerApp() {
     try {
       await applyChanges(orgId, changes, opts.allowOver);
       let ledgerId: string | undefined;
-      if (opts.ledger) { const { data } = await supabase.from('ledger').insert(opts.ledger).select('id').single(); ledgerId = data?.id; }
+      if (opts.ledger) { const { data } = await supabase.from('ledger').insert(opts.ledger).select('id').single(); ledgerId = data?.id; if (ledgerId && opts.onLedger) await opts.onLedger(ledgerId); }
       if (opts.settle) await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', opts.settle);
       if (!opts.skipUndo) {
         const locs = [...new Set(Object.keys(changes).map((k) => slotOf(b, k)?.location_id).filter(Boolean) as string[])];
@@ -304,7 +304,7 @@ export default function OwnerApp() {
 
 function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker }: {
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
-  commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string; allowOver?: boolean }) => Promise<boolean>;
+  commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string; allowOver?: boolean; onLedger?: (id: string) => Promise<void> }) => Promise<boolean>;
   reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void; goWorker: () => void;
 }) {
   const toast = useToast();
@@ -412,7 +412,13 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
             <button key={o} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: xw.id, [o]: ow.id }, `Traded. ${xw.name} works ${slotLabel(b, s.key)} and ${ow.name} works ${slotLabel(b, o)}.`, { allowOver: true })) close(); }}>
               <span className="main"><b>{slotLabel(b, o)}</b><span className={r.errors.length ? 'reason bad' : r.warnings.length ? 'reason warn' : ''}>{r.errors[0]?.msg ?? r.warnings[0]?.msg ?? `${ow.name} works this, ${xw.name} gets ${slotLabel(b, s.key)}`}</span></span>
               {r.errors.length ? <span className="tag bad">No</span> : <span className={`tag ${r.warnings.length ? 'warn' : 'ok'}`}>Trade</span>}</button>))
-            : <p className="empty-note">{xw.name} has no upcoming shifts scheduled yet. Use "covers now" above and pay it back later.</p>}</div></div>
+            : <p className="empty-note">{xw.name} has no upcoming shifts on the schedule yet. Pick any future date and shift below instead.</p>}</div>
+          {!evens && <FutureTrade b={b} k={s.key} ow={ow} xw={xw} disabled={cover.errors.length > 0} onGo={async (slot, date) => {
+            const ok = await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${ow.name} works ${slotLabel(b, cellKey(slot, date))} in return.`, {
+              ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) }, allowOver: true,
+              onLedger: async (id) => { const { error } = await supabase.rpc('payback_request', { p_ledger: id, p_slot: slot, p_date: date }); if (error) toast(errText(error), 'error', 'The return shift was not set'); } });
+            if (ok) close();
+          }} />}</div>
         <div><button className="btn" onClick={() => set({ type: 'swap', key: s.key })}>‹ Pick someone else</button></div>
       </Sheet>);
   }
@@ -568,5 +574,25 @@ function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: (
   );
 }
 
-
-
+/** Trade with any future date and shift (even before that week is scheduled): the coworker covers now and the
+ *  original worker works the picked shift in return (a pay back, placed automatically when the day is scheduled). */
+function FutureTrade({ b, k, ow, xw, disabled, onGo }: { b: Bundle; k: string; ow: Emp; xw: Emp; disabled: boolean; onGo: (slot: string, date: string) => Promise<void> }) {
+  const locs = b.locs.filter((l) => ow.locs.includes(l.id)).length ? b.locs.filter((l) => ow.locs.includes(l.id)) : b.locs;
+  const [f, setF] = useState({ date: addDays(parseCell(k).date, 7), loc: slotOf(b, k)?.location_id ?? locs[0]?.id ?? '', slot: '' });
+  const [busy, setBusy] = useState(false);
+  const slots = b.slots.filter((x) => x.location_id === f.loc).sort((x, y) => x.start_hour - y.start_hour);
+  const pk = f.slot ? cellKey(f.slot, f.date) : null, now = pk ? empOf(b, b.assign[pk]) : undefined;
+  return (
+    <div className="future-trade"><h4>Or pick any future date and shift</h4>
+      <p className="hint" style={{ margin: 0 }}>{xw.name} covers now and {ow.name} works the shift you pick for {xw.name}, even if that week isn't scheduled yet. When the day is scheduled, {ow.name} is placed there automatically (marked ⇄).</p>
+      <div className="twocol">
+        <div className="field"><label htmlFor="ft-date">Date</label><input id="ft-date" type="date" min={todayIso()} value={f.date} onChange={(e) => e.target.value && setF({ ...f, date: e.target.value })} /></div>
+        {locs.length > 1 && <div className="field"><label htmlFor="ft-loc">Location</label><select id="ft-loc" value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value, slot: '' })}>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
+        <div className="field"><label htmlFor="ft-slot">Shift</label><select id="ft-slot" value={f.slot} onChange={(e) => setF({ ...f, slot: e.target.value })}><option value="">Pick…</option>
+          {slots.map((x) => <option key={x.id} value={x.id}>{shiftLong(x.start_hour, x.hours)}</option>)}</select>
+          {pk && <span className="hint" style={{ margin: 0 }}>{now ? `Scheduled now: ${now.name}${now.id === ow.id ? ' (already theirs)' : ''}.` : 'Not scheduled yet.'}</span>}</div>
+      </div>
+      <div><button className="btn primary" disabled={disabled || busy || !f.slot || pk === k || now?.id === ow.id} onClick={async () => { setBusy(true); await onGo(f.slot, f.date); setBusy(false); }}>
+        {busy ? 'Saving…' : `${xw.name} covers now · ${ow.name} works this in return`}</button></div>
+    </div>);
+}
