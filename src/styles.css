@@ -1250,3 +1250,15 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .spot-card.spot-new { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: linear-gradient(180deg, var(--accent-soft), var(--surface) 65%); }
 .spot-card .chat-eg { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .spot-card h3 .tag { vertical-align: middle; margin-left: 4px; font-size: 11px; }
+
+/* ---------------- clock in without a shift: where, and instead of whom */
+.cs-locs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.cs-loc { display: flex; align-items: center; gap: 10px; padding: 14px; border: 2px solid var(--line); border-radius: 14px; background: var(--surface); font: inherit; color: var(--fg); cursor: pointer; text-align: left; }
+.cs-loc span { font-size: 24px; }
+.cs-loc.on { border-color: var(--accent); background: var(--accent-soft); }
+.cs-extra .btn { width: 100%; justify-content: center; }
+.cs-confirm { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 14px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.cs-confirm p { margin: 0; }
+.cs-ico { font-size: 30px; line-height: 1; }
+.cs-yes { display: flex; flex-direction: column; gap: 8px; }
+.cs-yes .btn { justify-content: center; white-space: normal; }

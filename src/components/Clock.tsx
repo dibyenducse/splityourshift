@@ -59,9 +59,14 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const openEnd = openKey && slotOf(b, openKey) ? shiftWindow(b, openKey).end : null;
   const forgot = !!open && !!openEnd && now > openEnd.getTime() + 30 * 60000;
 
+  const [starting, setStarting] = useState(false);
   const clockIn = async () => {
+    // My shift is on now (even if I clocked out for a break): clock in, no questions.
+    const onNow = current ?? mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime(); });
+    // No shift of mine right now: ask where and for whom first, then clock in.
+    if (!onNow) { setStarting(true); return; }
     setBusy(true);
-    const { data, error } = await supabase.rpc('clock_in_now', {});
+    const { data, error } = await supabase.rpc('clock_in_now', current ? {} : { p_loc: slotOf(b, onNow)?.location_id ?? null });
     setBusy(false);
     if (error) return toast(errText(error), 'error', "Didn't clock in");
     const r = data as ClockResult;
@@ -153,6 +158,7 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
       {missed && <MissedPunchSheet b={b} empId={empId} onClose={() => setMissed(false)} reload={reload} />}
       {ask?.mode === 'late' && <LateSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
       {ask?.mode === 'extra' && <ExtraSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
+      {starting && <ClockStartSheet b={b} empId={empId} locs={clockLocs} onClose={() => setStarting(false)} reload={reload} onLate={(r) => setAsk(r)} />}
       {ask?.mode === 'unscheduled' && <CoverAsk b={b} empId={empId} entryId={ask.entry_id} onClose={() => setAsk(null)} reload={reload} />}
     </section>
   );
@@ -324,4 +330,72 @@ export function HoursList({ b, empId, weeks, onCancel }: { b: Bundle; empId: str
           : <span className="tag bad">{f.status === 'denied' ? 'Denied' : 'Cancelled'}</span>}</td></tr>)}
     </tbody></table></div>
   );
+}
+
+/**
+ * Clocking in with no shift of mine right now: 1. where am I (if I work at more than one place),
+ * 2. am I here instead of someone (whose shift is on now), or is it an extra shift. Then the clock starts.
+ */
+function ClockStartSheet({ b, empId, locs, onClose, reload, onLate }: { b: Bundle; empId: string; locs: Bundle['locs']; onClose: () => void; reload: () => void; onLate: (r: ClockResult) => void }) {
+  const toast = useToast();
+  const [loc, setLoc] = useState(locs.length === 1 ? locs[0].id : '');
+  const [pick, setPick] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const now = Date.now(), days = [addDays(todayIso(), -1), todayIso()];
+  const cells = loc ? [...b.slots.flatMap((x) => days.map((d) => cellKey(x.id, d))), ...(b.parts ?? []).filter((x) => days.includes(x.only_date!)).map((x) => cellKey(x.id, x.only_date!))]
+    .filter((k) => { const sl = slotOf(b, k); if (!sl || sl.location_id !== loc || b.assign[k] === empId) return false; const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime(); })
+    .sort((x, y) => shiftWindow(b, x).start.getTime() - shiftWindow(b, y).start.getTime()) : [];
+  const taken = (k: string) => b.entries.find((e) => e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date && !e.clock_out);
+  const locName0 = b.locs.find((l) => l.id === loc)?.name ?? '';
+
+  const start = async (kind: 'takeover' | 'swap' | 'extra', k: string | null) => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc('clock_in_now', { p_loc: loc || null });
+    if (error) { setBusy(false); return toast(errText(error), 'error', "Didn't clock in"); }
+    const r = data as ClockResult;
+    if (r.mode === 'unscheduled') {
+      const args = k ? { p_entry: r.entry_id, p_kind: kind, p_slot: parseCell(k).slot, p_date: parseCell(k).date } : { p_entry: r.entry_id, p_kind: 'extra', p_loc: loc || null };
+      const { error: e2 } = await supabase.rpc('resolve_unscheduled', args);
+      if (e2) toast(`You're clocked in, but this wasn't saved: ${errText(e2)}`, 'warn', 'Clocked in');
+      else {
+        const other = k ? empOf(b, b.assign[k])?.name : null;
+        toast(k ? (other ? (kind === 'swap' ? `Clocked in for ${other}'s shift. ${other} gets a swap request; your manager is told.` : `Clocked in for ${other}'s shift. Your manager is told.`) : `Clocked in for ${slotLabel(b, k)}.`)
+          : `Clocked in at ${locName0} for an extra shift. Your manager is told.`, 'ok', 'Clocked in');
+      }
+    } else if (r.mode === 'scheduled') toast(`Clocked in for ${r.label}. Have a good shift!`, 'ok', 'Clocked in');
+    else onLate(r);
+    setBusy(false); onClose(); reload();
+  };
+
+  // step 3: confirm "instead of …"
+  if (pick) {
+    const other = empOf(b, b.assign[pick]);
+    return (
+      <Sheet eyebrow={`Clock in · ${locName0}`} title={other ? `Here instead of ${other.name}?` : 'Work this open shift?'} onClose={onClose}>
+        <div className="cs-confirm"><span className="cs-ico" aria-hidden="true">{other ? '🙋' : '🕒'}</span>
+          <p>{other ? <><b>{other.name}</b> is on <b>{slotLabel(b, pick)}</b>. Is {other.name.split(' ')[0]} not coming, and you're working this shift instead?</> : <>Nobody is on <b>{slotLabel(b, pick)}</b>. You'll work it.</>}</p></div>
+        <div className="cs-yes">
+          <button className="btn primary big" disabled={busy} onClick={() => start('takeover', pick)}>{busy ? 'Clocking in…' : other ? `Yes, I'm here instead of ${other.name.split(' ')[0]} · Clock in` : 'Yes, clock me in'}</button>
+          {other && <button className="btn" disabled={busy} onClick={() => start('swap', pick)}>Yes, and {other.name.split(' ')[0]} works one of my shifts later (swap)</button>}
+        </div>
+        <p className="hint" style={{ margin: 0 }}>Your manager is told either way. {other ? `${other.name.split(' ')[0]} is taken off this shift.` : ''}</p>
+        <div><button className="btn" disabled={busy} onClick={() => setPick(null)}>‹ Back</button></div>
+      </Sheet>);
+  }
+
+  return (
+    <Sheet eyebrow="Clock in" title="You don't have a shift right now" onClose={onClose}>
+      {locs.length > 1 && <div className="sec"><h4>1. Where are you working?</h4>
+        <div className="cs-locs">{locs.map((l) => <button key={l.id} type="button" className={`cs-loc${loc === l.id ? ' on' : ''}`} aria-pressed={loc === l.id} onClick={() => setLoc(l.id)}>
+          <span aria-hidden="true">{l.type === 'gas' ? '⛽' : l.type === 'shop' ? '🛒' : '🏨'}</span><b>{l.name}</b></button>)}</div></div>}
+      {loc && <div className="sec"><h4>{locs.length > 1 ? '2. ' : ''}Are you here instead of someone?</h4>
+        <p>Who is on now at {locName0}:</p>
+        <div className="list">{cells.length ? cells.map((k) => { const o = empOf(b, b.assign[k]), t = taken(k);
+          return (<button key={k} className="row" disabled={!!t} onClick={() => setPick(k)}>
+            <span className="main"><b>{o ? `Instead of ${o.name}` : 'Open shift'}</b><span>{slotLabel(b, k)}{t ? ` · ${empOf(b, t.employee_id)?.name ?? 'Someone'} is already clocked in` : ''}</span></span>
+            {t ? <span className="tag plain">Taken</span> : <span className="tag ok">That's me</span>}</button>); })
+          : <p className="empty-note">Nobody is scheduled at {locName0} right now.</p>}</div></div>}
+      {loc && <div className="cs-extra"><button className="btn" disabled={busy} onClick={() => start('extra', null)}>{busy ? 'Clocking in…' : `No, I'm working an extra shift · Clock in at ${locName0}`}</button></div>}
+      {!loc && <p className="hint">Pick where you are to see who is on now.</p>}
+    </Sheet>);
 }
