@@ -8,7 +8,7 @@ export interface Org {
   /** How names show on the schedule. */
   name_display?: 'first' | 'last' | 'first_initial' | 'custom';
   /** Subscription: see lib/plans.ts. plan_until null with a paid plan = no end date. */
-  plan?: 'free' | 'plus' | 'premium'; plan_until?: string | null; plan_source?: string | null;
+  plan?: 'free' | 'plus' | 'premium'; plan_until?: string | null; plan_source?: string | null; trial_started_at?: string | null;
   /** A custom location limit set by support (more than the plan's). */
   location_limit?: number | null;
 }

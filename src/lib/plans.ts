@@ -59,6 +59,13 @@ export function trialLeft(org: Pick<Org, 'plan_source' | 'plan_until'> | null | 
   if (org?.plan_source !== 'trial' || !org.plan_until) return null;
   return Math.max(0, Math.ceil((new Date(org.plan_until).getTime() - Date.now()) / 86_400_000));
 }
+/** This business can still start its one free trial (on any plan). */
+export const trialAvailable = (org: Pick<Org, 'plan' | 'plan_until' | 'plan_source' | 'trial_started_at'> | null | undefined) =>
+  TRIAL.days > 0 && !!org && !org.trial_started_at && org.plan_source !== 'trial' && planOf(org) === 'free';
+/** Button text: "Start 14-day free trial". */
+export const trialLabel = () => `Start ${TRIAL.days}-day free trial`;
+/** The plan picked before signing up ("plus|monthly"), without using it up. */
+export const peekPlan = (): PlanId | null => { try { const p = (localStorage.getItem('sys-plan') ?? '').split('|')[0]; return p === 'free' || p === 'plus' || p === 'premium' ? p : null; } catch { return null; } };
 export async function loadPlanCatalog(): Promise<CatalogRow[]> {
   const { supabase } = await import('./supabase');
   const { data: t } = await supabase.from('app_settings').select('trial_days, trial_plan').maybeSingle();

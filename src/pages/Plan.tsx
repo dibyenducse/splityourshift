@@ -6,7 +6,7 @@ import type { Org } from '../lib/types';
 import { Loading, useToast } from '../components/ui';
 import { ProfileMenu } from '../components/Avatar';
 import { AppBar } from './AppShell';
-import { PLANS, PLAN_ORDER, POPULAR, dollars, locLimitOf, locLimitText, perMonth, planOf, trialLeft, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, dollars, locLimitOf, locLimitText, perMonth, planOf, TRIAL, trialAvailable, trialLabel, trialLeft, untilText, yearlySave, type Billing, type PlanId } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 interface Redemption { id: string; code: string; plan: PlanId; months: number; plan_until: string; created_at: string }
@@ -38,6 +38,8 @@ export default function PlanPage() {
     setOrg(o as Org); setLocs(count ?? 0); setHist((r ?? []) as Redemption[]);
   }, [me?.orgId]);
   useEffect(() => { load(); }, [load]);
+  // On a trial, or before using it: the plan buttons start or switch the trial instead of opening checkout.
+  useEffect(() => { if (org && ((trialLeft(org) ?? 0) > 0 || trialAvailable(org))) setPick(null); }, [org]);
 
   if (!me || me.role !== 'owner') return <Loading text="Plan & billing is for business owners." />;
   if (!org) return <Loading />;
@@ -47,6 +49,16 @@ export default function PlanPage() {
   const need = qs.get('need') === 'locations';
   const sel = pick ? PLANS[pick] : null;
 
+  const onTrial = (trialLeft(org) ?? 0) > 0, canTrial = trialAvailable(org);
+  const startTrial = async (id: PlanId) => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc('start_trial', { p_plan: id });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Trial not started');
+    const r = data as { plan: PlanId; until: string };
+    toast(onTrial ? `Your trial is now ${PLANS[r.plan].name}, still until ${untilText(r.until)}.` : `${PLANS[r.plan].name} is free until ${untilText(r.until)}. Every feature is on.`, 'ok', onTrial ? 'Trial switched' : 'Free trial started');
+    setPick(null); await load(); refresh();
+  };
   const redeem = async () => {
     if (!code.trim()) return toast('Type your coupon code.', 'error', 'Missing');
     setBusy(true);
@@ -82,9 +94,14 @@ export default function PlanPage() {
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
-              {isCur ? <button className="btn" disabled>Current plan</button>
+              {onTrial ? (org.plan ?? 'free') === id
+                  ? <button className="btn" disabled>Your trial plan</button>
+                  : <button className="btn primary" disabled={busy} onClick={() => startTrial(id)}>Switch trial to {p.name}</button>
+                : canTrial ? <button className="btn primary" disabled={busy} onClick={() => startTrial(id)}>{trialLabel()}</button>
+                : isCur ? <button className="btn" disabled>Current plan</button>
                 : id === 'free' ? <span className="hint" style={{ margin: 0, textAlign: 'center' }}>Included with every account</span>
                 : <button className={`btn${pick === id ? ' primary' : ''}`} onClick={() => setPick(id)}>{pick === id ? 'Selected' : `Choose ${p.name}`}</button>}
+              {(onTrial || canTrial) && <small className="trial-note">{canTrial ? `Free for ${TRIAL.days} days, no card needed.` : 'Same trial end date.'}{id !== 'free' && <> <button type="button" className="mini" onClick={() => setPick(id)}>Buy {p.name} now</button></>}</small>}
             </div>); })}
         </div>
 

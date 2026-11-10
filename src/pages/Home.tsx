@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/ui';
 import { useAuth } from '../App';
 import { useEffect, useState } from 'react';
-import { PLANS, PLAN_ORDER, POPULAR, TRIAL, wantPlan, type Billing } from '../lib/plans';
+import { PLANS, PLAN_ORDER, POPULAR, TRIAL, trialLabel, wantPlan, type Billing } from '../lib/plans';
 import { BillingToggle, PlanPrice } from '../components/PlanBits';
 
 export function SiteNav() {
@@ -59,7 +59,7 @@ export default function Home() {
   const { me } = useAuth();
   const nav = useNavigate();
   const [billing, setBilling] = useState<Billing>('monthly');
-  const choose = (id: string) => { if (id === 'free') return nav(me ? '/app' : '/signup'); if (me) return nav(`/app/plan?plan=${id}&billing=${billing}`); wantPlan.set(`${id}|${billing}`); nav('/signup'); };
+  const choose = (id: string) => { if (me) return nav(`/app/plan?plan=${id}&billing=${billing}`); wantPlan.set(`${id}|${billing}`); nav('/signup'); };
   return (
     <>
       <SiteNav />
@@ -182,7 +182,7 @@ export default function Home() {
       <section className="band wrap" id="pricing"><div className="inner reveal">
         <h2>Simple pricing</h2>
         <p className="sub">Pay per business, not per worker. Pay yearly and save; move up as you add locations.</p>
-        {TRIAL.days > 0 && <p className="trial-ribbon"><b>{TRIAL.days}-day free trial</b> with every {PLANS[TRIAL.plan].name} feature. No card needed; pick a plan when it ends.</p>}
+        {TRIAL.days > 0 && <p className="trial-ribbon"><b>Every plan starts with a {TRIAL.days}-day free trial.</b> No card needed. Try the plan you pick; switch any time during the trial.</p>}
         <div className="plan-toggle-row"><BillingToggle value={billing} onChange={setBilling} /></div>
         <div className="prices three">
           {PLAN_ORDER.map((id) => { const p = PLANS[id]; return (
@@ -190,7 +190,8 @@ export default function Home() {
               <h3>{p.name}</h3><PlanPrice id={id} billing={billing} />
               <p className="hint" style={{ margin: 0 }}>{p.blurb}</p>
               <ul>{p.features.map((x) => <li key={x}>{x}</li>)}</ul>
-              <button className={`btn${id === POPULAR ? ' primary' : ''}`} onClick={() => choose(id)}>{`Choose ${p.name}`}</button></div>); })}
+              <button className={`btn${id === POPULAR ? ' primary' : ''}`} onClick={() => choose(id)}>{TRIAL.days > 0 ? trialLabel() : `Choose ${p.name}`}</button>
+              {TRIAL.days > 0 && <small className="trial-note">Free for {TRIAL.days} days, then ${p.price}/month. No card needed.</small>}</div>); })}
         </div>
         <p className="hint" style={{ marginTop: 12 }}>Have a coupon code? Enter it under Plan &amp; billing after you sign up.</p>
       </div></section>

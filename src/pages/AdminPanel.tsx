@@ -240,10 +240,10 @@ function TrialSettings() {
   return (
     <section className="panel ad-trial">
       <div className="panel-head"><h2>Free trial</h2>{stats && <span className="tag plain">{stats.on} on a trial now · {stats.ended} trials ended</span>}</div>
-      <p className="hint">Every new business starts with this trial: all features of the plan, no card. When it ends they move to Starter; nothing is deleted. Extend or end one business's trial under Businesses → open it → Plan.</p>
+      <p className="hint">Every plan has this free trial: owners pick Starter, Plus or Premium when they sign up (or on Plan &amp; billing) and get that plan free, no card. One trial per business; they can switch plans during it. When it ends they move to Starter; nothing is deleted. Extend or end one business's trial under Businesses → open it → Plan.</p>
       <div className="ad-fields">
         <div className="field"><label htmlFor="tr-days">Trial length (days, 0 = no trial)</label><input id="tr-days" type="number" min={0} max={365} value={f.days} onChange={(e) => setF({ ...f, days: +e.target.value })} /></div>
-        <div className="field"><label htmlFor="tr-plan">Trial plan</label><select id="tr-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as PlanId })}>
+        <div className="field"><label htmlFor="tr-plan">Default plan (if they don't pick one)</label><select id="tr-plan" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value as PlanId })}>
           {(['plus', 'premium'] as PlanId[]).map((p) => <option key={p} value={p}>{PLANS[p].name} (up to {PLANS[p].locations} locations)</option>)}</select></div>
         <div className="field ad-trial-save"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save trial'}</button></div>
       </div>

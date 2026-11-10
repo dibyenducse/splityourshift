@@ -5,7 +5,7 @@ import { pendingJoin } from '../lib/team';
 import { siteUrl } from '../lib/api';
 import { useToast } from '../components/ui';
 import { useAuth } from '../App';
-import { TRIAL } from '../lib/plans';
+import { PLANS, PLAN_ORDER, TRIAL, peekPlan, wantPlan, type PlanId } from '../lib/plans';
 import { SiteNav } from './Home';
 
 const GoogleG = () => (
@@ -92,6 +92,9 @@ export function Signup() {
   const nav = useNavigate();
   const { refresh } = useAuth();
   const [f, setF] = useState({ name: '', business: '', email: '', password: '' });
+  const [trialPlan, setTrialPlanState] = useState<PlanId>(() => peekPlan() ?? TRIAL.plan);
+  const setTrialPlan = (p: PlanId) => { setTrialPlanState(p); wantPlan.set(`${p}|monthly`); };
+  useEffect(() => { if (!peekPlan()) wantPlan.set(`${TRIAL.plan}|monthly`); }, []);
   const [err, setErr] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -124,6 +127,10 @@ export function Signup() {
             <div className="kicker">Step 1 of 4</div>
             <h2>Create your owner account</h2>
             <p className="hint" style={{ margin: 0 }}>You make the schedule. {TRIAL.days > 0 && <b>Free for {TRIAL.days} days, no card needed. </b>}Workers don't sign up here: you'll get a join link to send them.</p>
+            {TRIAL.days > 0 && <fieldset className="trial-pick"><legend>Your {TRIAL.days}-day free trial</legend>
+              <div className="trial-pick-row">{PLAN_ORDER.map((id) => <label key={id} className={trialPlan === id ? 'on' : ''}>
+                <input type="radio" name="trial-plan" checked={trialPlan === id} onChange={() => setTrialPlan(id)} />
+                <b>{PLANS[id].name}</b><small>up to {PLANS[id].locations} locations · then ${PLANS[id].price}/mo</small></label>)}</div></fieldset>}
             <GoogleButton label="Sign up with Google" />
             <div className="twocol">
               <div className="field"><label htmlFor="su-name">Your name</label><input type="text" id="su-name" value={f.name} onChange={set('name')} autoComplete="name" /></div>
@@ -134,7 +141,7 @@ export function Signup() {
               <div className="field"><label htmlFor="su-pass">Password</label><input type="password" id="su-pass" value={f.password} onChange={set('password')} autoComplete="new-password" /><span className="hint" style={{ margin: 0 }}>At least 8 characters.</span></div>
             </div>
             {err && <div className="reason bad">{err}</div>}
-            <div className="actions"><button className="btn primary" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
+            <div className="actions"><button className="btn primary" type="submit" disabled={busy}>{busy ? 'Creating…' : TRIAL.days > 0 ? `Start my free ${PLANS[trialPlan].name} trial` : 'Create account'}</button>
               <span className="hint" style={{ margin: 0 }}>Already have one? <Link to="/login">Log in</Link></span></div>
           </form>
         )}

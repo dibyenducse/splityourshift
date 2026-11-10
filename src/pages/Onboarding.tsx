@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { wantPlan } from '../lib/plans';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { sendInvite } from '../lib/api';
@@ -53,6 +54,9 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
         }).select('id').single();
         if (error) throw error;
         org = data.id;
+        // The plan picked on the home page or sign-up page: its free trial (new businesses start on the default trial plan).
+        const [want] = (wantPlan.take() ?? '').split('|');
+        if (want === 'free' || want === 'plus' || want === 'premium') await supabase.rpc('start_trial', { p_plan: want });
       }
       const { data: loc, error: e1 } = await supabase.from('locations').insert({ org_id: org, name: locName.trim() || DEFAULT_NAME[type], type }).select('id').single();
       if (e1) throw e1;
