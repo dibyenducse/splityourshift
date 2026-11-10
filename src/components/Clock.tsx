@@ -132,6 +132,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
     face = (<>
       {dial(<button className="clock-btn" disabled={busy} onClick={clockIn} aria-label="Clock in now">
         <span>{busy ? '…' : 'Clock in'}<small>{w ? `${clockTime(w.start)} shift` : 'tap to start'}</small></span></button>)}
+      {current && slotOf(b, current) && <div className="clock-where"><span aria-hidden="true">📍</span>Clocking in at <b>{b.locs.find((l) => l.id === slotOf(b, current)!.location_id)?.name}</b></div>}
+      {!current && <div className="clock-where muted"><span aria-hidden="true">📍</span>No shift now: you'll pick where you are</div>}
       <p className="clock-sub">{current ? `${slotLabel(b, current)}${now > w!.start.getTime() + 5 * 60000 ? ` · started ${Math.round((now - w!.start.getTime()) / 60000)} min ago` : ''}`
         : next ? `No shift right now. Next: ${slotLabel(b, next)}. You can still clock in to cover someone or work an extra shift.`
         : 'No shift right now. You can still clock in to cover someone or work an extra shift.'}</p>
@@ -158,7 +160,7 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
       {missed && <MissedPunchSheet b={b} empId={empId} onClose={() => setMissed(false)} reload={reload} />}
       {ask?.mode === 'late' && <LateSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
       {ask?.mode === 'extra' && <ExtraSheet b={b} empId={empId} schedPay={schedPay} r={ask} onClose={() => setAsk(null)} reload={reload} />}
-      {starting && <ClockStartSheet b={b} empId={empId} locs={clockLocs} onClose={() => setStarting(false)} reload={reload} onLate={(r) => setAsk(r)} />}
+      {starting && <ClockStartSheet b={b} empId={empId} locs={[...clockLocs, ...b.locs.filter((l) => l.time_clock !== false && !clockLocs.some((x) => x.id === l.id))]} mineIds={clockLocs.map((l) => l.id)} onClose={() => setStarting(false)} reload={reload} onLate={(r) => setAsk(r)} />}
       {ask?.mode === 'unscheduled' && <CoverAsk b={b} empId={empId} entryId={ask.entry_id} onClose={() => setAsk(null)} reload={reload} />}
     </section>
   );
@@ -336,9 +338,9 @@ export function HoursList({ b, empId, weeks, onCancel }: { b: Bundle; empId: str
  * Clocking in with no shift of mine right now: 1. where am I (if I work at more than one place),
  * 2. am I here instead of someone (whose shift is on now), or is it an extra shift. Then the clock starts.
  */
-function ClockStartSheet({ b, empId, locs, onClose, reload, onLate }: { b: Bundle; empId: string; locs: Bundle['locs']; onClose: () => void; reload: () => void; onLate: (r: ClockResult) => void }) {
+function ClockStartSheet({ b, empId, locs, mineIds, onClose, reload, onLate }: { b: Bundle; empId: string; locs: Bundle['locs']; mineIds: string[]; onClose: () => void; reload: () => void; onLate: (r: ClockResult) => void }) {
   const toast = useToast();
-  const [loc, setLoc] = useState(locs.length === 1 ? locs[0].id : '');
+  const [loc, setLoc] = useState(mineIds.length === 1 && locs.length === 1 ? locs[0].id : '');
   const [pick, setPick] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const now = Date.now(), days = [addDays(todayIso(), -1), todayIso()];
@@ -385,10 +387,10 @@ function ClockStartSheet({ b, empId, locs, onClose, reload, onLate }: { b: Bundl
 
   return (
     <Sheet eyebrow="Clock in" title="You don't have a shift right now" onClose={onClose}>
-      {locs.length > 1 && <div className="sec"><h4>1. Where are you working?</h4>
+      <div className="sec"><h4>1. Where are you clocking in?</h4>
         <div className="cs-locs">{locs.map((l) => <button key={l.id} type="button" className={`cs-loc${loc === l.id ? ' on' : ''}`} aria-pressed={loc === l.id} onClick={() => setLoc(l.id)}>
-          <span aria-hidden="true">{l.type === 'gas' ? '⛽' : l.type === 'shop' ? '🛒' : '🏨'}</span><b>{l.name}</b></button>)}</div></div>}
-      {loc && <div className="sec"><h4>{locs.length > 1 ? '2. ' : ''}Are you here instead of someone?</h4>
+          <span aria-hidden="true">{l.type === 'gas' ? '⛽' : l.type === 'shop' ? '🛒' : '🏨'}</span><span className="cs-ln"><b>{l.name}</b>{!mineIds.includes(l.id) && <small>Not usually here</small>}</span>{loc === l.id && <i className="cs-check" aria-hidden="true">✓</i>}</button>)}</div></div>
+      {loc && <div className="sec"><h4>2. Are you here instead of someone?</h4>
         <p>Who is on now at {locName0}:</p>
         <div className="list">{cells.length ? cells.map((k) => { const o = empOf(b, b.assign[k]), t = taken(k);
           return (<button key={k} className="row" disabled={!!t} onClick={() => setPick(k)}>

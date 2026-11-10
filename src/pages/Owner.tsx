@@ -503,6 +503,7 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview, onMessage }: { 
   const others = b.emps.filter((x) => !x.user_id);
   const [f, setF] = useState(() => ({ name: w?.name ?? '', short: w?.short_name ?? '', email: w?.email ?? '', phone: w?.phone ?? '', max: w?.max_shifts ?? 5, rate: w?.rate ?? 0 }));
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'overview' | 'details' | 'pay' | 'avail'>('overview');
   const dirty = useMemo(() => w && (f.name !== w.name || f.short !== (w.short_name ?? '') || f.email !== (w.email ?? '') || f.phone !== (w.phone ?? '') || f.max !== w.max_shifts || f.rate !== w.rate), [f, w]);
   if (!w) return null;
   const n = countWeek(b, w.id, week);
@@ -533,49 +534,96 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview, onMessage }: { 
     setBusy(false); reload();
   };
 
+  const initials = w.name.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join('');
+  const hrs = hoursWeek(b, w.id, week), pct = Math.min(100, Math.round((n / Math.max(1, w.max_shifts)) * 100));
+  const isMe = w.user_id === me?.userId, canMsg = !!w.user_id && w.user_id !== b.org.owner_id;
+  const locName = (id: string) => b.locs.find((l) => l.id === id)?.name ?? '';
+  const statusText = w.status === 'active' ? 'Has a login' : w.status === 'invited' ? `Invited ${w.invited_at ? ago(w.invited_at) : ''}` : w.status === 'expired' ? 'Invite expired' : 'No login yet';
+
   return (
     <Sheet eyebrow="Worker profile" title={w.name} onClose={onClose}>
-      <div className="twocol">
-        <div className="field"><label htmlFor="pf-name">Full name</label><input type="text" id="pf-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-        <div className="field"><label htmlFor="pf-short">Short name on the schedule</label><input type="text" id="pf-short" maxLength={20} value={f.short} onChange={(e) => setF({ ...f, short: e.target.value })} placeholder={w ? shortName({ ...b, org: { ...b.org, name_display: 'first' } }, w) : ''} />
-          <span className="hint">{(b.org.name_display ?? 'first') === 'custom' ? 'Shown on the schedule.' : 'Used when the schedule shows custom short names.'}</span></div>
+      <div className="pf-hero" style={{ ['--h' as string]: w.hue }}>
+        <span className="pf-av" aria-hidden="true">{initials}</span>
+        <div className="pf-id">
+          <h3>{w.name}{isMe && <span className="tag plain">You</span>}</h3>
+          <div className="pf-meta"><span className={`pf-status ${w.status}`}><i />{isMe ? 'Owner account' : statusText}</span>
+            {(w.email || w.phone) && <span className="pf-contact">{[w.email, w.phone].filter(Boolean).join(' · ')}</span>}</div>
+          <div className="pf-locs">{w.locs.length ? w.locs.map((l) => <span key={l} className="pf-chip">🏨 {locName(l)}</span>) : <span className="pf-chip warn">Not at any location</span>}</div>
+        </div>
       </div>
-      <div className="twocol">
-        <div className="field"><label htmlFor="pf-email">Email (invite and log-in)</label><input type="email" id="pf-email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="name@email.com" /></div>
-        <div className="field"><label htmlFor="pf-phone">Phone (log-in)</label><input type="tel" id="pf-phone" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="(555) 123-4567" /></div>
+      <div className="pf-actions">
+        {canMsg && <button className="pf-act primary" onClick={() => onMessage(w.user_id!)}><span aria-hidden="true">💬</span>Message</button>}
+        {!isMe && <button className="pf-act" disabled={busy} onClick={invite}><span aria-hidden="true">{w.status === 'active' ? '🔑' : '✉️'}</span>{w.status === 'active' ? 'Reset password' : w.status === 'none' ? 'Send invite' : 'Resend invite'}</button>}
+        <button className="pf-act" onClick={onPreview}><span aria-hidden="true">👁</span>See their view</button>
       </div>
-      <div className="twocol">
-        <div className="field"><label htmlFor="pf-max">Max shifts per week</label><input type="number" id="pf-max" min={1} max={21} value={f.max} onChange={(e) => setF({ ...f, max: +e.target.value || 1 })} /></div>
-        <div className="field"><label htmlFor="pf-rate">Hourly rate ($)</label><input type="number" id="pf-rate" min={0} step={0.25} value={f.rate} onChange={(e) => setF({ ...f, rate: +e.target.value || 0 })} /></div>
+
+      <div className="pf-stats">
+        <div className="pf-stat"><small>This week</small><b className={countClass(n, w.max_shifts)}>{n}<span>/{w.max_shifts}</span></b><span className="pf-bar"><i className={countClass(n, w.max_shifts)} style={{ width: `${pct}%` }} /></span><em>shifts</em></div>
+        <div className="pf-stat"><small>Hours</small><b>{hrs}</b><em>this week</em></div>
+        <div className="pf-stat"><small>Pay so far</small><b>{money(pay.gross)}</b><em>{pay.hours} h this period</em></div>
+        <div className="pf-stat"><small>Rate</small><b>{money(w.rate)}</b><em>per hour</em></div>
       </div>
-      <div className="actions"><button className="btn primary" disabled={!dirty || busy} onClick={save}>Save changes</button></div>
-      <fieldset className="field"><legend>Works at</legend><div className="checks">
-        {b.locs.map((l) => <label key={l.id}><input type="checkbox" checked={w.locs.includes(l.id)} onChange={(e) => toggleLoc(l.id, e.target.checked)} /> {l.name}</label>)}</div></fieldset>
-      {w.user_id === me?.userId ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap your photo at the top right, then <b>Switch to worker view</b>, to clock in and out.</p>
-        {others.length > 0 && <details><summary>Already on the list under another name?</summary>
-          <p>Pick that worker and your worker view will use it (with its shifts) instead of this one.</p>
-          <div className="actions">{others.map((x) => <button key={x.id} className="btn small" disabled={busy} onClick={async () => {
-            setBusy(true); try { await myWorkerProfile(b.org.id, x.id); await refresh(); toast(`Your worker view now uses ${x.name}. You can delete ${w.name} if you don't need it.`, 'ok', 'Linked'); onClose(); reload(); } catch (e) { toast(errText(e), 'error', "Couldn't link"); } setBusy(false);
-          }}>That's me: {x.name}</button>)}</div></details>}</div> : <>
-      <div className="sec"><h4>Login <StatusTag s={w.status} /></h4>
-        <p>{w.status === 'active' ? `${w.name} logs in with their email${w.phone ? ' or phone' : ''} and their own password.`
-          : w.status === 'invited' ? `Invite sent ${w.invited_at ? ago(w.invited_at) : ''}. The link works for 24 hours.`
-          : w.status === 'expired' ? 'The invite link expired. Send a new one.' : 'Send an invite so they can see their shifts and pay. They choose their own password.'}</p>
-        <div className="actions"><button className={`btn small${w.status === 'active' ? '' : ' primary'}`} disabled={busy} onClick={invite}>
-          {w.status === 'active' ? 'Send password reset link' : w.status === 'none' ? 'Send invite' : 'Resend invite'}</button></div></div>
+
+      <div className="seg pf-tabs" role="tablist">{([['overview', 'Overview'], ['details', 'Details'], ['pay', 'Pay'], ['avail', 'Availability']] as const).map(([k, t]) =>
+        <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{t}{k === 'details' && dirty ? ' •' : ''}</button>)}</div>
+
+      {tab === 'overview' && <>
+        <div className="sec"><h4>Week of {rangeTitle(week, addDays(week, 6))}</h4>
+          {mine.length ? <div className="pf-shifts" style={{ ['--h' as string]: w.hue }}>{mine.map((k) => { const sl = slotOf(b, k)!, d = parseCell(k).date; return (
+            <div key={k} className="pf-shift"><span className="d">{DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7].slice(0, 3)}<b>{d.slice(8)}</b></span>
+              <span className="t"><b>{shiftLong(sl.start_hour, sl.hours)}</b><small>{locName(sl.location_id)} · {sl.hours}h</small></span></div>); })}</div>
+            : <p className="empty-note">No shifts this week.</p>}</div>
+        {isMe ? <div className="sec"><h4>Login</h4><p>This is you. You log in with your owner account; tap your photo at the top right, then <b>Switch to worker view</b>, to clock in and out.</p>
+          {others.length > 0 && <details><summary>Already on the list under another name?</summary>
+            <p>Pick that worker and your worker view will use it (with its shifts) instead of this one.</p>
+            <div className="actions">{others.map((x) => <button key={x.id} className="btn small" disabled={busy} onClick={async () => {
+              setBusy(true); try { await myWorkerProfile(b.org.id, x.id); await refresh(); toast(`Your worker view now uses ${x.name}. You can delete ${w.name} if you don't need it.`, 'ok', 'Linked'); onClose(); reload(); } catch (e) { toast(errText(e), 'error', "Couldn't link"); } setBusy(false);
+            }}>That's me: {x.name}</button>)}</div></details>}</div>
+          : <div className={`pf-login ${w.status}`}><span aria-hidden="true">{w.status === 'active' ? '✅' : w.status === 'invited' ? '⏳' : '🔒'}</span>
+            <p>{w.status === 'active' ? `${w.name} logs in with their email${w.phone ? ' or phone' : ''} and their own password.`
+              : w.status === 'invited' ? `Invite sent ${w.invited_at ? ago(w.invited_at) : ''}. The link works for 24 hours.`
+              : w.status === 'expired' ? 'The invite link expired. Send a new one.' : `Send an invite (add an email under Details) or share your join link, so ${w.name.split(' ')[0]} can see their shifts and pay.`}</p></div>}
       </>}
-      <div className="sec"><h4>Week of {rangeTitle(week, addDays(week, 6))} <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span></h4>
-        {mine.length ? <><ul className="plain">{mine.map((k) => <li key={k}>{slotLabel(b, k)}</li>)}</ul><p style={{ marginTop: 6 }}>{hoursWeek(b, w.id, week)} hours</p></> : <p>No shifts this week.</p>}</div>
-      <div className="sec"><h4>Pay history</h4><PayslipList business={b.org.name} empId={w.id} limit={4} /></div>
-      <div className="sec"><h4>Pay this period</h4><p>{pay.hours} hours × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''} = <b>{money(pay.gross)}</b></p></div>
-      <div className="sec"><h4>Availability <span className="hint">(set by {w.name})</span></h4><ul className="plain">{w.avail.map((a) => <li key={a.dow}>{DAY_LONG[a.dow].slice(0, 3)} · {availText(a)}</li>)}</ul></div>
-      <div className="actions">{w.user_id && w.user_id !== b.org.owner_id && <button className="btn primary" onClick={() => onMessage(w.user_id!)}>💬 Send {w.name.split(' ')[0]} a message</button>}
-        <button className="btn" onClick={onPreview}>See what {w.name} sees</button>
-        <ConfirmButton label="Delete worker" confirmLabel={`Click again to delete ${w.name}`} onConfirm={async () => {
-        const { error } = await supabase.from('employees').delete().eq('id', w.id);
-        if (error) return toast(errText(error), 'error', "Couldn't delete");
-        toast(`${w.name} deleted. Their shifts are now open.`, 'warn', 'Deleted'); onClose(); reload();
-      }} /></div>
+
+      {tab === 'details' && <>
+        <div className="twocol">
+          <div className="field"><label htmlFor="pf-name">Full name</label><input type="text" id="pf-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+          <div className="field"><label htmlFor="pf-short">Short name on the schedule</label><input type="text" id="pf-short" maxLength={20} value={f.short} onChange={(e) => setF({ ...f, short: e.target.value })} placeholder={w ? shortName({ ...b, org: { ...b.org, name_display: 'first' } }, w) : ''} />
+            <span className="hint">{(b.org.name_display ?? 'first') === 'custom' ? 'Shown on the schedule.' : 'Used when the schedule shows custom short names.'}</span></div>
+        </div>
+        <div className="twocol">
+          <div className="field"><label htmlFor="pf-email">Email (invite and log-in)</label><input type="email" id="pf-email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="name@email.com" /></div>
+          <div className="field"><label htmlFor="pf-phone">Phone (log-in)</label><input type="tel" id="pf-phone" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="(555) 123-4567" /></div>
+        </div>
+        <div className="twocol">
+          <div className="field"><label htmlFor="pf-max">Max shifts per week</label>
+            <div className="pf-step"><button type="button" className="btn icon" onClick={() => setF({ ...f, max: Math.max(1, f.max - 1) })} aria-label="One fewer">−</button>
+              <input type="number" id="pf-max" min={1} max={21} value={f.max} onChange={(e) => setF({ ...f, max: +e.target.value || 1 })} />
+              <button type="button" className="btn icon" onClick={() => setF({ ...f, max: Math.min(21, f.max + 1) })} aria-label="One more">+</button></div></div>
+          <div className="field"><label htmlFor="pf-rate">Hourly rate ($)</label><input type="number" id="pf-rate" min={0} step={0.25} value={f.rate} onChange={(e) => setF({ ...f, rate: +e.target.value || 0 })} /></div>
+        </div>
+        <div className="sec"><h4>Works at</h4><div className="pf-loctoggles">
+          {b.locs.map((l) => { const on = w.locs.includes(l.id); return <button key={l.id} type="button" className={`pf-loctog${on ? ' on' : ''}`} aria-pressed={on} onClick={() => toggleLoc(l.id, !on)}>{on ? '✓' : '+'} {l.name}</button>; })}</div></div>
+        {dirty && <div className="pf-save"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+          <button className="btn" onClick={() => setF({ name: w.name, short: w.short_name ?? '', email: w.email ?? '', phone: w.phone ?? '', max: w.max_shifts, rate: w.rate })}>Undo changes</button></div>}
+        <details className="pf-danger"><summary>Delete this worker</summary>
+          <p>Their shifts become open. Past payroll stays.</p>
+          <ConfirmButton label="Delete worker" confirmLabel={`Click again to delete ${w.name}`} onConfirm={async () => {
+            const { error } = await supabase.from('employees').delete().eq('id', w.id);
+            if (error) return toast(errText(error), 'error', "Couldn't delete");
+            toast(`${w.name} deleted. Their shifts are now open.`, 'warn', 'Deleted'); onClose(); reload();
+          }} /></details>
+      </>}
+
+      {tab === 'pay' && <>
+        <div className="pf-paycard"><small>This pay period</small>
+          <p>{pay.hours} h × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''}</p><b>{money(pay.gross)}</b></div>
+        <div className="sec"><h4>Payslips</h4><PayslipList business={b.org.name} empId={w.id} limit={6} /></div>
+      </>}
+
+      {tab === 'avail' && <div className="sec"><h4>When {w.name.split(' ')[0]} can work <span className="hint">(set by {w.name.split(' ')[0]})</span></h4>
+        <div className="pf-avail">{w.avail.map((a) => { const t = availText(a), off = /not available|off|can't/i.test(t); return (
+          <div key={a.dow} className={`pf-day${off ? ' off' : ''}`}><b>{DAY_LONG[a.dow].slice(0, 3)}</b><small>{t}</small></div>); })}</div></div>}
     </Sheet>
   );
 }
