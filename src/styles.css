@@ -1017,7 +1017,9 @@ body.dragging .part.hover[data-cell] { outline: 2px solid var(--accent); }
 .spot-hero.in .sv-cut { animation: sv-snip 1.2s ease-in-out .3s both; }
 @keyframes sv-grow { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes sv-snip { 0% { opacity: 0; transform: translate(-50%, -140%) rotate(90deg); } 50% { opacity: 1; transform: translate(-50%, -50%) rotate(90deg) scale(1.2); } 100% { opacity: 1; transform: translate(-50%, -50%) rotate(90deg); } }
-.spot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+.spot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+@media (max-width: 1060px) { .spot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .spot-grid { grid-template-columns: 1fr; } }
 .spot-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 6px; align-content: start; transition: transform .2s, box-shadow .2s; }
 .spot-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgb(0 0 0 / .08); }
 .spot-card h3 { font-size: 19px; margin: 4px 0 0; } .spot-card p { color: var(--muted); margin: 0; }
@@ -1244,3 +1246,7 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .chat-eg span { max-width: 85%; padding: 5px 10px; border-radius: 12px; font-size: 13px; }
 .chat-eg .them { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 3px; }
 .chat-eg .me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+
+.spot-card.spot-new { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: linear-gradient(180deg, var(--accent-soft), var(--surface) 65%); }
+.spot-card .chat-eg { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.spot-card h3 .tag { vertical-align: middle; margin-left: 4px; font-size: 11px; }
