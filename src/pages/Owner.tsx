@@ -26,6 +26,7 @@ import WorkerApp from './Worker';
 import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
 import { AddTeamSheet, ImportScheduleSheet, WelcomeSheet } from '../components/AddTeam';
+import { MessagesView, useUnreadMessages } from '../components/Messages';
 import { importReady } from '../lib/team';
 import { PLANS, locLimitOf, planOf, trialLeft, untilText, wantPlan } from '../lib/plans';
 
@@ -52,7 +53,9 @@ export default function OwnerApp() {
   // Owner who also works shifts: the worker view of their own profile (remembered on this device).
   const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
-  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll' | 'reports' | 'tasks'>('schedule');
+  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
+  const [msgWith, setMsgWith] = useState<string | null>(null);
+  const { unread: unreadMsgs, reloadUnread } = useUnreadMessages(me?.orgId, me?.userId);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -220,8 +223,9 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll', 'reports', 'tasks'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : 'Tasks'}</button>)}</nav>;
+  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll', 'reports', 'tasks', 'messages'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
+    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
+      : <><span className="full">Messages</span><span className="short">Chat</span>{unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</>}</button>)}</nav>;
 
   const schedule = (
     <div className="layout two owner">
@@ -304,13 +308,14 @@ export default function OwnerApp() {
           { label: 'Plan & billing', hint: trialLeft(b.org) ? `${PLANS[planOf(b.org)].name} trial · ${trialLeft(b.org)} days left` : `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' },
         ]} />} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div>
+        : tab === 'messages' ? <div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} onClose={() => setSheet(null)} onManual={addWorker} />}
       {sheet?.type === 'welcome' && <WelcomeSheet onClose={() => setSheet(null)} onJoinLink={() => setSheet({ type: 'addteam' })} onManual={() => { setSheet(null); addWorker(); }} />}
       {sheet?.type === 'import' && <ImportScheduleSheet b={b} orgId={orgId} week={week} onClose={() => setSheet(null)} reload={reload} />}
-      {sheet && sheet.type !== 'addteam' && sheet.type !== 'import' && sheet.type !== 'welcome' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
+      {sheet && sheet.type !== 'addteam' && sheet.type !== 'import' && sheet.type !== 'welcome' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} message={(uid) => { setSheet(null); setMsgWith(uid); setTab('messages'); window.scrollTo({ top: 0 }); }} />}
     </>
   );
 }
@@ -319,7 +324,8 @@ export default function OwnerApp() {
 
 // ---------------------------------------------------------------- sheets
 
-function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker }: {
+function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker, message }: {
+  message: (userId: string) => void;
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
   commit: (c: Changes, msg: string, o?: { ledger?: Record<string, unknown>; settle?: string; allowOver?: boolean; onLedger?: (id: string) => Promise<void> }) => Promise<boolean>;
   reload: () => Promise<void>; notes: ReturnType<typeof useNotes>['notes']; reloadNotes: () => void; decide: (r: Req, a: boolean) => void; signOut: () => Promise<void>; preview: (empId: string) => void; goWorker: () => void;
@@ -456,7 +462,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
       </Sheet>);
   }
 
-  if (s.type === 'profile') return <ProfileSheet b={b} week={week} id={s.id} onClose={close} reload={reload} onPreview={() => preview(s.id)} />;
+  if (s.type === 'profile') return <ProfileSheet b={b} week={week} id={s.id} onClose={close} reload={reload} onPreview={() => preview(s.id)} onMessage={message} />;
 
   if (s.type === 'loc') return <LocSheet b={b} loc={s.loc} onClose={close} reload={reload} />;
   if (s.type === 'delloc') return (
@@ -473,7 +479,7 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
   return null;
 }
 
-function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void>; onPreview: () => void }) {
+function ProfileSheet({ b, week, id, onClose, reload, onPreview, onMessage }: { b: Bundle; week: string; id: string; onClose: () => void; reload: () => Promise<void>; onPreview: () => void; onMessage: (userId: string) => void }) {
   const toast = useToast();
   const { me, refresh } = useAuth();
   const w = empOf(b, id);
@@ -546,7 +552,8 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview }: { b: Bundle; 
       <div className="sec"><h4>Pay history</h4><PayslipList business={b.org.name} empId={w.id} limit={4} /></div>
       <div className="sec"><h4>Pay this period</h4><p>{pay.hours} hours × {money(pay.rate)}{pay.ot ? ` + ${pay.ot} h overtime` : ''} = <b>{money(pay.gross)}</b></p></div>
       <div className="sec"><h4>Availability <span className="hint">(set by {w.name})</span></h4><ul className="plain">{w.avail.map((a) => <li key={a.dow}>{DAY_LONG[a.dow].slice(0, 3)} · {availText(a)}</li>)}</ul></div>
-      <div className="actions"><button className="btn" onClick={onPreview}>See what {w.name} sees</button>
+      <div className="actions">{w.user_id && w.user_id !== b.org.owner_id && <button className="btn primary" onClick={() => onMessage(w.user_id!)}>💬 Send {w.name.split(' ')[0]} a message</button>}
+        <button className="btn" onClick={onPreview}>See what {w.name} sees</button>
         <ConfirmButton label="Delete worker" confirmLabel={`Click again to delete ${w.name}`} onConfirm={async () => {
         const { error } = await supabase.from('employees').delete().eq('id', w.id);
         if (error) return toast(errText(error), 'error', "Couldn't delete");

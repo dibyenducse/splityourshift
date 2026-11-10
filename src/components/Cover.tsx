@@ -9,12 +9,12 @@ import { shiftNameOf } from './Logbook';
 interface Offer { id: string; request_id: string; employee_id: string; label: string; slot_id: string | null; work_date: string; off_name: string | null; status: 'pending' | 'accepted' | 'declined' | 'closed'; created_at: string; decided_at: string | null }
 
 /** Worker: ask the owner for time off on any date and shift (no schedule needed). Not a swap. */
-export function TimeOffSheet({ b, empId, onClose, reload }: { b: Bundle; empId: string; onClose: () => void; reload: () => void }) {
+export function TimeOffSheet({ b, empId, onClose, reload, initialKey }: { b: Bundle; empId: string; onClose: () => void; reload: () => void; initialKey?: string }) {
   const toast = useToast();
   const me = empOf(b, empId);
   const locs = b.locs.filter((l) => me?.locs.includes(l.id)).length ? b.locs.filter((l) => me?.locs.includes(l.id)) : b.locs;
   const mine = keysOf(b, empId).filter((k) => parseCell(k).date >= todayIso() && !b.reqs.some((r) => r.employee_id === empId && r.slot_id === parseCell(k).slot && r.work_date === parseCell(k).date && ['pending', 'approved'].includes(r.status))).slice(0, 8);
-  const [f, setF] = useState({ loc: locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1), reason: '' });
+  const [f, setF] = useState(() => { if (initialKey) { const { slot, date } = parseCell(initialKey); return { loc: slotById(b, slot)?.location_id ?? locs[0]?.id ?? '', slot, date, reason: '' }; } return { loc: locs[0]?.id ?? '', slot: '', date: addDays(todayIso(), 1), reason: '' }; });
   const [busy, setBusy] = useState(false);
   const slots = b.slots.filter((s) => s.location_id === f.loc).sort((x, y) => x.start_hour - y.start_hour);
   const pick = (k: string) => { const { slot, date } = parseCell(k); setF({ ...f, slot, date, loc: slotById(b, slot)?.location_id ?? f.loc }); };

@@ -3,7 +3,7 @@ import { supabase, errText } from '../lib/supabase';
 import { addDays, ago, shiftLong, todayIso } from '../lib/time';
 import { availFor, cellKey, empOf, keysOf, parseCell, slotOf, slotById } from '../lib/rules';
 import type { Adjustment, Bundle } from '../lib/types';
-import { ConfirmButton, useToast } from './ui';
+import { ConfirmButton, Sheet, useToast } from './ui';
 import { shiftNameOf } from './Logbook';
 import { PaybackPicker } from './Cover';
 import { HowToButton } from './HowTo';
@@ -188,14 +188,14 @@ function AcceptSwap({ b, a, busy, onGo, onCancel }: { b: Bundle; a: Adjustment; 
  * 2) a coworker (free / working that day / unavailable is shown), 3) the summary and Send.
  * Owner: the same, with a first step for whose shift it is.
  */
-function SwapRequest({ b, empId, owner, pending, onSent }: { b: Bundle; empId?: string; owner?: boolean; pending: Adjustment[]; onSent: () => void }) {
+function SwapRequest({ b, empId, owner, pending, onSent, initialCell }: { b: Bundle; empId?: string; owner?: boolean; pending: Adjustment[]; onSent: () => void; initialCell?: string }) {
   const toast = useToast();
   const today = todayIso();
   const [from, setFrom] = useState(owner ? '' : empId ?? '');
   const me = empOf(b, from);
   const myLocs = me && b.locs.filter((l) => me.locs.includes(l.id)).length ? b.locs.filter((l) => me.locs.includes(l.id)) : b.locs;
   const mine = from ? keysOf(b, from).filter((k) => parseCell(k).date >= today).sort((x, y) => parseCell(x).date.localeCompare(parseCell(y).date) || (slotOf(b, x)!.start_hour - slotOf(b, y)!.start_hour)).slice(0, 12) : [];
-  const [cell, setCell] = useState<string | null>(null);
+  const [cell, setCell] = useState<string | null>(initialCell ?? null);
   const [other, setOther] = useState(false);
   const [o, setO] = useState({ date: addDays(today, 7), loc: myLocs[0]?.id ?? '', slot: '' });
   const [to, setTo] = useState('');
@@ -273,4 +273,12 @@ function SwapRequest({ b, empId, owner, pending, onSent }: { b: Bundle; empId?: 
         <span className="hint" style={{ margin: 0 }}>{owner ? 'They accept or decline; when they accept, the schedule updates.' : 'They can accept, decline, or choose a shift of yours to work in return. Your manager is told.'}</span>
       </div></div>
     </div>);
+}
+
+/** Worker taps one of their shifts: ask a coworker to work it (the shift is already picked). */
+export function SwapSheet({ b, empId, cell, onClose }: { b: Bundle; empId: string; cell: string; onClose: () => void }) {
+  return (
+    <Sheet eyebrow="Swap a shift" title="Ask a coworker to work it" onClose={onClose}>
+      <SwapRequest b={b} empId={empId} pending={[]} onSent={onClose} initialCell={cell} />
+    </Sheet>);
 }

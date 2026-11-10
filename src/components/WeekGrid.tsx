@@ -6,7 +6,9 @@ import { ConfirmButton } from './ui';
 
 interface GridProps {
   b: Bundle; week: string; editable: boolean; meId?: string; onlyLocs?: string[];
-  onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void; onClearWeek?: (l: Loc) => void;
+  onCell?: (k: string) => void; onEditLoc?: (l: Loc) => void;
+  /** Worker view: tapping one of my own shifts. */
+  onMine?: (k: string) => void; onClearWeek?: (l: Loc) => void;
   /** Per-location undo: the hint (null = nothing to undo here) and the action. */
   undoHint?: (locId: string) => string | null; onUndo?: (locId: string) => void;
 }
@@ -31,7 +33,7 @@ export function printBoards(locId?: string) {
 }
 
 /** One board per location: shifts down the side, days across, like the paper schedule. */
-export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek, undoHint, onUndo }: GridProps) {
+export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc, onClearWeek, undoHint, onUndo, onMine }: GridProps) {
   const myLocs = meId ? b.emps.find((e) => e.id === meId)?.locs : undefined;
   const clockUsed = b.locs.some((l) => l.time_clock !== false && (!myLocs || myLocs.includes(l.id)));
   const today = todayIso();
@@ -113,8 +115,8 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                         if (parts.length) return (
                           <td key={d} className="cell split" aria-label={`${DAY_LONG[d]}: split into ${parts.length} parts`}>
                             {parts.map((p) => { const pk = cellKey(p.id, p.only_date!), pw = empOf(b, b.assign[pk]); return (
-                              <div key={p.id} className="part" {...(editable ? { tabIndex: 0, 'data-cell': pk } : {})}
-                                onClick={editable && onCell ? (e) => { e.stopPropagation(); onCell(pk); } : undefined}
+                              <div key={p.id} className={`part${!editable && onMine && meId && b.assign[pk] === meId ? ' mine-tap' : ''}`} {...(editable ? { tabIndex: 0, 'data-cell': pk } : !editable && onMine && meId && b.assign[pk] === meId ? { tabIndex: 0, role: 'button', 'data-mine': pk } : {})}
+                                onClick={editable && onCell ? (e) => { e.stopPropagation(); onCell(pk); } : !editable && onMine && meId && b.assign[pk] === meId ? (e) => { e.stopPropagation(); onMine(pk); } : undefined}
                                 onKeyDown={editable && onCell ? (e) => { if (e.key === 'Enter') onCell(pk); } : undefined}
                                 aria-label={`${shiftLong(p.start_hour, p.hours)}: ${pw ? pw.name : 'open'}`}>
                                 <span className="ptime">{shiftShort(p.start_hour, p.hours)}</span>{cellInner(pk)}</div>); })}
@@ -122,9 +124,9 @@ export function WeekGrid({ b, week, editable, meId, onlyLocs, onCell, onEditLoc,
                         const inner = cellInner(k);
                         const w = empOf(b, b.assign[k]);
                         return (
-                          <td key={d} className="cell" {...(editable ? { tabIndex: 0, 'data-cell': k } : {})}
-                            onClick={editable && onCell ? () => onCell(k) : undefined}
-                            onKeyDown={editable && onCell ? (e) => { if (e.key === 'Enter') onCell(k); } : undefined}
+                          <td key={d} className={`cell${!editable && onMine && meId && w?.id === meId ? ' mine-tap' : ''}`} {...(editable ? { tabIndex: 0, 'data-cell': k } : !editable && onMine && meId && w?.id === meId ? { tabIndex: 0, role: 'button', 'data-mine': k } : {})}
+                            onClick={editable && onCell ? () => onCell(k) : !editable && onMine && meId && w?.id === meId ? () => onMine(k) : undefined}
+                            onKeyDown={editable && onCell ? (e) => { if (e.key === 'Enter') onCell(k); } : !editable && onMine && meId && w?.id === meId ? (e) => { if (e.key === 'Enter') onMine(k); } : undefined}
                             aria-label={`${d}: ${w ? w.name : 'open'}`}>{inner}</td>);
                       })}
                     </tr>

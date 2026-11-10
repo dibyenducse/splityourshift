@@ -4,17 +4,18 @@ import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
 import { DAY_LONG, addDays, ago, mmdd, mondayOf, money, rangeTitle, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotOf } from '../lib/rules';
+import { availFor, cellKey, empOf, keysOf, parseCell, payFor, periodOf, slotOf } from '../lib/rules';
 import { dateShort, myPay, periodTitle, type MyPay } from '../lib/payroll';
 import type { Bundle, Req } from '../lib/types';
-import { Loading, useToast } from '../components/ui';
+import { Loading, Sheet, useToast } from '../components/ui';
 import { WeekGrid } from '../components/WeekGrid';
 import { ClockPanel, HoursList } from '../components/Clock';
 import { HowToSheet } from '../components/HowTo';
 import { AppBar, NotesSheet, useNotes } from './AppShell';
 import { ProfileMenu } from '../components/Avatar';
 import { PayslipList } from '../components/Payslips';
-import { AdjustmentsPanel } from '../components/Adjustments';
+import { AdjustmentsPanel, SwapSheet } from '../components/Adjustments';
+import { MessagesView, useUnreadMessages } from '../components/Messages';
 import { CoverOffersPanel, TimeOffSheet } from '../components/Cover';
 import { TasksBoard } from '../components/ShiftLog';
 import { ShiftReportsBook } from '../components/Logbook';
@@ -34,9 +35,16 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
   const [sheet, setSheet] = useState<'request' | 'notes' | null>(null);
+  // A shift of mine I tapped: what to do with it (swap, time off, message my manager)
+  const [shiftK, setShiftK] = useState<string | null>(null);
+  const [swapK, setSwapK] = useState<string | null>(null);
+  const [offK, setOffK] = useState<string | null>(null);
+  const [msgWith, setMsgWith] = useState<string | null>(null);
+  const [asks, setAsks] = useState<string[]>([]);
   const [howto, setHowto] = useState(false);
   // Worker sections in the header: my shifts (time clock, schedule, pay), the shift report logbook, my tasks.
-  const [view, setView] = useState<'home' | 'reports' | 'tasks'>('home');
+  const [view, setView] = useState<'schedule' | 'pay' | 'messages' | 'reports' | 'tasks'>('schedule');
+  const { unread: unreadMsgs, reloadUnread } = useUnreadMessages(preview ? undefined : me?.orgId, preview ? undefined : me?.userId);
   const nav = useNavigate();
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const { notes, reload: reloadNotes } = useNotes();
@@ -48,6 +56,10 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   }, [orgId, empId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => { myPay(empId).then(setPay, () => {}); }, [empId, b?.entries.length]);
+  // swap requests I've sent that are still waiting (marked on my shifts)
+  const loadAsks = useCallback(() => supabase.from('shift_adjustments').select('slot_id, work_date').eq('from_emp', empId).eq('kind', 'future_swap').eq('status', 'pending')
+    .then(({ data }) => setAsks((data ?? []).map((x) => cellKey(x.slot_id, x.work_date)))), [empId]);
+  useEffect(() => { loadAsks(); }, [loadAsks, b]);
   useEffect(() => {
     const ch = supabase.channel(`w-${orgId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `org_id=eq.${orgId}` }, () => reload())
@@ -65,11 +77,24 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const live: Record<string, Req> = {};
   for (const r of [...b.reqs].reverse()) if (r.employee_id === w.id && r.status !== 'cancelled' && r.slot_id) live[cellKey(r.slot_id, r.work_date)] = r;
   const myReqs = b.reqs.filter((r) => r.employee_id === w.id);
+  /** What needs attention on one of my shifts. */
+  const problemsOf = (k: string): { text: string; bad?: boolean }[] => {
+    const out: { text: string; bad?: boolean }[] = [], r = live[k], d = parseCell(k).date;
+    if (r?.status === 'pending') out.push({ text: 'Day off asked' });
+    if (r?.status === 'approved') out.push({ text: 'Day off approved' });
+    if (r?.status === 'denied') out.push({ text: 'Day off denied', bad: true });
+    if (asks.includes(k)) out.push({ text: 'Swap asked' });
+    if (!availFor(b, w, k)) out.push({ text: "You said you can't work then", bad: true });
+    if (keysOf(b, w.id).some((x) => x !== k && parseCell(x).date === d)) out.push({ text: '2 shifts this day' });
+    return out;
+  };
   const weeks = periodOf(b.org, week), p = payFor(b, w, weeks), wk = payFor(b, w, [week]);
   const hours = mine.reduce((n, k) => n + slotOf(b, k)!.hours, 0);
   // Time clock off at every location I work at: no clock anywhere (panel, hours list, wording); pay is by schedule.
   const clockOn = b.locs.some((l) => w.locs.includes(l.id) && l.time_clock !== false) || b.entries.some((e) => e.employee_id === w.id && !e.clock_out);
 
+  // The time clock goes first on a day I work (or while I'm clocked in); otherwise my shifts come first.
+  const clockFirst = b.entries.some((e) => e.employee_id === w.id && !e.clock_out) || keysOf(b, w.id).some((k) => parseCell(k).date === todayIso());
   const cancel = async (r: Req) => {
     const { error } = await supabase.rpc('cancel_time_off', { p_id: r.id });
     if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled. You keep this shift.', 'ok', 'Cancelled');
@@ -86,27 +111,38 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           { label: 'Request time off', onClick: () => setSheet('request'), icon: 'timeoff' as const },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' as const },
         ]} />}
-        nav={<nav className="topnav" aria-label="Sections">{([['home', 'My shifts'], ['reports', 'Shift reports'], ['tasks', 'My tasks']] as const).map(([v, t]) =>
-          <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>{t}</button>)}</nav>} />
+        nav={<nav className="topnav" aria-label="Sections">{([['schedule', 'My schedule', 'Schedule'], ['pay', 'Pay & time off', 'Pay'], ['messages', 'Messages', 'Chat'], ['reports', 'Shift reports', 'Reports'], ['tasks', 'My tasks', 'Tasks']] as const).filter(([v]) => !(preview && v === 'messages')).map(([v, t, sh]) =>
+          <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>
+            <span className="full">{t}</span><span className="short">{sh}</span>{v === 'messages' && unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</button>)}</nav>} />
       {view === 'reports' ? <div className="wrap"><div className="layout"><ShiftReportsBook b={b} empId={preview ? undefined : w.id} /></div></div>
       : view === 'tasks' ? <div className="wrap"><div className="layout"><TasksBoard b={b} empId={preview ? undefined : w.id} /></div></div>
+      : view === 'messages' && !preview ? <div className="wrap"><div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div></div>
       : <div className="wrap"><div className="layout">
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
-        <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
+        {view === 'schedule' ? <>
+        {clockFirst && <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />}
         {!preview && <CoverOffersPanel b={b} empId={w.id} />}
-        {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
-          <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts (set by your manager).</p>
-          <div className="myshifts">{mine.length ? mine.map((k) => { const s = slotOf(b, k)!, d = parseCell(k).date, r = live[k];
-            return (<div key={k} className="mycard" style={{ ['--h' as string]: w.hue }}>
-              <span className="d">{DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7]} {mmdd(d)}</span>
+          <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts. <b>Tap a shift</b> to swap it, ask for the day off, or message your manager.</p>
+          {mine.length > w.max_shifts && <p className="reason bad" style={{ marginTop: 0 }}>You have {mine.length} shifts this week; your limit is {w.max_shifts}. Talk to your manager.</p>}
+          <div className="myshifts">{mine.length ? mine.map((k) => { const s = slotOf(b, k)!, d = parseCell(k).date, probs = problemsOf(k);
+            return (<button key={k} type="button" className={`mycard tap${probs.some((x) => x.bad) ? ' has-prob' : ''}${d === todayIso() ? ' today' : ''}`} style={{ ['--h' as string]: w.hue }} onClick={() => setShiftK(k)}>
+              <span className="d">{d === todayIso() ? 'Today · ' : ''}{DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7]} {mmdd(d)}</span>
               <span className="t">{shiftLong(s.start_hour, s.hours)} · {s.hours}h</span>
-              <span className="l">{b.locs.find((l) => l.id === s.location_id)?.name}</span>{r && reqTag(r)}</div>); })
-            : <p className="empty-note">No shifts this week.</p>}</div></section>
+              <span className="l">{b.locs.find((l) => l.id === s.location_id)?.name}</span>
+              {probs.length > 0 && <span className="probs">{probs.map((x) => <span key={x.text} className={`tag ${x.bad ? 'bad' : 'warn'}`}>{x.text}</span>)}</span>}
+              <span className="go" aria-hidden="true">›</span></button>); })
+            : <p className="empty-note">No shifts this week. Use the arrows at the top to see other weeks.</p>}</div></section>
 
+        <section className="panel"><div className="panel-head"><h2>Team schedule</h2></div>
+          <p className="hint">Your shifts are highlighted. Tap one of yours to swap it.</p>
+          <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} onMine={preview ? undefined : (k) => setShiftK(k)} /></div></section>
+        {!clockFirst && <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />}
+        {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
+        </> : <>
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
           <p className="hint">{clockOn && !b.locs.filter((l) => w.locs.includes(l.id)).every((l) => l.pay_method === 'schedule' || l.time_clock === false) ? 'Pay counts the hours you clocked in and out' : 'Pay counts your scheduled shift hours'}, before taxes. Your manager sets your rate.</p>
           <div className="tiles">
@@ -135,13 +171,28 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
                 {r.status === 'pending' && <button className="btn small danger" onClick={() => cancel(r)}>Cancel request</button>}</div></div>))
             : <p className="empty-note">You haven't asked for any time off.</p>}</div></section>
 
-        <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} /></div>
+        </>}
         </fieldset>
       </div></div>}
 
       {howto && <HowToSheet topics={['clock', 'swap']} onClose={() => setHowto(false)} />}
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
       {sheet === 'request' && <TimeOffSheet b={b} empId={w.id} onClose={() => setSheet(null)} reload={reload} />}
+      {offK && <TimeOffSheet b={b} empId={w.id} initialKey={offK} onClose={() => setOffK(null)} reload={reload} />}
+      {swapK && <SwapSheet b={b} empId={w.id} cell={swapK} onClose={() => { setSwapK(null); loadAsks(); }} />}
+      {shiftK && slotOf(b, shiftK) && (() => { const s = slotOf(b, shiftK)!, d = parseCell(shiftK).date, probs = problemsOf(shiftK), r = live[shiftK], asked = asks.includes(shiftK);
+        const sameDay = Object.keys(b.assign).filter((x) => parseCell(x).date === d && x !== shiftK && slotOf(b, x)?.location_id === s.location_id).map((x) => ({ x, e: empOf(b, b.assign[x]) })).filter((y) => y.e);
+        return (
+        <Sheet eyebrow="My shift" title={`${DAY_LONG[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7]} ${mmdd(d)} · ${shiftLong(s.start_hour, s.hours)}`} onClose={() => setShiftK(null)}>
+          <p style={{ margin: 0 }}>{b.locs.find((l) => l.id === s.location_id)?.name} · {s.hours} hours</p>
+          {probs.length > 0 && <div className="probs">{probs.map((x) => <span key={x.text} className={`tag ${x.bad ? 'bad' : 'warn'}`}>{x.text}</span>)}</div>}
+          {d >= todayIso() && <div className="shift-acts">
+            <button className="shift-act primary" disabled={asked} onClick={() => { setShiftK(null); setSwapK(shiftK); }}><span aria-hidden="true">⇄</span><b>{asked ? 'Swap already asked' : "Can't work it? Ask a coworker to swap"}</b><small>{asked ? 'Waiting for their answer. See Swaps below.' : 'Pick who works it; you see who is free that day.'}</small></button>
+            <button className="shift-act" disabled={!!r && r.status !== 'denied'} onClick={() => { setShiftK(null); setOffK(shiftK); }}><span aria-hidden="true">🌴</span><b>{r && r.status !== 'denied' ? 'Day off already asked' : 'Ask for this day off'}</b><small>Your manager approves it and finds cover.</small></button>
+            {!preview && <button className="shift-act" onClick={() => { const o = b.org.owner_id; setShiftK(null); setMsgWith(o); setView('messages'); }}><span aria-hidden="true">💬</span><b>Message my manager</b><small>About this shift or anything else.</small></button>}
+          </div>}
+          {sameDay.length > 0 && <div className="sec"><h4>Also working that day</h4><div className="stack">{sameDay.map(({ x, e }) => <div key={x} className="item"><span><b>{e!.name}</b> · {shiftLong(slotOf(b, x)!.start_hour, slotOf(b, x)!.hours)}</span></div>)}</div></div>}
+        </Sheet>); })()}
     </>
   );
 }
