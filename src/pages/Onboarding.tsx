@@ -81,14 +81,15 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
           if (sent) toast(`Sent ${sent} login invite${sent > 1 ? 's' : ''} by email.`, 'ok', 'Invites sent');
         }
       }
-      toast('Your schedule is ready. Drag names from the staff list into the shifts.', 'ok', 'All set');
+      if (mode === 'new') { try { localStorage.setItem('sys-welcome', '1'); } catch { /* private */ } }
+      else toast('Location added. Drag names from the staff list into the shifts.', 'ok', 'All set');
       if (mode === 'new') await refresh(); else onDone?.();
     } catch (e) {
       toast(errText(e), 'error', "Couldn't save");
     } finally { setBusy(false); }
   };
 
-  const total = 3;
+  const total = mode === 'new' ? 2 : 3;
   const bar = <div className="steps">{Array.from({ length: total }, (_, i) => <span key={i} className={i < step ? 'done' : ''} />)}</div>;
   const back = step > 1 ? <button className="btn" onClick={() => setStep(step - 1)}>Back</button>
     : mode === 'add' ? <button className="btn" onClick={onCancel}>Cancel</button> : <button className="btn" onClick={signOut}>Log out</button>;
@@ -112,12 +113,12 @@ export default function Onboarding({ mode, orgId, existing = [], onDone, onCance
         <b>{p.name}</b><span>{p.sub}</span>{p.rec && <span className="tag ok">Suggested</span>}</button>))}</div>
     <div className="sec"><h4>Your shifts</h4><p>Change any start time or length. The bar shows the 24 hours of a day.</p>
       <ShiftEditor idPrefix="wz" rows={rows} onChange={(r) => { setRows(r); setPreset('custom'); }} /></div>
-    <div className="wiz-foot">{back}<button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button></div>
+    <div className="wiz-foot">{back}{mode === 'new'
+      ? <button className="btn primary" disabled={!rows.length || busy} onClick={finish}>{busy ? 'Saving…' : 'Create my schedule'}</button>
+      : <button className="btn primary" disabled={!rows.length} onClick={() => setStep(3)}>Continue</button>}</div>
   </>);
   else body = (<>
     <h2>Add your workers</h2>
-    <div className="imp-promo"><span aria-hidden="true">📷</span><div><b>Have your schedule on paper or in another app?</b><small>Skip typing. Finish setup and take a photo of it: we add your workers, any missing shift times and who works when.</small></div>
-      <button className="btn primary" disabled={busy} onClick={() => { try { localStorage.setItem('sys-import', '1'); } catch { /* private */ } finish(); }}>Finish and import a photo</button></div>
     <p className="lead">Each person gets their own weekly shift limit and hourly rate. Workers with an email get an invite to set their password. Leave a row empty to skip it, or skip them all: after setup you'll get a join link to share, and workers add themselves.{mode === 'new' && <> You're on the list already, so you can schedule yourself too.</>}</p>
     {existing.length > 0 && <fieldset className="field"><legend>Workers you already have who also work at {locName}</legend><div className="checks">
       {existing.map((w) => <label key={w.id}><input type="checkbox" checked={also.includes(w.id)} onChange={(e) => setAlso(e.target.checked ? [...also, w.id] : also.filter((x) => x !== w.id))} /> {w.name}</label>)}</div></fieldset>}

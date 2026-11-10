@@ -229,3 +229,30 @@ export function ImportScheduleSheet({ b, orgId, week, onClose, reload }: { b: Bu
     </Sheet>
   );
 }
+
+/** First screen after setup: how to add workers, and the two easy ways to put them into shifts. */
+export function WelcomeSheet({ onClose, onJoinLink, onManual }: { onClose: () => void; onJoinLink: () => void; onManual: () => void }) {
+  return (
+    <Sheet eyebrow="Getting started" title="Your schedule is ready" onClose={onClose}>
+      <section className="wl-step"><span className="wl-n">1</span><div>
+        <h3>Add your workers</h3>
+        <p>Easiest: send them your <b>join link</b>. They open it on their phone, sign up, and show up on your staff list by themselves. Or add someone by hand.</p>
+        <div className="actions"><button className="btn primary" onClick={onJoinLink}>Get my join link</button><button className="btn" onClick={onManual}>Add a worker by hand</button></div>
+      </div></section>
+      <section className="wl-step"><span className="wl-n">2</span><div>
+        <h3>Put names into shifts</h3>
+        <div className="wl-ways">
+          <div className="wl-way"><b>Tap a shift, then tap a name</b>
+            <div className="wl-demo" aria-hidden="true"><span className="wl-cell">Open</span><span className="wl-arrow">→</span>
+              <span className="wl-list"><i style={{ ['--h' as string]: 340 }}>Maria</i><i style={{ ['--h' as string]: 205 }}>James</i><i style={{ ['--h' as string]: 145 }}>Ana</i></span></div>
+            <small>Tap any open shift: your workers' list opens with who is free. Tap a name and it's done.</small></div>
+          <div className="wl-way"><b>Or drag a name onto a shift</b>
+            <div className="wl-demo" aria-hidden="true"><span className="wl-chip" style={{ ['--h' as string]: 340 }}>Maria</span><span className="wl-arrow">⤳</span><span className="wl-cell">Open</span></div>
+            <small>Drag from the Staff list into the week, like moving names on a paper schedule.</small></div>
+        </div>
+        <p className="hint" style={{ margin: 0 }}>The app stops mistakes: nobody in two places at once, and a warning when someone goes over their weekly limit.</p>
+      </div></section>
+      <div className="actions"><button className="btn" onClick={onClose}>Got it</button></div>
+    </Sheet>
+  );
+}

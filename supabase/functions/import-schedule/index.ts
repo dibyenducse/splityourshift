@@ -57,6 +57,9 @@ Rules:
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
+    const body = await req.json().catch(() => ({}));
+    // The app asks first whether import is switched on (a Claude key is set), and hides the button if not.
+    if (body?.ping) return json({ ready: Boolean(Deno.env.get('ANTHROPIC_API_KEY')) });
     const url = Deno.env.get('SUPABASE_URL')!;
     const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const admin = createClient(url, service, { auth: { persistSession: false } });
@@ -64,7 +67,7 @@ Deno.serve(async (req) => {
     const { data: { user } } = jwt ? await admin.auth.getUser(jwt) : { data: { user: null } };
     if (!user) return json({ error: 'Please log in again.' }, 401);
 
-    const { org_id, location_id, data, media_type } = await req.json();
+    const { org_id, location_id, data, media_type } = body;
     const { data: org } = await admin.from('organizations').select('id, owner_id').eq('id', org_id).single();
     if (!org || org.owner_id !== user.id) return json({ error: 'Only the owner can import a schedule.' }, 403);
     if (typeof data !== 'string' || !data.length) return json({ error: 'Choose a photo or PDF first.' }, 400);

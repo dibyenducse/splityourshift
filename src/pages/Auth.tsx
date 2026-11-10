@@ -124,7 +124,7 @@ export function Signup() {
             <p className="hint" style={{ margin: 0 }}>We sent a confirmation link to <b>{f.email}</b>. Open it to finish creating your account, then you'll set up your shifts.</p></div>
         ) : (
           <form className="card" onSubmit={submit} noValidate>
-            <div className="kicker">Step 1 of 4</div>
+            <div className="kicker">Step 1 of 3</div>
             <h2>Create your owner account</h2>
             <p className="hint" style={{ margin: 0 }}>You make the schedule. {TRIAL.days > 0 && <b>Free for {TRIAL.days} days, no card needed. </b>}Workers don't sign up here: you'll get a join link to send them.</p>
             {TRIAL.days > 0 && <fieldset className="trial-pick"><legend>Your {TRIAL.days}-day free trial</legend>

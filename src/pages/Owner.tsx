@@ -25,13 +25,14 @@ import { payDashboard, dateShort, type DashRow } from '../lib/payroll';
 import WorkerApp from './Worker';
 import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
-import { AddTeamSheet, ImportScheduleSheet } from '../components/AddTeam';
+import { AddTeamSheet, ImportScheduleSheet, WelcomeSheet } from '../components/AddTeam';
+import { importReady } from '../lib/team';
 import { PLANS, locLimitOf, planOf, trialLeft, untilText, wantPlan } from '../lib/plans';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'cover'; id: string } | { type: 'addteam' } | { type: 'import' } | null;
+  | { type: 'notes' } | { type: 'cover'; id: string } | { type: 'addteam' } | { type: 'import' } | { type: 'welcome' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const UserIcon = () => (
@@ -70,7 +71,11 @@ export default function OwnerApp() {
   }, [orgId, week, toast]);
   useEffect(() => { reload(); }, [reload]);
   // Setup ended with "Finish and import from a photo": open the import once the schedule is loaded.
-  useEffect(() => { if (!b || adding) return; try { if (localStorage.getItem('sys-import')) { localStorage.removeItem('sys-import'); setSheet({ type: 'import' }); } } catch { /* private mode */ } }, [b, adding]);
+  // Right after setup: show how to add workers and fill shifts.
+  useEffect(() => { if (!b) return; try { if (localStorage.getItem('sys-welcome')) { localStorage.removeItem('sys-welcome'); setSheet({ type: 'welcome' }); } } catch { /* private mode */ } }, [b]);
+  // Photo import shows only once it's switched on (a Claude key is set on the server).
+  const [importOk, setImportOk] = useState(false);
+  useEffect(() => { importReady().then(setImportOk); }, []);
   // A plan picked on the home page before signing up: open its checkout once.
   useEffect(() => { const [p, bill] = (wantPlan.take() ?? '').split('|'); if (p === 'plus' || p === 'premium') nav(`/app/plan?plan=${p}&billing=${bill === 'yearly' ? 'yearly' : 'monthly'}`); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Payroll reminder on the main screen: payday within 2 days (or past) and not marked paid yet.
@@ -263,7 +268,7 @@ export default function OwnerApp() {
           <label className="namepick no-print">Names
             <select value={b.org.name_display ?? 'first'} onChange={async (e) => { const { error } = await supabase.from('organizations').update({ name_display: e.target.value }).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); }} aria-label="How names show on the schedule">
               <option value="first">First name</option><option value="last">Last name</option><option value="first_initial">First name + last initial</option><option value="custom">Custom short name</option></select></label>
-          <button className="btn small no-print imp-btn" onClick={() => setSheet({ type: 'import' })} title="Read a photo of your paper schedule and fill in this week">📷 Import from photo</button>
+          {importOk && <button className="btn small no-print imp-btn" onClick={() => setSheet({ type: 'import' })} title="Read a photo of your paper schedule and fill in this week">📷 Import from photo</button>}
           <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
         {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
@@ -276,9 +281,9 @@ export default function OwnerApp() {
         {(() => { const p = planOf(b.org), lim = locLimitOf(b.org); return lim !== null && b.locs.length > lim && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
           <p><b>{(b.org.plan ?? 'free') !== 'free' && p === 'free' ? (b.org.plan_source === 'trial' ? 'Your free trial has ended.' : `Your ${PLANS[b.org.plan ?? 'free'].name} plan has ended.`) : `You have ${b.locs.length} locations on the ${PLANS[p].name} plan.`}</b> Everything keeps working, but you can't add more locations until you choose a bigger plan.</p>
           <button className="btn small primary" onClick={() => nav('/app/plan')}>See plans</button></div>; })()}
-        {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : 'Drag names from the staff list into the shifts, or take a photo of your paper schedule and we fill it in.'}</p>
+        {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : importOk ? 'Tap a shift and pick a name, or take a photo of your paper schedule and we fill it in.' : 'Tap a shift and pick a name, or drag names from the staff list into the shifts.'}</p>
           <div className="actions" style={{ margin: 0 }}>{prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}
-            <button className={`btn${prevHas ? '' : ' primary'}`} onClick={() => setSheet({ type: 'import' })}>📷 Import from a photo</button></div></div>}
+            {importOk && <button className={`btn${prevHas ? '' : ' primary'}`} onClick={() => setSheet({ type: 'import' })}>📷 Import from a photo</button>}</div></div>}
         <WeekGrid b={b} week={week} editable onCell={onCell} undoHint={undoHint} onUndo={doUndo} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
           onClearWeek={(l) => { const ch: Changes = {}; for (const s of [...b.slots, ...(b.parts ?? [])].filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
             commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
@@ -303,8 +308,9 @@ export default function OwnerApp() {
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} onClose={() => setSheet(null)} onManual={addWorker} />}
+      {sheet?.type === 'welcome' && <WelcomeSheet onClose={() => setSheet(null)} onJoinLink={() => setSheet({ type: 'addteam' })} onManual={() => { setSheet(null); addWorker(); }} />}
       {sheet?.type === 'import' && <ImportScheduleSheet b={b} orgId={orgId} week={week} onClose={() => setSheet(null)} reload={reload} />}
-      {sheet && sheet.type !== 'addteam' && sheet.type !== 'import' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
+      {sheet && sheet.type !== 'addteam' && sheet.type !== 'import' && sheet.type !== 'welcome' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} />}
     </>
   );
 }

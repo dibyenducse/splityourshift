@@ -51,6 +51,13 @@ async function fileToBase64(file: File): Promise<{ data: string; media_type: str
   return { data: await asB64(file), media_type: file.type || 'image/jpeg' };
 }
 
+/** Whether photo import is switched on (the server has a Claude key). Asked once. */
+let ready: Promise<boolean> | null = null;
+export function importReady(): Promise<boolean> {
+  ready ??= supabase.functions.invoke('import-schedule', { body: { ping: true } }).then(({ data }) => Boolean(data?.ready), () => false);
+  return ready;
+}
+
 export async function importFromFile(orgId: string, locationId: string | null, file: File): Promise<Imported> {
   const body = { org_id: orgId, location_id: locationId, ...(await fileToBase64(file)) };
   const { data, error } = await supabase.functions.invoke('import-schedule', { body });
