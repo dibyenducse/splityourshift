@@ -38,6 +38,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   // A shift of mine I tapped: what to do with it (swap, time off, message my manager)
   const [shiftK, setShiftK] = useState<string | null>(null);
   const [swapK, setSwapK] = useState<string | null>(null);
+  const [swapAny, setSwapAny] = useState(false);
   const [offK, setOffK] = useState<string | null>(null);
   const [msgWith, setMsgWith] = useState<string | null>(null);
   const [asks, setAsks] = useState<string[]>([]);
@@ -93,8 +94,6 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   // Time clock off at every location I work at: no clock anywhere (panel, hours list, wording); pay is by schedule.
   const clockOn = b.locs.some((l) => w.locs.includes(l.id) && l.time_clock !== false) || b.entries.some((e) => e.employee_id === w.id && !e.clock_out);
 
-  // The time clock goes first on a day I work (or while I'm clocked in); otherwise my shifts come first.
-  const clockFirst = b.entries.some((e) => e.employee_id === w.id && !e.clock_out) || keysOf(b, w.id).some((k) => parseCell(k).date === todayIso());
   const cancel = async (r: Req) => {
     const { error } = await supabase.rpc('cancel_time_off', { p_id: r.id });
     if (error) toast(errText(error), 'error', "Couldn't cancel"); else toast('Request cancelled. You keep this shift.', 'ok', 'Cancelled');
@@ -122,7 +121,12 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
         {view === 'schedule' ? <>
-        {clockFirst && <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />}
+        <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
+        <div className="quick-acts">
+          <button className="quick-act" onClick={() => setSwapAny(true)}><span aria-hidden="true">⇄</span><b>Swap a shift</b><small>Ask a coworker to work it</small></button>
+          <button className="quick-act" onClick={() => setSheet('request')}><span aria-hidden="true">🌴</span><b>Request time off</b><small>Your manager finds cover</small></button>
+          {!preview && <button className="quick-act" onClick={() => { setMsgWith(b.org.owner_id); setView('messages'); }}><span aria-hidden="true">💬</span><b>Message manager</b><small>{unreadMsgs ? `${unreadMsgs} new message${unreadMsgs > 1 ? 's' : ''}` : 'Ask anything'}</small></button>}
+        </div>
         {!preview && <CoverOffersPanel b={b} empId={w.id} />}
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
@@ -140,7 +144,6 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         <section className="panel"><div className="panel-head"><h2>Team schedule</h2></div>
           <p className="hint">Your shifts are highlighted. Tap one of yours to swap it.</p>
           <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} onMine={preview ? undefined : (k) => setShiftK(k)} /></div></section>
-        {!clockFirst && <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />}
         {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
         </> : <>
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
@@ -179,6 +182,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
       {sheet === 'notes' && <NotesSheet notes={notes} onClose={() => setSheet(null)} reload={reloadNotes} />}
       {sheet === 'request' && <TimeOffSheet b={b} empId={w.id} onClose={() => setSheet(null)} reload={reload} />}
       {offK && <TimeOffSheet b={b} empId={w.id} initialKey={offK} onClose={() => setOffK(null)} reload={reload} />}
+      {swapAny && <SwapSheet b={b} empId={w.id} onClose={() => { setSwapAny(false); loadAsks(); }} />}
       {swapK && <SwapSheet b={b} empId={w.id} cell={swapK} onClose={() => { setSwapK(null); loadAsks(); }} />}
       {shiftK && slotOf(b, shiftK) && (() => { const s = slotOf(b, shiftK)!, d = parseCell(shiftK).date, probs = problemsOf(shiftK), r = live[shiftK], asked = asks.includes(shiftK);
         const sameDay = Object.keys(b.assign).filter((x) => parseCell(x).date === d && x !== shiftK && slotOf(b, x)?.location_id === s.location_id).map((x) => ({ x, e: empOf(b, b.assign[x]) })).filter((y) => y.e);

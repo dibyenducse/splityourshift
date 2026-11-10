@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
@@ -324,6 +324,21 @@ export default function OwnerApp() {
 
 // ---------------------------------------------------------------- sheets
 
+/** Swap options as three clear cards: pick one, its details and button show below. */
+function SwapChoices({ items, initial }: { items: { id: string; icon: string; title: string; sub: string; tag?: string; disabled?: boolean; body: ReactNode }[]; initial: string }) {
+  const [on, setOn] = useState(items.some((x) => x.id === initial) ? initial : items[0].id);
+  const cur = items.find((x) => x.id === on) ?? items[0];
+  return (
+    <div className="swap-choices">
+      <h4 className="sc-q">How do they swap? <small>Pick one</small></h4>
+      <div className="sc-cards" role="radiogroup" aria-label="How do they swap?">{items.map((x, n) => (
+        <button key={x.id} type="button" role="radio" aria-checked={on === x.id} className={`sc-card${on === x.id ? ' on' : ''}${x.disabled ? ' dis' : ''}`} onClick={() => setOn(x.id)} data-choice={x.id}>
+          <span className="sc-n">{n + 1}</span><span className="sc-ico" aria-hidden="true">{x.icon}</span>
+          <b>{x.title}</b><small>{x.sub}</small>{x.tag && <span className="tag ok sc-tag">{x.tag}</span>}</button>))}</div>
+      <div className="sc-body option best">{cur.body}</div>
+    </div>);
+}
+
 function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decide, signOut, preview, goWorker, message }: {
   message: (userId: string) => void;
   s: NonNullable<SheetState>; b: Bundle; week: string; set: (s: SheetState) => void;
@@ -413,23 +428,24 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
     return (
       <Sheet eyebrow={`Replace ${ow.name}`} title={`With ${xw.name}`} onClose={close}>
         {slotCard(s.key)}
-        <div className={`option${bestTrade ? '' : ' best'}`}><h4>{xw.name} covers now{evens ? `, and they're even` : `, ${ow.name} pays back later`}</h4>
+        <SwapChoices key={xw.id} initial={bestTrade ? 'trade' : 'cover'} items={[
+          { id: 'cover', icon: '⏳', title: evens ? `${xw.name} covers: you're even` : 'Cover now, pay back later', sub: evens ? `${xw.name} owed ${ow.name} a shift` : `${ow.name} owes ${xw.name} 1 shift`, tag: !bestTrade ? 'Easiest' : undefined, disabled: cover.errors.length > 0, body: <>
           <p>{evens ? `${xw.name} owed ${ow.name} a shift (${evens.label}). Covering this one pays it back.`
             : <>{xw.name} takes this shift{extra ? ' as an extra shift' : ''}. It goes on the <b>Shifts owed</b> list as "{ow.name} owes {xw.name} 1 shift". You don't have to decide the payback now: when you plan a later week, tap <b>Pay back</b> and pick any of {xw.name}'s shifts for {ow.name} to work.</>}</p>
           {cover.errors.length ? <div className="reason bad">{cover.errors[0].msg}</div> : cover.warnings.map((w) => <div key={w.msg} className="reason warn">{w.msg}</div>)}
-          <div><button className={`btn${bestTrade ? '' : ' primary'}`} disabled={cover.errors.length > 0} onClick={async () => {
+          <div><button className="btn primary" disabled={cover.errors.length > 0} onClick={async () => {
             const ok = evens
               ? await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${xw.name} and ${ow.name} are even now.`, { settle: evens.id, allowOver: true })
               : await commit({ [s.key]: xw.id }, `${xw.name} covers ${slotLabel(b, s.key)}. ${ow.name} owes ${xw.name} 1 shift.`,
                 { ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) }, allowOver: true });
             if (ok) close();
-          }}>{xw.name} covers this shift{extra ? ' (extra shift)' : ''}</button></div></div>
-        {!evens && <div className="option"><h4>Or {ow.name} gives it away: nothing owed</h4>
+          }}>{xw.name} covers this shift{extra ? ' (extra shift)' : ''}</button></div></> },
+          ...(!evens ? [{ id: 'give', icon: '🎁', title: 'Give it away', sub: `${xw.name} keeps it · nothing owed`, disabled: cover.errors.length > 0, body: <>
           <p>{xw.name} keeps this shift for good and is paid for it{extra ? ' as an extra shift' : ''}. {ow.name} doesn't owe anything and works one shift less.</p>
-          <div><button className="btn" disabled={cover.errors.length > 0} onClick={async () => {
+          <div><button className="btn primary" disabled={cover.errors.length > 0} onClick={async () => {
             if (await commit({ [s.key]: xw.id }, `${xw.name} takes ${slotLabel(b, s.key)} for good. Nothing owed.`, { allowOver: true })) close();
-          }}>{xw.name} takes it, no payback</button></div></div>}
-        <div className={`option${bestTrade ? ' best' : ''}`}><h4>Or trade right away: {ow.name} takes one of {xw.name}'s shifts</h4>
+          }}>{xw.name} takes it, no payback</button></div></> }] : []),
+          { id: 'trade', icon: '⇄', title: 'Trade shifts now', sub: `${ow.name} works one of ${xw.name}'s shifts`, tag: bestTrade ? 'Best fit' : undefined, body: <>
           <p>Pick the shift {ow.name} will work instead. Both keep the same number of shifts. Later weeks show up here once they're scheduled.</p>
           <div className="list">{opts.length ? opts.map(({ o, r }) => (
             <button key={o} className="row" disabled={r.errors.length > 0} onClick={async () => { if (await commit({ [s.key]: xw.id, [o]: ow.id }, `Traded. ${xw.name} works ${slotLabel(b, s.key)} and ${ow.name} works ${slotLabel(b, o)}.`, { allowOver: true })) close(); }}>
@@ -441,7 +457,8 @@ function OwnerSheet({ s, b, week, set, commit, reload, notes, reloadNotes, decid
               ledger: { org_id: b.org.id, debtor_id: ow.id, creditor_id: xw.id, slot_id: sl.id, work_date: parseCell(s.key).date, label: slotLabel(b, s.key) }, allowOver: true,
               onLedger: async (id) => { const { error } = await supabase.rpc('payback_request', { p_ledger: id, p_slot: slot, p_date: date }); if (error) toast(errText(error), 'error', 'The return shift was not set'); } });
             if (ok) close();
-          }} />}</div>
+          }} />}</> },
+        ]} />
         <div><button className="btn" onClick={() => set({ type: 'swap', key: s.key })}>‹ Pick someone else</button></div>
       </Sheet>);
   }

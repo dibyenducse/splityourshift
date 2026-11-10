@@ -276,9 +276,9 @@ function SwapRequest({ b, empId, owner, pending, onSent, initialCell }: { b: Bun
 }
 
 /** Worker taps one of their shifts: ask a coworker to work it (the shift is already picked). */
-export function SwapSheet({ b, empId, cell, onClose }: { b: Bundle; empId: string; cell: string; onClose: () => void }) {
+export function SwapSheet({ b, empId, cell, onClose }: { b: Bundle; empId: string; cell?: string; onClose: () => void }) {
   return (
-    <Sheet eyebrow="Swap a shift" title="Ask a coworker to work it" onClose={onClose}>
+    <Sheet eyebrow="Swap a shift" title={cell ? 'Ask a coworker to work it' : 'Ask a coworker to work a shift'} onClose={onClose}>
       <SwapRequest b={b} empId={empId} pending={[]} onSent={onClose} initialCell={cell} />
     </Sheet>);
 }

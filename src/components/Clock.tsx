@@ -43,7 +43,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const [push, setPush] = useState(pushIsOn());
   const [missed, setMissed] = useState(false);
   const [ask, setAsk] = useState<ClockResult | null>(null);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(t); }, []);
+  const ticking = b.entries.some((e) => e.employee_id === empId && !e.clock_out);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), ticking ? 1000 : 15000); return () => clearInterval(t); }, [ticking]);
 
   const mine = keysOf(b, empId).filter((k) => { const d = parseCell(k).date; return d >= addDays(todayIso(), -1) && d <= addDays(todayIso(), 14); });
   const entryFor = (k: string) => b.entries.find((e) => e.employee_id === empId && e.slot_id === parseCell(k).slot && e.work_date === parseCell(k).date);
@@ -96,11 +97,25 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
     catch (e) { toast(errText(e), 'error', "Couldn't turn on"); }
   };
 
+  // ring around the button: how much of the shift is done (on the clock) — empty when not clocked in
+  const openStart = openKey && slotOf(b, openKey) ? shiftWindow(b, openKey).start : null;
+  const prog = open ? (openStart && openEnd ? Math.min(1, Math.max(0, (now - openStart.getTime()) / (openEnd.getTime() - openStart.getTime())))
+    : Math.min(1, (now - new Date(open.clock_in).getTime()) / (8 * 36e5))) : 0;
+  const leftMin = open && openEnd ? Math.round((openEnd.getTime() - now) / 60000) : null;
+  const dial = (btn: React.ReactNode) => (
+    <div className={`clock-dial${open ? ' on' : ''}`}>
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle className="trk" cx="60" cy="60" r="56" pathLength={100} />
+        {open && <circle className="bar" cx="60" cy="60" r="56" pathLength={100} strokeDasharray={`${(prog * 100).toFixed(2)} 100`} />}</svg>
+      {btn}</div>);
+  const sk = openKey ?? null;
   let face;
   if (open) {
     face = (<>
-      <button className="clock-btn on" disabled={busy} onClick={clockOut} aria-label="Clock out now">
-        <span>{busy ? '…' : 'Clock out'}<b>{elapsed(open.clock_in, now)}</b><small>on the clock · tap to stop</small></span></button>
+      {dial(<button className="clock-btn on" disabled={busy} onClick={clockOut} aria-label="Clock out now">
+        <span>{busy ? '…' : 'Clock out'}<b>{elapsed(open.clock_in, now)}</b><small>on the clock · tap to stop</small></span></button>)}
+      {sk && slotOf(b, sk) && <div className="clock-shift"><span className="lbl">This shift</span><b>{slotLabel(b, sk)}</b>
+        <div className="clock-prog"><i style={{ width: `${Math.round(prog * 100)}%` }} /></div>
+        <small>{leftMin === null ? '' : openStart && now < openStart.getTime() ? `Starts at ${clockTime(openStart)}` : leftMin > 0 ? `${Math.floor(leftMin / 60) ? `${Math.floor(leftMin / 60)}h ` : ''}${leftMin % 60}m left · ends ${clockTime(openEnd!)}` : `Shift ended at ${clockTime(openEnd!)}`}</small></div>}
       <p className="clock-sub" role="status" aria-live="polite">Since {clockTime(open.clock_in)}{openKey && slotOf(b, openKey) ? ` · ${slotLabel(b, openKey)}` : open.note ? ` · ${open.note}` : ''}</p>
       {!open.slot_id && open.note === 'No scheduled shift' && <button className="btn small" onClick={() => setAsk({ mode: 'unscheduled', entry_id: open.id })}>Covering someone? Tell us</button>}
       {forgot && <div className="forgot-out" role="alert"><p><b>Forgot to clock out?</b> Your shift ended at {clockTime(openEnd!)}.</p>
@@ -110,8 +125,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   } else {
     const w = current ? shiftWindow(b, current) : null;
     face = (<>
-      <button className="clock-btn" disabled={busy} onClick={clockIn} aria-label="Clock in now">
-        <span>{busy ? '…' : 'Clock in'}<small>{w ? `${clockTime(w.start)} shift` : 'tap to start'}</small></span></button>
+      {dial(<button className="clock-btn" disabled={busy} onClick={clockIn} aria-label="Clock in now">
+        <span>{busy ? '…' : 'Clock in'}<small>{w ? `${clockTime(w.start)} shift` : 'tap to start'}</small></span></button>)}
       <p className="clock-sub">{current ? `${slotLabel(b, current)}${now > w!.start.getTime() + 5 * 60000 ? ` · started ${Math.round((now - w!.start.getTime()) / 60000)} min ago` : ''}`
         : next ? `No shift right now. Next: ${slotLabel(b, next)}. You can still clock in to cover someone or work an extra shift.`
         : 'No shift right now. You can still clock in to cover someone or work an extra shift.'}</p>
@@ -127,6 +142,9 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
           {(pushSupported() || isIOS()) && <button className={`btn icon bellbtn${push ? ' on' : ''}`} onClick={turnOn}
             title={push ? 'Shift reminders are on (tap to turn off)' : 'Turn on shift reminders'} aria-label={push ? 'Shift reminders on. Tap to turn off' : 'Turn on shift reminders'} aria-pressed={push}><BellIcon on={push} /></button>}
           <span className={`lamp${open ? ' on' : ''}`} title={open ? 'On the clock' : 'Not clocked in'} /></span></div>
+      <div className="clock-now"><div><b>{new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</b>
+        <span>{new Date(now).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span></div>
+        <span className={`clock-pill${open ? ' on' : ''}`}><i />{open ? 'On the clock' : 'Off the clock'}</span></div>
       <div className="clock">{face}</div>
       <div className="actions" style={{ justifyContent: 'center' }}>
         <button className="linkish" onClick={() => setMissed(true)}>Forgot to clock in or out?</button>
