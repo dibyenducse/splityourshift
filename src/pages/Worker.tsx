@@ -44,7 +44,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const [asks, setAsks] = useState<string[]>([]);
   const [howto, setHowto] = useState(false);
   // Worker sections in the header: my shifts (time clock, schedule, pay), the shift report logbook, my tasks.
-  const [view, setView] = useState<'schedule' | 'pay' | 'messages' | 'reports' | 'tasks'>('schedule');
+  const [view, setView] = useState<'schedule' | 'team' | 'pay' | 'messages' | 'reports' | 'tasks'>('schedule');
   const { unread: unreadMsgs, reloadUnread } = useUnreadMessages(preview ? undefined : me?.orgId, preview ? undefined : me?.userId);
   const nav = useNavigate();
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -110,7 +110,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           { label: 'Request time off', onClick: () => setSheet('request'), icon: 'timeoff' as const },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' as const },
         ]} />}
-        nav={<nav className="topnav" aria-label="Sections">{([['schedule', 'My schedule', 'Schedule'], ['pay', 'Pay & time off', 'Pay'], ['messages', 'Messages', 'Chat'], ['reports', 'Shift reports', 'Reports'], ['tasks', 'My tasks', 'Tasks']] as const).filter(([v]) => !(preview && v === 'messages')).map(([v, t, sh]) =>
+        nav={<nav className="topnav" aria-label="Sections">{([['schedule', 'My schedule', 'Mine'], ['team', 'Team schedule', 'Team'], ['pay', 'Pay & time off', 'Pay'], ['messages', 'Messages', 'Chat'], ['reports', 'Shift reports', 'Reports'], ['tasks', 'My tasks', 'Tasks']] as const).filter(([v]) => !(preview && v === 'messages')).map(([v, t, sh]) =>
           <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>
             <span className="full">{t}</span><span className="short">{sh}</span>{v === 'messages' && unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</button>)}</nav>} />
       {view === 'reports' ? <div className="wrap"><div className="layout"><ShiftReportsBook b={b} empId={preview ? undefined : w.id} /></div></div>
@@ -120,7 +120,11 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         {preview && <div className="banner sample"><p><b>Preview: this is what {w.name} sees on their phone.</b> Buttons are turned off here. {w.status !== 'active' && `${w.name} can't log in yet: send them an invite from their profile.`}</p>
           <button className="btn small" onClick={preview.onExit}>‹ Back to owner view</button></div>}
         <fieldset disabled={!!preview} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'contents' }}>
-        {view === 'schedule' ? <>
+        {view === 'team' ? <>
+        <section className="panel"><div className="panel-head"><h2>Team schedule · {rangeTitle(week, addDays(week, 6))}</h2></div>
+          <p className="hint">Who works when this week. Your shifts are highlighted: tap one of yours to swap it or ask for the day off. Use the arrows at the top for other weeks.</p>
+          <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} onMine={preview ? undefined : (k) => setShiftK(k)} /></div></section>
+        </> : view === 'schedule' ? <>
         <ClockPanel b={b} empId={w.id} userId={me!.userId} reload={reload} />
         <div className="quick-acts">
           <button className="quick-act" onClick={() => setSwapAny(true)}><span aria-hidden="true">⇄</span><b>Swap a shift</b><small>Ask a coworker to work it</small></button>
@@ -130,7 +134,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
         {!preview && <CoverOffersPanel b={b} empId={w.id} />}
 
         <section className="panel" id="my-shifts"><div className="panel-head"><h2>My shifts · {rangeTitle(week, addDays(week, 6))}</h2><button className="btn primary small" onClick={() => setSheet('request')}>Request time off</button></div>
-          <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts. <b>Tap a shift</b> to swap it, ask for the day off, or message your manager.</p>
+          <p className="hint">{mine.length} shift{mine.length === 1 ? '' : 's'} · {hours} hours this week · limit {w.max_shifts} shifts. <b>Tap a shift</b> to swap it, ask for the day off, or message your manager. See everyone's shifts under <button type="button" className="linkish" onClick={() => setView('team')}>Team schedule</button>.</p>
           {mine.length > w.max_shifts && <p className="reason bad" style={{ marginTop: 0 }}>You have {mine.length} shifts this week; your limit is {w.max_shifts}. Talk to your manager.</p>}
           <div className="myshifts">{mine.length ? mine.map((k) => { const s = slotOf(b, k)!, d = parseCell(k).date, probs = problemsOf(k);
             return (<button key={k} type="button" className={`mycard tap${probs.some((x) => x.bad) ? ' has-prob' : ''}${d === todayIso() ? ' today' : ''}`} style={{ ['--h' as string]: w.hue }} onClick={() => setShiftK(k)}>
@@ -141,9 +145,6 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
               <span className="go" aria-hidden="true">›</span></button>); })
             : <p className="empty-note">No shifts this week. Use the arrows at the top to see other weeks.</p>}</div></section>
 
-        <section className="panel"><div className="panel-head"><h2>Team schedule</h2></div>
-          <p className="hint">Your shifts are highlighted. Tap one of yours to swap it.</p>
-          <div className="boards"><WeekGrid b={b} week={week} editable={false} meId={w.id} onlyLocs={w.locs.length ? w.locs : undefined} onMine={preview ? undefined : (k) => setShiftK(k)} /></div></section>
         {!preview && <AdjustmentsPanel b={b} empId={w.id} />}
         </> : <>
         <section className="panel"><div className="panel-head"><h2>My pay · {rangeTitle(weeks[0], addDays(weeks[weeks.length - 1], 6))}</h2><span className="tag plain">Paid {b.org.pay_period === 'biweekly' ? 'every 2 weeks' : 'every week'}</span></div>
