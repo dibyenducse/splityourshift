@@ -1411,3 +1411,19 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .ps-clock .cks-pill { padding: 5px 10px; font-size: 14px; }
 @media (max-width: 520px) { .topnav { overflow-x: auto; scrollbar-width: none; } .topnav::-webkit-scrollbar { display: none; } .tnav { flex: 1 0 auto; padding: 7px 6px; } }
 @media (max-width: 380px) { .topnav { gap: 0; } .tnav { padding: 7px 4px; font-size: 12px; } }
+
+/* late / stayed late: the simple "nothing else" choice first */
+.late-ok { display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left; padding: 14px; border-radius: 14px; border: 2px solid var(--accent); background: var(--accent-soft); font: inherit; color: var(--fg); cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.late-ok:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 20%, transparent); }
+.late-ok > span:first-child { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 17px; }
+.late-ok > span:last-child { display: flex; flex-direction: column; gap: 3px; } .late-ok small { color: var(--muted); font-size: 13.5px; }
+.late-ok.quiet { border: 1px solid var(--line); background: var(--surface); }
+.late-ok.quiet > span:first-child { background: var(--surface-2); color: var(--fg); }
+.late-ok + .late-ok { margin-top: 8px; }
+.late-or { margin: 10px 0 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+/* payroll settings: grace example */
+.cks-sub { display: block; font-weight: 500; color: var(--muted); font-size: 12.5px; }
+.grace-eg { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font-size: 13.5px; }
+.ge-row { display: grid; grid-template-columns: 124px 1fr; gap: 8px; align-items: start; }
+.ge-t { white-space: nowrap; font-family: var(--f-mono); font-size: 11.5px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
+.ge-row.ok .ge-t { border-color: var(--ok); color: var(--ok); } .ge-row.late .ge-t { border-color: var(--warn); color: var(--warn); }

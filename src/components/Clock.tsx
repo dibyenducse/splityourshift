@@ -178,7 +178,7 @@ function LateSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empI
     const { error } = await supabase.rpc('late_choice', { p_entry: r.entry_id, p_choice: c });
     setBusy(false);
     if (error) return toast(errText(error), 'error', 'Not saved');
-    toast(c === 'payroll' ? 'Saved. Your real clock-in time is used for pay.' : 'Sent to your manager. If they approve, you are paid from the scheduled start.', 'ok', 'Saved');
+    toast(c === 'payroll' ? `All set. You're clocked in from ${clockTime(new Date())}; nothing else happens.` : 'Sent to your manager. If they approve, you are paid from the scheduled start.', 'ok', c === 'payroll' ? 'Clocked in' : 'Saved');
     onClose(); reload();
   };
   const who = r.covered_name, m = r.covered_minutes || r.late_minutes;
@@ -187,12 +187,14 @@ function LateSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empI
       <div className="sec"><p>{r.label}. Your real clock-in time ({clockTime(new Date())}) is saved{who ? <>; <b>{who}</b> stayed {r.covered_minutes} minutes for you</> : ''}. How should this be handled?</p></div>
       {swap ? <div className="option best"><h4>Request a time swap</h4><p>Pick when you give the time back. {who ?? 'Your coworker'} accepts, declines or proposes another time.</p>
         <TimeSwapPicker b={b} empId={empId} other={r.covered_by} minutes={m} iOwe entryId={r.entry_id} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
-        <div className="option"><h4>Normal payroll</h4><p>{schedPay ? "Your pay follows the schedule, so being late doesn't change it. Your real clock-in time is kept." : "You're paid from your real clock-in time."}</p>
-          <div><button className="btn" disabled={busy} onClick={() => choose('payroll')}>{schedPay ? 'OK' : 'Use normal payroll'}</button></div></div>
-        {!schedPay && <div className="option"><h4>Request paid adjustment</h4><p>Ask your manager to pay you from the scheduled start. They approve or keep the real time.</p>
+        <button className="late-ok" disabled={busy} onClick={() => choose('payroll')}>
+          <span aria-hidden="true">✓</span><span><b>Just clock me in, nothing else</b>
+            <small>No swap, no request. {schedPay ? 'Your pay follows the schedule anyway.' : `You're paid from your real clock-in time (${clockTime(new Date())}).`} Good for a few minutes, or when you{who ? ` and ${who.split(' ')[0]}` : ''} have already sorted it out.</small></span></button>
+        <p className="late-or">Or, if you want to make it up:</p>
+        <div className="option"><h4>Give the time back later (time swap)</h4><p>Give {m} minutes back {who ? `to ${who}` : 'to a coworker'} on a future date and shift you pick.</p>
+          <div><button className="btn" disabled={busy} onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
+        {!schedPay && <div className="option"><h4>Ask to be paid from the start</h4><p>Ask your manager to pay you from the scheduled start. They approve or keep the real time.</p>
           <div><button className="btn" disabled={busy} onClick={() => choose('paid')}>Ask my manager</button></div></div>}
-        <div className="option best"><h4>Request time swap</h4><p>Give {m} minutes back {who ? `to ${who}` : 'to a coworker'} on a future date and shift you pick.</p>
-          <div><button className="btn primary" disabled={busy} onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
       </>}
     </Sheet>
   );
@@ -200,16 +202,29 @@ function LateSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empI
 
 /** Clocked out past the shift (beyond grace): normal payroll (the extra time is paid) or a time swap. */
 function ExtraSheet({ b, empId, schedPay, r, onClose, reload }: { b: Bundle; empId: string; schedPay?: boolean; r: Extract<ClockResult, { mode: 'extra' }>; onClose: () => void; reload: () => void }) {
+  const toast = useToast();
   const [swap, setSwap] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const settle = async () => {
+    setBusy(true);
+    const { error } = await supabase.rpc('settle_extra', { p_entry: r.entry_id });
+    setBusy(false);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(`Done. The extra ${r.extra_minutes} minutes aren't paid and nothing is owed.`, 'ok', 'Settled'); onClose(); reload();
+  };
   return (
     <Sheet eyebrow="Clocked out" title={`You stayed ${r.extra_minutes} minutes after your shift`} onClose={onClose}>
       <div className="sec"><p>{r.label ? `${r.label}. ` : ''}Your hours are saved{r.next_name ? <>. <b>{r.next_name}</b> came late after you</> : ''}. How should the extra time be handled?</p></div>
       {swap ? <div className="option best"><h4>Future time swap</h4><p>Pick when the time is given back to you. {r.next_name ?? 'Your coworker'} accepts, declines or proposes another time.</p>
         <TimeSwapPicker b={b} empId={empId} other={r.next_emp} minutes={r.extra_minutes} entryId={undefined} onDone={() => { onClose(); reload(); }} onCancel={() => setSwap(false)} /></div> : <>
-        <div className="option"><h4>Normal payroll</h4><p>{schedPay ? `Your pay follows the schedule, so the extra ${r.extra_minutes} minutes aren't paid. Your real clock-out time is kept.` : `The extra ${r.extra_minutes} minutes are paid with your hours.`}</p>
-          <div><button className="btn" onClick={onClose}>Use normal payroll</button></div></div>
-        <div className="option best"><h4>Future time swap</h4><p>{r.next_name ?? 'A coworker'} gives you {r.extra_minutes} minutes back on a date and shift you pick.</p>
-          <div><button className="btn primary" onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
+        <button className="late-ok" onClick={onClose}>
+          <span aria-hidden="true">$</span><span><b>{schedPay ? 'OK' : `Get paid for the ${r.extra_minutes} minutes`}</b>
+            <small>{schedPay ? `Your pay follows the schedule, so the extra minutes aren't paid. Your real clock-out time is kept.` : 'The extra time is paid with your hours, from your real clock-out time.'}</small></span></button>
+        {!schedPay && <button className="late-ok quiet" disabled={busy} onClick={settle}>
+          <span aria-hidden="true">🤝</span><span><b>No extra pay, no swap: we sorted it out</b>
+            <small>Nothing is paid or owed for these {r.extra_minutes} minutes{r.next_name ? `; you and ${r.next_name.split(' ')[0]} are settled` : ''}. Good for a few minutes.</small></span></button>}
+        <div className="option"><h4>Get the time back later (time swap)</h4><p>{r.next_name ?? 'A coworker'} gives you {r.extra_minutes} minutes back on a date and shift you pick.</p>
+          <div><button className="btn" onClick={() => setSwap(true)}>Pick a date and shift…</button></div></div>
       </>}
     </Sheet>
   );
