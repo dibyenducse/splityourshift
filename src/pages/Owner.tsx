@@ -27,13 +27,14 @@ import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
 import { AddTeamSheet, ImportScheduleSheet, WelcomeSheet } from '../components/AddTeam';
 import { MessagesView, useUnreadMessages } from '../components/Messages';
+import { OwnerSwapSheet, SwapsSheet } from '../components/Adjustments';
 import { importReady } from '../lib/team';
 import { PLANS, locLimitOf, planOf, trialLeft, untilText, wantPlan } from '../lib/plans';
 
 type SheetState =
   | { type: 'shift'; key: string } | { type: 'swap'; key: string } | { type: 'swap-with'; key: string; other: string }
   | { type: 'payback'; id: string } | { type: 'profile'; id: string } | { type: 'loc'; loc: Loc } | { type: 'delloc' }
-  | { type: 'notes' } | { type: 'cover'; id: string } | { type: 'addteam' } | { type: 'import' } | { type: 'welcome' } | null;
+  | { type: 'notes' } | { type: 'cover'; id: string } | { type: 'addteam' } | { type: 'import' } | { type: 'welcome' } | { type: 'staff' } | { type: 'swapnew' } | { type: 'swaps' } | null;
 
 const countClass = (n: number, max: number) => (n > max ? 'over' : n === max ? 'full' : '');
 const UserIcon = () => (
@@ -55,6 +56,12 @@ export default function OwnerApp() {
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
   const [tab, setTab] = useState<'schedule' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
   const [msgWith, setMsgWith] = useState<string | null>(null);
+  const [staffQ, setStaffQ] = useState('');
+  // swaps waiting for an answer or for my approval (badge on the Swaps box)
+  const [swapWaiting, setSwapWaiting] = useState(0);
+  const loadSwapWaiting = useCallback(() => { supabase.from('shift_adjustments').select('id', { count: 'exact', head: true }).eq('org_id', me!.orgId!).in('status', ['pending', 'awaiting_owner'])
+    .then(({ count }) => setSwapWaiting(count ?? 0), () => {}); }, [me]);
+  useEffect(() => { loadSwapWaiting(); }, [loadSwapWaiting]);
   const { unread: unreadMsgs, reloadUnread } = useUnreadMessages(me?.orgId, me?.userId);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [picked, setPicked] = useState<string | null>(null);
@@ -231,10 +238,12 @@ export default function OwnerApp() {
     <div className="layout two owner">
       <aside className="rail">
         <section className="panel" id="roster">
-          <div className="panel-head"><h2>Staff</h2><button className="mini" onClick={() => setSheet({ type: 'addteam' })}>+ Add worker</button></div>
-          <p className="hint">Drag a name onto a shift, or tap a name and then a shift. The number is shifts this week out of their limit. Open a profile to send a login invite.</p>
-          <div className="roster-list">
-            {staff.length ? staff.map((w) => { const n = countWeek(b, w.id, week); return (
+          <div className="panel-head"><h2>Staff <span className="hint" style={{ margin: 0, fontWeight: 600 }}>{staff.length}</span></h2>
+            <span className="staff-tools">{staff.length > 0 && <button className="mini" onClick={() => setSheet({ type: 'staff' })}>See all</button>}<button className="mini" onClick={() => setSheet({ type: 'addteam' })}>+ Add</button></span></div>
+          <p className="hint">Drag a name onto a shift, or tap a name and then a shift. The number is shifts this week out of their limit.</p>
+          {staff.length > 8 && <input type="search" className="staff-search" value={staffQ} onChange={(e) => setStaffQ(e.target.value)} placeholder={`Search ${staff.length} workers…`} aria-label="Search workers" />}
+          <div className="roster-list compact">
+            {staff.length ? staff.filter((w) => !staffQ.trim() || w.name.toLowerCase().includes(staffQ.trim().toLowerCase())).map((w) => { const n = countWeek(b, w.id, week); return (
               <div key={w.id} className={`wcard${picked === w.id ? ' picked' : ''}`} data-drag="" data-wid={w.id} style={{ ['--h' as string]: w.hue }}
                 onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) setPicked(picked === w.id ? null : w.id); }}>
                 <span className="dot" /><span className="wname" title={w.name}>{w.name}</span>{b.entries.some((e) => e.employee_id === w.id && !e.clock_out) && <span className="sdot" title={`${w.name} is on the clock`} aria-label="On the clock" />}
@@ -242,6 +251,14 @@ export default function OwnerApp() {
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
                 <button className="iconbtn" onClick={() => setSheet({ type: 'profile', id: w.id })} title="View Profile" aria-label={`View ${w.name}'s profile`}><UserIcon /></button>
               </div>); }) : <div className="empty-note">No workers yet. <button className="btn small primary" onClick={() => setSheet({ type: 'addteam' })}>Send your team a join link</button></div>}
+          </div>
+        </section>
+        <section className="panel swaps-rail">
+          <div className="panel-head"><h2>Shift swaps{swapWaiting > 0 && <span className="badge">{swapWaiting}</span>}</h2></div>
+          <p className="hint">Tap any shift on the schedule to swap it or find cover, or set one up here.</p>
+          <div className="swap-btns">
+            <button className="swap-btn primary" onClick={() => setSheet({ type: 'swapnew' })}><span aria-hidden="true">⇄</span><b>New swap</b><small>Pick whose shift and who works it</small></button>
+            <button className="swap-btn" onClick={() => setSheet({ type: 'swaps' })}><span aria-hidden="true">📋</span><b>All swaps{swapWaiting > 0 ? ` · ${swapWaiting} waiting` : ''}</b><small>Waiting, agreed and done</small></button>
           </div>
         </section>
         <section className="panel">
@@ -313,9 +330,12 @@ export default function OwnerApp() {
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} onClose={() => setSheet(null)} onManual={addWorker} />}
+      {sheet?.type === 'staff' && <StaffSheet b={b} week={week} meId={me!.userId} onClose={() => setSheet(null)} onProfile={(id) => setSheet({ type: 'profile', id })} onAdd={() => setSheet({ type: 'addteam' })} />}
+      {sheet?.type === 'swapnew' && <OwnerSwapSheet b={b} onClose={() => { setSheet(null); loadSwapWaiting(); reload(); }} />}
+      {sheet?.type === 'swaps' && <SwapsSheet b={b} onClose={() => { setSheet(null); loadSwapWaiting(); reload(); }} />}
       {sheet?.type === 'welcome' && <WelcomeSheet onClose={() => setSheet(null)} onJoinLink={() => setSheet({ type: 'addteam' })} onManual={() => { setSheet(null); addWorker(); }} />}
       {sheet?.type === 'import' && <ImportScheduleSheet b={b} orgId={orgId} week={week} onClose={() => setSheet(null)} reload={reload} />}
-      {sheet && sheet.type !== 'addteam' && sheet.type !== 'import' && sheet.type !== 'welcome' && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} message={(uid) => { setSheet(null); setMsgWith(uid); setTab('messages'); window.scrollTo({ top: 0 }); }} />}
+      {sheet && !['addteam', 'import', 'welcome', 'staff', 'swapnew', 'swaps'].includes(sheet.type) && <OwnerSheet s={sheet} b={b} week={week} set={setSheet} commit={commit} reload={reload} notes={notes} reloadNotes={reloadNotes} decide={decide} signOut={signOut} preview={(id) => { setSheet(null); setPreviewEmp(id); }} goWorker={() => goWorker()} message={(uid) => { setSheet(null); setMsgWith(uid); setTab('messages'); window.scrollTo({ top: 0 }); }} />}
     </>
   );
 }
@@ -626,6 +646,27 @@ function ProfileSheet({ b, week, id, onClose, reload, onPreview, onMessage }: { 
           <div key={a.dow} className={`pf-day${off ? ' off' : ''}`}><b>{DAY_LONG[a.dow].slice(0, 3)}</b><small>{t}</small></div>); })}</div></div>}
     </Sheet>
   );
+}
+
+/** Every worker in one list: search, this week's shifts, login, locations, open a profile. */
+function StaffSheet({ b, week, meId, onClose, onProfile, onAdd }: { b: Bundle; week: string; meId: string; onClose: () => void; onProfile: (id: string) => void; onAdd: () => void }) {
+  const [q, setQ] = useState('');
+  const [loc, setLoc] = useState('');
+  const list = [...b.emps].sort((x, y) => x.name.localeCompare(y.name))
+    .filter((w) => (!q.trim() || `${w.name} ${w.email ?? ''} ${w.phone ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())) && (!loc || w.locs.includes(loc)));
+  return (
+    <Sheet eyebrow="Staff" title={`All workers · ${b.emps.length}`} onClose={onClose}>
+      <div className="staff-filter"><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or phone…" aria-label="Search workers" />
+        {b.locs.length > 1 && <select value={loc} onChange={(e) => setLoc(e.target.value)} aria-label="Location"><option value="">All locations</option>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}</div>
+      <div className="staff-full">{list.map((w) => { const n = countWeek(b, w.id, week); return (
+        <button key={w.id} className="staff-row" onClick={() => onProfile(w.id)} style={{ ['--h' as string]: w.hue }}>
+          <span className="staff-av">{w.name.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join('')}</span>
+          <span className="staff-main"><b>{w.name}{w.user_id === meId && <span className="lstat you">you</span>}</b>
+            <small>{w.locs.map((l) => b.locs.find((x) => x.id === l)?.name).filter(Boolean).join(' · ') || 'No location'}{w.status !== 'active' && w.user_id !== meId ? ` · ${w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'invite expired' : 'no login'}` : ''}</small></span>
+          <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span><span className="staff-go" aria-hidden="true">›</span></button>); })}
+        {!list.length && <p className="empty-note">Nobody matches.</p>}</div>
+      <div className="actions"><button className="btn primary" onClick={onAdd}>+ Add workers</button></div>
+    </Sheet>);
 }
 
 function LocSheet({ b, loc, onClose, reload }: { b: Bundle; loc: Loc; onClose: () => void; reload: () => Promise<void> }) {

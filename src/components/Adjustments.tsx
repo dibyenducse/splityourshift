@@ -282,3 +282,19 @@ export function SwapSheet({ b, empId, cell, onClose }: { b: Bundle; empId: strin
       <SwapRequest b={b} empId={empId} pending={[]} onSent={onClose} initialCell={cell} />
     </Sheet>);
 }
+
+/** Owner: set up a swap for any worker, in a popup from the schedule. */
+export function OwnerSwapSheet({ b, onClose }: { b: Bundle; onClose: () => void }) {
+  return (
+    <Sheet eyebrow="Shift swap" title="Set up a swap" onClose={onClose}>
+      <p className="hint" style={{ margin: 0 }}>Tip: you can also tap any shift on the schedule, then “Swap or find cover”.</p>
+      <SwapRequest b={b} owner pending={[]} onSent={onClose} />
+    </Sheet>);
+}
+/** Owner: every swap (waiting, agreed, done) and shifts owed, in a popup from the schedule. */
+export function SwapsSheet({ b, onClose }: { b: Bundle; onClose: () => void }) {
+  return (
+    <Sheet eyebrow="Shift swaps" title="All swaps" onClose={onClose}>
+      <div className="swaps-sheet"><AdjustmentsPanel b={b} owner /></div>
+    </Sheet>);
+}

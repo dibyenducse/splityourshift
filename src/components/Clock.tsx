@@ -51,6 +51,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const open = b.entries.find((e) => e.employee_id === empId && !e.clock_out);
   const current = mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime() && !entryFor(k); });
   const next = mine.find((k) => shiftWindow(b, k).start.getTime() > now && !entryFor(k));
+  // my shift running now, even if I clocked out of it for a break
+  const onNowK = current ?? mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime(); });
   const openKey = open?.slot_id ? cellKey(open.slot_id, open.work_date) : null;
   const me = empOf(b, empId);
   const clockLocs = b.locs.filter((l) => me?.locs.includes(l.id) && l.time_clock !== false);
@@ -62,7 +64,7 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
   const [starting, setStarting] = useState(false);
   const clockIn = async () => {
     // My shift is on now (even if I clocked out for a break): clock in, no questions.
-    const onNow = current ?? mine.find((k) => { const w = shiftWindow(b, k); return now >= w.start.getTime() - 30 * 60000 && now <= w.end.getTime(); });
+    const onNow = onNowK;
     // No shift of mine right now: ask where and for whom first, then clock in.
     if (!onNow) { setStarting(true); return; }
     setBusy(true);
@@ -132,8 +134,8 @@ export function ClockPanel({ b, empId, userId, reload }: { b: Bundle; empId: str
     face = (<>
       {dial(<button className="clock-btn" disabled={busy} onClick={clockIn} aria-label="Clock in now">
         <span>{busy ? '…' : 'Clock in'}<small>{w ? `${clockTime(w.start)} shift` : 'tap to start'}</small></span></button>)}
-      {current && slotOf(b, current) && <div className="clock-where"><span aria-hidden="true">📍</span>Clocking in at <b>{b.locs.find((l) => l.id === slotOf(b, current)!.location_id)?.name}</b></div>}
-      {!current && <div className="clock-where muted"><span aria-hidden="true">📍</span>No shift now: you'll pick where you are</div>}
+      {onNowK && slotOf(b, onNowK) && <div className="clock-where"><span aria-hidden="true">📍</span>Clocking in at <b>{b.locs.find((l) => l.id === slotOf(b, onNowK)!.location_id)?.name}</b></div>}
+      {!onNowK && <div className="clock-where muted"><span aria-hidden="true">📍</span>No shift now: you'll pick where you are</div>}
       <p className="clock-sub">{current ? `${slotLabel(b, current)}${now > w!.start.getTime() + 5 * 60000 ? ` · started ${Math.round((now - w!.start.getTime()) / 60000)} min ago` : ''}`
         : next ? `No shift right now. Next: ${slotLabel(b, next)}. You can still clock in to cover someone or work an extra shift.`
         : 'No shift right now. You can still clock in to cover someone or work an extra shift.'}</p>
