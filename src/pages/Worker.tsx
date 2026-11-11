@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { loadBundle } from '../lib/api';
@@ -44,9 +44,14 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
   const [asks, setAsks] = useState<string[]>([]);
   const [howto, setHowto] = useState(false);
   // Worker sections in the header: my shifts (time clock, schedule, pay), the shift report logbook, my tasks.
-  const [view, setView] = useState<'schedule' | 'team' | 'pay' | 'messages' | 'reports' | 'tasks'>('schedule');
+  type View = 'schedule' | 'team' | 'pay' | 'messages' | 'reports' | 'tasks';
+  const location = useLocation();
+  const [pv, setPv] = useState<View>('schedule'); // owner's preview of a worker keeps its own tab
+  const wseg = location.pathname.split('/')[2] ?? '';
+  const view: View = preview ? pv : (['schedule', 'team', 'pay', 'messages', 'reports', 'tasks'] as string[]).includes(wseg) ? wseg as View : 'schedule';
   const { unread: unreadMsgs, reloadUnread } = useUnreadMessages(preview ? undefined : me?.orgId, preview ? undefined : me?.userId);
   const nav = useNavigate();
+  const setView = (v: View) => { if (preview) setPv(v); else if (v !== view) { nav(`/app/${v}`); window.scrollTo({ top: 0 }); } };
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const { notes, reload: reloadNotes } = useNotes();
   const [pay, setPay] = useState<MyPay[]>([]);

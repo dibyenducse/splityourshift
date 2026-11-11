@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
@@ -48,13 +48,18 @@ const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.
 export default function OwnerApp() {
   const { me, signOut, refresh } = useAuth();
   const nav = useNavigate();
+  const setTab = (t: Tab) => { if (t !== tab) nav(`/app/${t}`); };
   const toast = useToast();
   const [week, setWeek] = useState(() => mondayOf(todayIso()));
   const [b, setB] = useState<Bundle | null>(null);
   // Owner who also works shifts: the worker view of their own profile (remembered on this device).
   const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
-  const [tab, setTab] = useState<'schedule' | 'swaps' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
+  // Each section has its own address (#/app/swaps …), so refresh, Back and bookmarks keep the page.
+  const location = useLocation();
+  type Tab = 'schedule' | 'swaps' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages';
+  const seg = location.pathname.split('/')[2] ?? '';
+  const tab: Tab = (['schedule', 'swaps', 'time', 'payroll', 'reports', 'tasks', 'messages'] as string[]).includes(seg) ? seg as Tab : 'schedule';
   const [msgWith, setMsgWith] = useState<string | null>(null);
   const [staffQ, setStaffQ] = useState('');
   // swaps waiting for an answer or for my approval (badge on the Swaps box)
@@ -230,10 +235,10 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const goTab = (t: typeof tab) => setTab(t);
+  const goTab = (t: Tab) => { setTab(t); window.scrollTo({ top: 0 }); };
   const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'swaps', 'time', 'payroll', 'reports', 'tasks', 'messages'] as const).map((t) => (
     <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => goTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <>Swaps{swapWaiting > 0 && <span className="badge">{swapWaiting}</span>}</>
+    {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <><span className="full">Swaps &amp; time off</span><span className="short">Swaps</span>{swapWaiting + pending.length > 0 && <span className="badge">{swapWaiting + pending.length}</span>}</>
       : t === 'time' ? <><span className="full">Time clock</span><span className="short">Clock</span>{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</>
       : t === 'payroll' ? <><span className="full">Payroll</span><span className="short">Pay</span></>
       : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
@@ -242,9 +247,10 @@ export default function OwnerApp() {
   const swapsPage = (
     <div className="layout swaps-page">
       <section className="panel swaps-hero">
-        <div><h2>Shift swaps</h2><p className="hint" style={{ margin: 0 }}>Move a shift to someone else, see what's waiting, and keep track of shifts owed. You can also tap any shift on the schedule, then “Swap or find cover”.</p></div>
+        <div><h2>Swaps &amp; time off</h2><p className="hint" style={{ margin: 0 }}>Move a shift to someone else, answer time-off requests, and keep track of shifts owed. You can also tap any shift on the schedule, then “Swap or find cover”.</p></div>
         <div className="swaps-stats">
-          <span className="sw-stat"><b>{swapWaiting}</b><small>waiting</small></span>
+          <span className="sw-stat"><b>{swapWaiting}</b><small>swaps waiting</small></span>
+          <span className="sw-stat"><b>{pending.length}</b><small>time off asked</small></span>
           <span className="sw-stat"><b>{openOwed.length}</b><small>shifts owed</small></span>
           <button className="btn primary big" onClick={() => setSheet({ type: 'swapnew' })}>⇄ New swap</button>
         </div>
@@ -252,6 +258,18 @@ export default function OwnerApp() {
       <div className="swaps-grid">
         <div className="swaps-main"><AdjustmentsPanel b={b} owner /></div>
         <aside className="swaps-side">
+        <section className="panel timeoff-panel">
+          <div className="panel-head"><h2>Time-off requests{pending.length > 0 && <span className="badge">{pending.length}</span>}</h2></div>
+          <p className="hint">Workers send these from their phone. You decide; they can cancel while it's pending.</p>
+          <div className="stack">{pending.length ? pending.map((r) => (
+            <div key={r.id} className="item"><div><b>{empOf(b, r.employee_id)?.name ?? '?'}</b> wants this shift off</div><small>{r.label} · {ago(r.created_at)}</small>
+              {r.reason && <q>{r.reason}</q>}
+              <div className="actions"><button className="btn small primary" onClick={() => decide(r, true)}>Approve &amp; find cover</button><button className="btn small" onClick={() => decide(r, false)}>Deny</button></div></div>
+          )) : <p className="empty-note">No requests waiting.</p>}</div>
+          {needCover.length > 0 && <><h4 style={{ margin: '12px 0 6px' }}>Approved, needs cover</h4><div className="stack">{needCover.map((r) => (
+            <div key={r.id} className="item"><div><b>{r.label}</b> · {empOf(b, r.employee_id)?.name ?? '?'} is off</div>
+              <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'cover', id: r.id })}>Who can cover?</button></div></div>))}</div></>}
+        </section>
         <section className="panel owed-panel">
           <div className="panel-head"><h2>Shifts owed</h2></div>
           <p className="hint">When someone covers in an emergency, it stays here until it's paid back, in any later week. Tap Pay back when you plan that week.</p>
@@ -286,18 +304,6 @@ export default function OwnerApp() {
                 <button className="iconbtn" onClick={() => setSheet({ type: 'profile', id: w.id })} title="View Profile" aria-label={`View ${w.name}'s profile`}><UserIcon /></button>
               </div>); }) : <div className="empty-note">No workers yet. <button className="btn small primary" onClick={() => setSheet({ type: 'addteam' })}>Send your team a join link</button></div>}
           </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><h2>Time-off requests{pending.length > 0 && <span className="badge">{pending.length}</span>}</h2></div>
-          <p className="hint">Workers send these from their phone. You decide; they can cancel while it's pending.</p>
-          <div className="stack">{pending.length ? pending.map((r) => (
-            <div key={r.id} className="item"><div><b>{empOf(b, r.employee_id)?.name ?? '?'}</b> wants this shift off</div><small>{r.label} · {ago(r.created_at)}</small>
-              {r.reason && <q>{r.reason}</q>}
-              <div className="actions"><button className="btn small primary" onClick={() => decide(r, true)}>Approve &amp; find cover</button><button className="btn small" onClick={() => decide(r, false)}>Deny</button></div></div>
-          )) : <p className="empty-note">No requests waiting.</p>}</div>
-          {needCover.length > 0 && <><h4 style={{ margin: '12px 0 6px' }}>Approved, needs cover</h4><div className="stack">{needCover.map((r) => (
-            <div key={r.id} className="item"><div><b>{r.label}</b> · {empOf(b, r.employee_id)?.name ?? '?'} is off</div>
-              <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'cover', id: r.id })}>Who can cover?</button></div></div>))}</div></>}
         </section>
       </aside>
       <main className="boards">
