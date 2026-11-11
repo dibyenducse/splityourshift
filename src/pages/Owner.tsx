@@ -55,7 +55,6 @@ export default function OwnerApp() {
   const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
   const [tab, setTab] = useState<'schedule' | 'swaps' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
-  const [lastTP, setLastTP] = useState<'time' | 'payroll'>('time');
   const [msgWith, setMsgWith] = useState<string | null>(null);
   const [staffQ, setStaffQ] = useState('');
   // swaps waiting for an answer or for my approval (badge on the Swaps box)
@@ -231,16 +230,14 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const goTab = (t: typeof tab) => { if (t === 'time' || t === 'payroll') setLastTP(t); setTab(t); };
-  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'swaps', 'timepay', 'reports', 'tasks', 'messages'] as const).map((t) => { const on = t === 'timepay' ? tab === 'time' || tab === 'payroll' : tab === t; return (
-    <button key={t} className={`tnav${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined} onClick={() => goTab(t === 'timepay' ? lastTP : t)}>
+  const goTab = (t: typeof tab) => setTab(t);
+  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'swaps', 'time', 'payroll', 'reports', 'tasks', 'messages'] as const).map((t) => (
+    <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => goTab(t)}>
     {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <>Swaps{swapWaiting > 0 && <span className="badge">{swapWaiting}</span>}</>
-      : t === 'timepay' ? <><span className="full">Time &amp; pay</span><span className="short">Time</span>{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</>
+      : t === 'time' ? <><span className="full">Time clock</span><span className="short">Clock</span>{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</>
+      : t === 'payroll' ? <><span className="full">Payroll</span><span className="short">Pay</span></>
       : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
-      : <><span className="full">Messages</span><span className="short">Chat</span>{unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</>}</button>); })}</nav>;
-  const tpSub = <div className="tp-sub" role="tablist" aria-label="Time and pay">
-    <button role="tab" aria-selected={tab === 'time'} className={tab === 'time' ? 'on' : ''} onClick={() => goTab('time')}><span aria-hidden="true">⏱</span>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</button>
-    <button role="tab" aria-selected={tab === 'payroll'} className={tab === 'payroll' ? 'on' : ''} onClick={() => goTab('payroll')}><span aria-hidden="true">$</span>Payroll</button></div>;
+      : <><span className="full">Messages</span><span className="short">Chat</span>{unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</>}</button>))}</nav>;
 
   const swapsPage = (
     <div className="layout swaps-page">
@@ -344,8 +341,8 @@ export default function OwnerApp() {
           { label: 'Plan & billing', hint: trialLeft(b.org) ? `${PLANS[planOf(b.org)].name} trial · ${trialLeft(b.org)} days left` : `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' },
         ]} />} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'swaps' ? swapsPage : tab === 'time' ? <>{tpSub}<TimeClock b={b} week={week} tabs={null} reload={reload} /></> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div>
-        : tab === 'messages' ? <div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div> : <>{tpSub}<Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} /></>}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'swaps' ? swapsPage : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div>
+        : tab === 'messages' ? <div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} onClose={() => setSheet(null)} onManual={addWorker} />}

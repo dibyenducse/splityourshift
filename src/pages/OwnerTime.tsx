@@ -6,7 +6,6 @@ import type { Bundle, TimeEntry } from '../lib/types';
 import { ConfirmButton, Sheet, useToast } from '../components/ui';
 import { clockTime, shiftWindow } from '../components/Clock';
 import { HowToButton } from '../components/HowTo';
-import { ClockSettings } from '../components/ClockSettings';
 
 const toLocalInput = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 type Edit = { entry?: TimeEntry; empId?: string; cell?: string } | null;
@@ -51,8 +50,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
             {hrs > 14 && <span className="tag bad">Forgot to clock out?</span>}
             <button className="btn small" onClick={() => clockOutNow(e)}>Clock out now</button></div>); })
           : <p className="empty-note">Nobody is clocked in right now.</p>}</div></section>
-      <ClockSettings b={b} onSaved={reload} />
-      <p className="hint moved-note">Shift swaps have their own <b>Swaps</b> tab at the top.</p>
+      <p className="hint moved-note">Turn the time clock on or off, the grace period and how hours are paid: <b>Payroll → Payroll settings</b>. Shift swaps: the <b>Swaps</b> tab.</p>
 
       {fixes.length > 0 && <section className="panel"><div className="panel-head"><h2>Hour fixes to approve<span className="badge">{fixes.length}</span></h2></div>
         <p className="hint">Workers send these when they forgot to clock in or out. Approved hours count for pay.</p>

@@ -289,23 +289,20 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           </div>}
           <span className="hint">{otText(f)}.</span>
           </div>
-          <div className="ps-card"><h3>Time clock and pay</h3>
+          <div className="ps-card ps-clock"><h3>Time clock and pay</h3>
           <label className="switch"><input type="checkbox" role="switch" checked={f.time_clock} onChange={(e) => setF({ ...f, time_clock: e.target.checked })} /><span className="track" aria-hidden="true" /><span><b>Time clock {f.time_clock ? 'on' : 'off'}</b> at {loc.name}</span></label>
-          {!f.time_clock ? <span className="hint">Off: workers here see no time clock at all. Payroll pays each worker's assigned shift hours, follows every schedule change, and you can edit anyone's hours on the payroll. Switching deletes nothing: clock records, edits and paid payrolls are kept.</span> : <>
-            <div className="otrow">
-              <label>Grace period</label>
-              <select value={[10, 15, 30].includes(f.grace_minutes) ? f.grace_minutes : -1} onChange={(e) => setF({ ...f, grace_minutes: +e.target.value < 0 ? 20 : +e.target.value })} aria-label="Grace period">
-                {[10, 15, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}<option value={-1}>Custom…</option></select>
-              {![10, 15, 30].includes(f.grace_minutes) && <label><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Custom grace minutes" /> minutes</label>}
-            </div>
-            <span className="hint">Within {f.grace_minutes} minutes of the start there is no late notice. {f.pay_method === 'schedule' ? 'Later than that, the worker is told it was late and can offer a time swap; pay still follows the schedule.' : 'Later than that, the worker picks normal payroll, a paid adjustment (you approve) or a time swap.'} Real clock times are always saved.</span>
-            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'actual'} onChange={() => setF({ ...f, pay_method: 'actual' })} /> Pay actual clock-in to clock-out time</label>
-            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'grace'} onChange={() => setF({ ...f, pay_method: 'grace' })} /> Pay scheduled shift hours, with the grace period paid</label>
-            <label className="inline"><input type="radio" name="pm" checked={f.pay_method === 'schedule'} onChange={() => setF({ ...f, pay_method: 'schedule' })} /> Pay by the schedule only (keep the time clock for records)</label>
-            <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}. {f.pay_method === 'schedule' ? 'Workers still clock in and out, so you see who came and when; payroll pays each assigned shift, follows every schedule change, and you can edit anyone\'s hours.' : 'Work past the shift (beyond grace) and overtime are always paid; nothing is counted twice.'}</span>
+          {!f.time_clock ? <span className="hint">Off: workers here see no time clock. Payroll pays each assigned shift and follows schedule changes; you can still edit anyone's hours. Nothing is deleted when you switch.</span> : <>
+            <div className="cks-row"><span className="cks-l">Grace period</span>
+              <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${f.grace_minutes === m ? ' on' : ''}`} aria-pressed={f.grace_minutes === m} onClick={() => setF({ ...f, grace_minutes: m })}>{m} min</button>)}
+                <label className="cks-custom"><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Grace minutes" /> min</label></div>
+              <span className="hint">Clocking in up to {f.grace_minutes} minutes late gets no late notice. Later than that, {f.pay_method === 'schedule' ? 'the worker is told and can offer a time swap; pay still follows the schedule' : 'the worker picks normal payroll, a paid adjustment (you approve) or a time swap'}.</span></div>
+            <div className="cks-row"><span className="cks-l">How hours are paid</span>
+              <div className="cks-methods">{([['actual', 'Clocked time', 'Pay from clock-in to clock-out'], ['grace', 'Shift hours + grace', 'Pay the scheduled shift; a few late minutes are still paid'], ['schedule', 'By the schedule', 'Keep the clock for records; pay the assigned shifts']] as const).map(([m, t, sub]) =>
+                <button key={m} type="button" className={`cks-method${f.pay_method === m ? ' on' : ''}`} aria-pressed={f.pay_method === m} onClick={() => setF({ ...f, pay_method: m })}><b>{t}</b><small>{sub}</small></button>)}</div>
+              <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}.</span></div>
           </>}
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
-          {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in Time clock.</span>}
+          {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in the Swaps tab.</span>}
           </div>
         </div>
         <div className="ps-foot"><span className="hint">Saved per business. Paid payrolls stay as they were.</span><button className="btn primary" onClick={save}>Save payroll settings</button></div>

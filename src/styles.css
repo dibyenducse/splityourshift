@@ -1403,3 +1403,11 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .staff-hint { font-size: 12.5px; margin: 0 0 8px; }
 .staff-filter .search-box { margin: 0; }
 .staff-filter select { border-radius: 99px; }
+
+/* payroll settings: time clock card uses the pill/method look */
+.ps-clock .cks-methods { grid-template-columns: 1fr; }
+.ps-clock .cks-method { padding: 8px 12px; }
+.ps-clock .cks-pills { gap: 5px; }
+.ps-clock .cks-pill { padding: 5px 10px; font-size: 14px; }
+@media (max-width: 520px) { .topnav { overflow-x: auto; scrollbar-width: none; } .topnav::-webkit-scrollbar { display: none; } .tnav { flex: 1 0 auto; padding: 7px 6px; } }
+@media (max-width: 380px) { .topnav { gap: 0; } .tnav { padding: 7px 4px; font-size: 12px; } }
