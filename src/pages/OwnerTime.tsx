@@ -52,7 +52,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
             <button className="btn small" onClick={() => clockOutNow(e)}>Clock out now</button></div>); })
           : <p className="empty-note">Nobody is clocked in right now.</p>}</div></section>
       <ClockSettings b={b} onSaved={reload} />
-      <p className="hint moved-note">Shift swaps are now on the <b>Schedule</b> page, next to your staff list.</p>
+      <p className="hint moved-note">Shift swaps have their own <b>Swaps</b> tab at the top.</p>
 
       {fixes.length > 0 && <section className="panel"><div className="panel-head"><h2>Hour fixes to approve<span className="badge">{fixes.length}</span></h2></div>
         <p className="hint">Workers send these when they forgot to clock in or out. Approved hours count for pay.</p>

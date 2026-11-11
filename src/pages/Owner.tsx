@@ -27,7 +27,7 @@ import { PartInfo, SplitShift } from '../components/SplitShift';
 import { HowToSheet } from '../components/HowTo';
 import { AddTeamSheet, ImportScheduleSheet, WelcomeSheet } from '../components/AddTeam';
 import { MessagesView, useUnreadMessages } from '../components/Messages';
-import { OwnerSwapSheet, SwapsSheet } from '../components/Adjustments';
+import { AdjustmentsPanel, OwnerSwapSheet, SwapsSheet } from '../components/Adjustments';
 import { importReady } from '../lib/team';
 import { PLANS, locLimitOf, planOf, trialLeft, untilText, wantPlan } from '../lib/plans';
 
@@ -54,7 +54,8 @@ export default function OwnerApp() {
   // Owner who also works shifts: the worker view of their own profile (remembered on this device).
   const [asWorker, setAsWorkerState] = useState(() => { try { return localStorage.getItem('sys-view') === 'worker'; } catch { return false; } });
   const setAsWorker = (on: boolean) => { setAsWorkerState(on); try { localStorage.setItem('sys-view', on ? 'worker' : 'owner'); } catch { /* private mode */ } };
-  const [tab, setTab] = useState<'schedule' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
+  const [tab, setTab] = useState<'schedule' | 'swaps' | 'time' | 'payroll' | 'reports' | 'tasks' | 'messages'>('schedule');
+  const [lastTP, setLastTP] = useState<'time' | 'payroll'>('time');
   const [msgWith, setMsgWith] = useState<string | null>(null);
   const [staffQ, setStaffQ] = useState('');
   // swaps waiting for an answer or for my approval (badge on the Swaps box)
@@ -230,18 +231,54 @@ export default function OwnerApp() {
   // ---------- views ----------
   const staff = [...b.emps].sort((x, y) => x.name.localeCompare(y.name));
   const onClock = b.entries.filter((e) => !e.clock_out).length, fixCount = b.fixes.filter((f) => f.status === 'pending').length + b.entries.filter((e) => e.claimed_in).length;
-  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'time', 'payroll', 'reports', 'tasks', 'messages'] as const).map((t) => <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'time' ? <>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</> : t === 'payroll' ? 'Payroll' : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
-      : <><span className="full">Messages</span><span className="short">Chat</span>{unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</>}</button>)}</nav>;
+  const goTab = (t: typeof tab) => { if (t === 'time' || t === 'payroll') setLastTP(t); setTab(t); };
+  const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'swaps', 'timepay', 'reports', 'tasks', 'messages'] as const).map((t) => { const on = t === 'timepay' ? tab === 'time' || tab === 'payroll' : tab === t; return (
+    <button key={t} className={`tnav${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined} onClick={() => goTab(t === 'timepay' ? lastTP : t)}>
+    {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <>Swaps{swapWaiting > 0 && <span className="badge">{swapWaiting}</span>}</>
+      : t === 'timepay' ? <><span className="full">Time &amp; pay</span><span className="short">Time</span>{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</>
+      : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
+      : <><span className="full">Messages</span><span className="short">Chat</span>{unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</>}</button>); })}</nav>;
+  const tpSub = <div className="tp-sub" role="tablist" aria-label="Time and pay">
+    <button role="tab" aria-selected={tab === 'time'} className={tab === 'time' ? 'on' : ''} onClick={() => goTab('time')}><span aria-hidden="true">⏱</span>Time clock{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</button>
+    <button role="tab" aria-selected={tab === 'payroll'} className={tab === 'payroll' ? 'on' : ''} onClick={() => goTab('payroll')}><span aria-hidden="true">$</span>Payroll</button></div>;
+
+  const swapsPage = (
+    <div className="layout swaps-page">
+      <section className="panel swaps-hero">
+        <div><h2>Shift swaps</h2><p className="hint" style={{ margin: 0 }}>Move a shift to someone else, see what's waiting, and keep track of shifts owed. You can also tap any shift on the schedule, then “Swap or find cover”.</p></div>
+        <div className="swaps-stats">
+          <span className="sw-stat"><b>{swapWaiting}</b><small>waiting</small></span>
+          <span className="sw-stat"><b>{openOwed.length}</b><small>shifts owed</small></span>
+          <button className="btn primary big" onClick={() => setSheet({ type: 'swapnew' })}>⇄ New swap</button>
+        </div>
+      </section>
+      <div className="swaps-grid">
+        <div className="swaps-main"><AdjustmentsPanel b={b} owner /></div>
+        <aside className="swaps-side">
+        <section className="panel owed-panel">
+          <div className="panel-head"><h2>Shifts owed</h2></div>
+          <p className="hint">When someone covers in an emergency, it stays here until it's paid back, in any later week. Tap Pay back when you plan that week.</p>
+          <div className="stack">{openOwed.length ? openOwed.map((l) => (
+            <div key={l.id} className="item"><div><b>{empOf(b, l.debtor_id)?.name ?? '?'}</b> owes <b>{empOf(b, l.creditor_id)?.name ?? '?'}</b> 1 shift</div>
+              <small>{empOf(b, l.creditor_id)?.name} covered {l.label}</small>
+              <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'payback', id: l.id })}>Pay back</button>
+                <button className="btn small" onClick={async () => { await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', l.id); reload(); toast('Marked as settled.', 'ok', 'Done'); }}>Mark settled</button></div></div>
+          )) : <p className="empty-note">Nobody owes a shift right now.</p>}</div>
+        </section>
+        </aside>
+      </div>
+    </div>);
 
   const schedule = (
     <div className="layout two owner">
       <aside className="rail">
         <section className="panel" id="roster">
-          <div className="panel-head"><h2>Staff <span className="hint" style={{ margin: 0, fontWeight: 600 }}>{staff.length}</span></h2>
-            <span className="staff-tools">{staff.length > 0 && <button className="mini" onClick={() => setSheet({ type: 'staff' })}>See all</button>}<button className="mini" onClick={() => setSheet({ type: 'addteam' })}>+ Add</button></span></div>
-          <p className="hint">Drag a name onto a shift, or tap a name and then a shift. The number is shifts this week out of their limit.</p>
-          {staff.length > 8 && <input type="search" className="staff-search" value={staffQ} onChange={(e) => setStaffQ(e.target.value)} placeholder={`Search ${staff.length} workers…`} aria-label="Search workers" />}
+          <div className="staff-head"><h2>Staff</h2><span className="staff-count">{staff.length}</span>
+            {staff.length > 0 && <button className="staff-all" onClick={() => setSheet({ type: 'staff' })}>See all <span aria-hidden="true">›</span></button>}</div>
+          <button className="staff-add" onClick={() => setSheet({ type: 'addteam' })}><span className="plus" aria-hidden="true">+</span><span><b>Add workers</b><small>Join link or by hand</small></span></button>
+          {staff.length > 5 && <label className="search-box"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input type="search" value={staffQ} onChange={(e) => setStaffQ(e.target.value)} placeholder={`Search ${staff.length} workers`} aria-label="Search workers" />{staffQ && <button type="button" className="search-x" onClick={() => setStaffQ('')} aria-label="Clear search">×</button>}</label>}
+          <p className="hint staff-hint">Drag a name onto a shift, or tap a name and then a shift. The number is shifts this week out of their limit.</p>
           <div className="roster-list compact">
             {staff.length ? staff.filter((w) => !staffQ.trim() || w.name.toLowerCase().includes(staffQ.trim().toLowerCase())).map((w) => { const n = countWeek(b, w.id, week); return (
               <div key={w.id} className={`wcard${picked === w.id ? ' picked' : ''}`} data-drag="" data-wid={w.id} style={{ ['--h' as string]: w.hue }}
@@ -251,14 +288,6 @@ export default function OwnerApp() {
                 <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span>
                 <button className="iconbtn" onClick={() => setSheet({ type: 'profile', id: w.id })} title="View Profile" aria-label={`View ${w.name}'s profile`}><UserIcon /></button>
               </div>); }) : <div className="empty-note">No workers yet. <button className="btn small primary" onClick={() => setSheet({ type: 'addteam' })}>Send your team a join link</button></div>}
-          </div>
-        </section>
-        <section className="panel swaps-rail">
-          <div className="panel-head"><h2>Shift swaps{swapWaiting > 0 && <span className="badge">{swapWaiting}</span>}</h2></div>
-          <p className="hint">Tap any shift on the schedule to swap it or find cover, or set one up here.</p>
-          <div className="swap-btns">
-            <button className="swap-btn primary" onClick={() => setSheet({ type: 'swapnew' })}><span aria-hidden="true">⇄</span><b>New swap</b><small>Pick whose shift and who works it</small></button>
-            <button className="swap-btn" onClick={() => setSheet({ type: 'swaps' })}><span aria-hidden="true">📋</span><b>All swaps{swapWaiting > 0 ? ` · ${swapWaiting} waiting` : ''}</b><small>Waiting, agreed and done</small></button>
           </div>
         </section>
         <section className="panel">
@@ -273,16 +302,6 @@ export default function OwnerApp() {
             <div key={r.id} className="item"><div><b>{r.label}</b> · {empOf(b, r.employee_id)?.name ?? '?'} is off</div>
               <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'cover', id: r.id })}>Who can cover?</button></div></div>))}</div></>}
         </section>
-        <section className="panel">
-          <div className="panel-head"><h2>Shifts owed</h2></div>
-          <p className="hint">When someone covers in an emergency, it stays here until it's paid back, in any later week. Tap Pay back when you plan that week.</p>
-          <div className="stack">{openOwed.length ? openOwed.map((l) => (
-            <div key={l.id} className="item"><div><b>{empOf(b, l.debtor_id)?.name ?? '?'}</b> owes <b>{empOf(b, l.creditor_id)?.name ?? '?'}</b> 1 shift</div>
-              <small>{empOf(b, l.creditor_id)?.name} covered {l.label}</small>
-              <div className="actions"><button className="btn small primary" onClick={() => setSheet({ type: 'payback', id: l.id })}>Pay back</button>
-                <button className="btn small" onClick={async () => { await supabase.from('ledger').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', l.id); reload(); toast('Marked as settled.', 'ok', 'Done'); }}>Mark settled</button></div></div>
-          )) : <p className="empty-note">Nobody owes a shift right now.</p>}</div>
-        </section>
       </aside>
       <main className="boards">
         <div className="tabsrow end">
@@ -294,7 +313,7 @@ export default function OwnerApp() {
         {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
             {!r.next_paid && <>{rangeTitle(r.next_start, r.next_end)}: {money(r.payable)} for {r.employees} employee{r.employees === 1 ? '' : 's'}.</>}</p>
-          <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); setTab('payroll'); }}>Open payroll</button></div>)}
+          <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); goTab('payroll'); }}>Open payroll</button></div>)}
         {(() => { const left = trialLeft(b.org), lim0 = locLimitOf(b.org); if (left === null || (left === 0 && lim0 !== null && b.locs.length > lim0)) return null; const tp = PLANS[(b.org.plan ?? 'premium') as keyof typeof PLANS];
           return <div className={`banner trial-bar no-print${left === 0 ? ' warn' : left <= 3 ? ' soon' : ''}`} style={{ marginBottom: 10 }}>
             <p>{left > 0 ? <><b>Free trial: {left} day{left === 1 ? '' : 's'} left</b> of {tp.name}, until {untilText(b.org.plan_until)}. Every feature is on.</> : <><b>Your free trial has ended.</b> Everything is still here. Choose a plan to keep adding locations.</>}</p>
@@ -325,8 +344,8 @@ export default function OwnerApp() {
           { label: 'Plan & billing', hint: trialLeft(b.org) ? `${PLANS[planOf(b.org)].name} trial · ${trialLeft(b.org)} days left` : `${PLANS[planOf(b.org)].name} plan`, onClick: () => nav('/app/plan'), icon: 'plan' },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' },
         ]} />} />
-      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'time' ? <TimeClock b={b} week={week} tabs={null} reload={reload} /> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div>
-        : tab === 'messages' ? <div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div> : <Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} />}</div>
+      <div className="wrap">{tab === 'schedule' ? schedule : tab === 'swaps' ? swapsPage : tab === 'time' ? <>{tpSub}<TimeClock b={b} week={week} tabs={null} reload={reload} /></> : tab === 'reports' ? <div className="layout"><ShiftReportsBook b={b} owner /></div> : tab === 'tasks' ? <div className="layout"><TasksBoard b={b} owner /><TaskManager b={b} /></div>
+        : tab === 'messages' ? <div className="layout"><MessagesView orgId={orgId} userId={me!.userId} withUser={msgWith} onRead={reloadUnread} /></div> : <>{tpSub}<Payroll b={b} tabs={null} reload={reload} initialLoc={payLoc} /></>}</div>
       {picked && empOf(b, picked) && <div className="pickbar"><span>Tap a shift to place <b>{empOf(b, picked)!.name}</b></span><button className="btn small" onClick={() => setPicked(null)}>Cancel</button></div>}
       {howto && <HowToSheet onClose={() => setHowto(false)} />}
       {sheet?.type === 'addteam' && <AddTeamSheet b={b} orgId={orgId} onClose={() => setSheet(null)} onManual={addWorker} />}
@@ -656,7 +675,8 @@ function StaffSheet({ b, week, meId, onClose, onProfile, onAdd }: { b: Bundle; w
     .filter((w) => (!q.trim() || `${w.name} ${w.email ?? ''} ${w.phone ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())) && (!loc || w.locs.includes(loc)));
   return (
     <Sheet eyebrow="Staff" title={`All workers · ${b.emps.length}`} onClose={onClose}>
-      <div className="staff-filter"><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or phone…" aria-label="Search workers" />
+      <div className="staff-filter"><label className="search-box"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or phone" aria-label="Search workers" />{q && <button type="button" className="search-x" onClick={() => setQ('')} aria-label="Clear search">×</button>}</label>
         {b.locs.length > 1 && <select value={loc} onChange={(e) => setLoc(e.target.value)} aria-label="Location"><option value="">All locations</option>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}</div>
       <div className="staff-full">{list.map((w) => { const n = countWeek(b, w.id, week); return (
         <button key={w.id} className="staff-row" onClick={() => onProfile(w.id)} style={{ ['--h' as string]: w.hue }}>
@@ -665,7 +685,7 @@ function StaffSheet({ b, week, meId, onClose, onProfile, onAdd }: { b: Bundle; w
             <small>{w.locs.map((l) => b.locs.find((x) => x.id === l)?.name).filter(Boolean).join(' · ') || 'No location'}{w.status !== 'active' && w.user_id !== meId ? ` · ${w.status === 'invited' ? 'invited' : w.status === 'expired' ? 'invite expired' : 'no login'}` : ''}</small></span>
           <span className={`count ${countClass(n, w.max_shifts)}`}>{n}/{w.max_shifts}</span><span className="staff-go" aria-hidden="true">›</span></button>); })}
         {!list.length && <p className="empty-note">Nobody matches.</p>}</div>
-      <div className="actions"><button className="btn primary" onClick={onAdd}>+ Add workers</button></div>
+      <button className="staff-add" onClick={onAdd}><span className="plus" aria-hidden="true">+</span><span><b>Add workers</b><small>Send your join link, or add someone by hand</small></span></button>
     </Sheet>);
 }
 

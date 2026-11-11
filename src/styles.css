@@ -1369,3 +1369,37 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .cks-method small { color: var(--muted); font-size: 12.5px; }
 .cks-method.on { border-color: var(--accent); background: var(--accent-soft); }
 @media (max-width: 620px) { .cks-methods { grid-template-columns: 1fr; } }
+
+/* ---------------- owner menu: Time & pay sub-tabs, Swaps page */
+.tp-sub { display: flex; gap: 6px; margin-bottom: 12px; }
+.tp-sub button { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-weight: 700; font-size: 15px; padding: 9px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.tp-sub button span[aria-hidden] { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); font-size: 14px; }
+.tp-sub button.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent); }
+.tp-sub button.on span[aria-hidden] { background: var(--surface); }
+.swaps-hero { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%); }
+.swaps-hero > div:first-child { flex: 1 1 320px; } .swaps-hero h2 { margin: 0 0 4px; }
+.swaps-stats { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sw-stat { display: flex; flex-direction: column; align-items: center; min-width: 72px; padding: 6px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.sw-stat b { font-family: var(--f-display); font-size: 24px; line-height: 1; } .sw-stat small { color: var(--muted); font-size: 12px; }
+.swaps-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .swaps-grid { grid-template-columns: 1fr; } }
+
+/* ---------------- staff list header, add button, search */
+.staff-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.staff-head h2 { margin: 0; }
+.staff-count { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.staff-all { margin-left: auto; font: inherit; font-size: 13px; font-weight: 700; color: var(--accent); background: none; border: 0; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+.staff-all:hover { background: var(--accent-soft); }
+.staff-add { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); font: inherit; color: var(--fg); text-align: left; cursor: pointer; transition: background .12s, border-color .12s, transform .12s; }
+.staff-add:hover { border-style: solid; border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+.staff-add .plus { flex: none; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 20px; font-weight: 700; box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 35%, transparent); }
+.staff-add span:last-child { display: flex; flex-direction: column; } .staff-add small { color: var(--muted); font-size: 12.5px; }
+.search-box { position: relative; display: flex; align-items: center; margin-bottom: 8px; flex: 1; }
+.search-box svg { position: absolute; left: 11px; color: var(--muted); pointer-events: none; }
+.search-box input { width: 100%; min-height: 38px; padding: 8px 32px 8px 34px; border-radius: 99px; border: 1px solid var(--line-strong); background: var(--surface-2); font: inherit; color: var(--fg); transition: border-color .12s, background .12s, box-shadow .12s; }
+.search-box input:focus { outline: none; border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.search-box input::-webkit-search-cancel-button { display: none; }
+.search-x { position: absolute; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--line); color: var(--fg); cursor: pointer; font-size: 14px; line-height: 1; }
+.staff-hint { font-size: 12.5px; margin: 0 0 8px; }
+.staff-filter .search-box { margin: 0; }
+.staff-filter select { border-radius: 99px; }
