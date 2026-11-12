@@ -59,13 +59,14 @@ export default function App() {
   // Prices and limits the admin set (Plans & pricing); everything re-renders with them once loaded.
   useEffect(() => { loadPlanCatalog().then((r) => r.length && setPlansV((v) => v + 1), () => {}); }, []);
   const refresh = useCallback(async () => { setMe(await whoAmI().catch(() => null)); }, []);
-  const signOut = useCallback(async () => { await supabase.auth.signOut(); setMe(null); }, []);
+  const signOut = useCallback(async () => { try { sessionStorage.removeItem('sys-dismiss'); } catch { /* private */ } await supabase.auth.signOut(); setMe(null); }, []);
   useEffect(() => {
     if (!configured) return;
     // A sign-up confirmation link brings a session in the URL; store it, then load the user.
     (async () => { if (authLanding === 'session' && landingTokens) await supabase.auth.setSession(landingTokens); await refresh(); })();
     // Don't call Supabase inside the callback itself (it can deadlock); defer it.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((evt) => {
+      if (evt === 'SIGNED_OUT') { try { sessionStorage.removeItem('sys-dismiss'); } catch { /* private */ } }
       if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT' || evt === 'USER_UPDATED') setTimeout(refresh, 0);
     });
     return () => subscription.unsubscribe();

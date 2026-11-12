@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { supabase, errText } from '../lib/supabase';
 import { applyChanges, loadBundle, markNotesRead, myWorkerProfile, sendInvite } from '../lib/api';
-import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso } from '../lib/time';
+import { DAY_LONG, addDays, ago, mondayOf, money, rangeTitle, shiftLong, shiftShort, todayIso, weekTitle } from '../lib/time';
 import {
   HUES, TYPE_LABEL, absStart, availText, cellKey, countWeek, empOf, evaluate, hoursWeek, keysOf, locName, parseCell, payFor, periodOf,
   shortName, slotLabel, slotOf, swapOf, valid, type Changes, type Result, type Row,
@@ -62,6 +62,9 @@ export default function OwnerApp() {
   const tab: Tab = (['schedule', 'swaps', 'time', 'payroll', 'reports', 'tasks', 'messages'] as string[]).includes(seg) ? seg as Tab : 'schedule';
   const [msgWith, setMsgWith] = useState<string | null>(null);
   const [staffQ, setStaffQ] = useState('');
+  // notices hidden with × stay hidden until the next log-in (kept for this browser session)
+  const [dismissed, setDismissed] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem('sys-dismiss') ?? '[]'); } catch { return []; } });
+  const dismiss = (k: string) => { const n = [...dismissed, k]; setDismissed(n); try { sessionStorage.setItem('sys-dismiss', JSON.stringify(n)); } catch { /* private mode */ } };
   // swaps waiting for an answer or for my approval (badge on the Swaps box)
   const [swapWaiting, setSwapWaiting] = useState(0);
   const loadSwapWaiting = useCallback(() => { supabase.from('shift_adjustments').select('id', { count: 'exact', head: true }).eq('org_id', me!.orgId!).in('status', ['pending', 'awaiting_owner'])
@@ -307,26 +310,33 @@ export default function OwnerApp() {
         </section>
       </aside>
       <main className="boards">
-        <div className="tabsrow end">
+        <div className="tabsrow sched-tools">
+          <div className="weeknav sched-week no-print">
+            <button className="btn icon" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week">‹</button>
+            <div className="label">{weekTitle(week)}</div>
+            <button className="btn icon" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week">›</button>
+            {week !== mondayOf(todayIso()) && <button className="mini" onClick={() => setWeek(mondayOf(todayIso()))}>This week</button>}
+          </div>
+          <span className="sched-tools-gap" />
           <label className="namepick no-print">Names
             <select value={b.org.name_display ?? 'first'} onChange={async (e) => { const { error } = await supabase.from('organizations').update({ name_display: e.target.value }).eq('id', b.org.id); if (error) toast(errText(error), 'error', 'Not saved'); reload(); }} aria-label="How names show on the schedule">
               <option value="first">First name</option><option value="last">Last name</option><option value="first_initial">First name + last initial</option><option value="custom">Custom short name</option></select></label>
           {importOk && <button className="btn small no-print imp-btn" onClick={() => setSheet({ type: 'import' })} title="Read a photo of your paper schedule and fill in this week">📷 Import from photo</button>}
           <button className="btn small no-print" onClick={() => printBoards()} title="Print every location's schedule for this week"><PrintIcon /> Print all</button></div>
-        {payDue.map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
+        {payDue.filter((r) => !dismissed.includes(`pay-${r.location_id}-${r.next_pay_date}-${r.pending}`)).map((r) => <div key={r.location_id} className={`banner ${r.pending ? 'bad' : 'warn'} no-print`} style={{ marginBottom: 10 }}>
           <p><b>{r.pending ? `${r.name}: ${r.pending} payroll${r.pending > 1 ? 's' : ''} not marked paid.` : `${r.name} payday ${r.next_pay_date === todayIso() ? 'is today' : dateShort(r.next_pay_date)}.`}</b>{' '}
             {!r.next_paid && <>{rangeTitle(r.next_start, r.next_end)}: {money(r.payable)} for {r.employees} employee{r.employees === 1 ? '' : 's'}.</>}</p>
-          <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); goTab('payroll'); }}>Open payroll</button></div>)}
-        {(() => { const left = trialLeft(b.org), lim0 = locLimitOf(b.org); if (left === null || (left === 0 && lim0 !== null && b.locs.length > lim0)) return null; const tp = PLANS[(b.org.plan ?? 'premium') as keyof typeof PLANS];
+          <button className="btn small primary" onClick={() => { setPayLoc(r.location_id); goTab('payroll'); }}>Open payroll</button><button className="banner-x" onClick={() => dismiss(`pay-${r.location_id}-${r.next_pay_date}-${r.pending}`)} aria-label="Hide this notice" title="Hide until you log in again">×</button></div>)}
+        {(() => { const left = trialLeft(b.org), lim0 = locLimitOf(b.org); if (left === null || (left === 0 && lim0 !== null && b.locs.length > lim0) || dismissed.includes(`trial-${left}`)) return null; const tp = PLANS[(b.org.plan ?? 'premium') as keyof typeof PLANS];
           return <div className={`banner trial-bar no-print${left === 0 ? ' warn' : left <= 3 ? ' soon' : ''}`} style={{ marginBottom: 10 }}>
             <p>{left > 0 ? <><b>Free trial: {left} day{left === 1 ? '' : 's'} left</b> of {tp.name}, until {untilText(b.org.plan_until)}. Every feature is on.</> : <><b>Your free trial has ended.</b> Everything is still here. Choose a plan to keep adding locations.</>}</p>
-            <button className="btn small primary" onClick={() => nav('/app/plan')}>{left > 0 ? 'See plans' : 'Choose a plan'}</button></div>; })()}
-        {(() => { const p = planOf(b.org), lim = locLimitOf(b.org); return lim !== null && b.locs.length > lim && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
+            <button className="btn small primary" onClick={() => nav('/app/plan')}>{left > 0 ? 'See plans' : 'Choose a plan'}</button><button className="banner-x" onClick={() => dismiss(`trial-${left}`)} aria-label="Hide this notice" title="Hide until you log in again">×</button></div>; })()}
+        {(() => { const p = planOf(b.org), lim = locLimitOf(b.org); return lim !== null && b.locs.length > lim && !dismissed.includes('plan-limit') && <div className="banner warn no-print" style={{ marginBottom: 10 }}>
           <p><b>{(b.org.plan ?? 'free') !== 'free' && p === 'free' ? (b.org.plan_source === 'trial' ? 'Your free trial has ended.' : `Your ${PLANS[b.org.plan ?? 'free'].name} plan has ended.`) : `You have ${b.locs.length} locations on the ${PLANS[p].name} plan.`}</b> Everything keeps working, but you can't add more locations until you choose a bigger plan.</p>
-          <button className="btn small primary" onClick={() => nav('/app/plan')}>See plans</button></div>; })()}
-        {emptyWeek && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : importOk ? 'Tap a shift and pick a name, or take a photo of your paper schedule and we fill it in.' : 'Tap a shift and pick a name, or drag names from the staff list into the shifts.'}</p>
+          <button className="btn small primary" onClick={() => nav('/app/plan')}>See plans</button><button className="banner-x" onClick={() => dismiss('plan-limit')} aria-label="Hide this notice" title="Hide until you log in again">×</button></div>; })()}
+        {emptyWeek && !dismissed.includes(`empty-${week}`) && <div className="banner"><p><b>No shifts yet for {rangeTitle(week, addDays(week, 6))}.</b> {prevHas ? "Start from last week's schedule, then drag names to change it." : importOk ? 'Tap a shift and pick a name, or take a photo of your paper schedule and we fill it in.' : 'Tap a shift and pick a name, or drag names from the staff list into the shifts.'}</p>
           <div className="actions" style={{ margin: 0 }}>{prevHas && <button className="btn primary" onClick={copyLastWeek}>Copy last week</button>}
-            {importOk && <button className={`btn${prevHas ? '' : ' primary'}`} onClick={() => setSheet({ type: 'import' })}>📷 Import from a photo</button>}</div></div>}
+            {importOk && <button className={`btn${prevHas ? '' : ' primary'}`} onClick={() => setSheet({ type: 'import' })}>📷 Import from a photo</button>}</div><button className="banner-x" onClick={() => dismiss(`empty-${week}`)} aria-label="Hide this notice" title="Hide until you log in again">×</button></div>}
         <WeekGrid b={b} week={week} editable onCell={onCell} undoHint={undoHint} onUndo={doUndo} onEditLoc={(l) => setSheet({ type: 'loc', loc: l })}
           onClearWeek={(l) => { const ch: Changes = {}; for (const s of [...b.slots, ...(b.parts ?? [])].filter((x) => x.location_id === l.id)) for (let d = 0; d < 7; d++) { const k = cellKey(s.id, addDays(week, d)); if (b.assign[k]) ch[k] = null; }
             commit(ch, `${l.name}: this week's schedule is cleared. Use Undo to bring it back.`); }} />
@@ -338,7 +348,7 @@ export default function OwnerApp() {
 
   return (
     <>
-      <AppBar subtitle={b.org.name} week={week} setWeek={setWeek} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
+      <AppBar subtitle={b.org.name} week={tab === 'time' ? week : undefined} setWeek={tab === 'time' ? setWeek : undefined} notes={notes} onNotes={() => setSheet({ type: 'notes' })}
         onAccount={() => nav('/app/account')} who={<>{b.org.owner_name || me!.email} · <b>Owner</b></>}
         nav={tabs}
         profile={<ProfileMenu name={b.org.owner_name || me!.email} role={`Owner · ${b.org.name}`} items={[

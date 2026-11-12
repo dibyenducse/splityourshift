@@ -52,6 +52,7 @@ export function Login() {
         const { error: e2 } = await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
         if (e2) throw e2;
       }
+      try { sessionStorage.removeItem('sys-dismiss'); } catch { /* private */ }
       await refresh();
       nav('/app');
     } catch (ex) { setErr(errText(ex)); } finally { setBusy(false); }
