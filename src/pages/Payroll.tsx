@@ -235,6 +235,9 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
     time_clock: loc.time_clock ?? true,
   });
   const startDow = (new Date(f.pay_anchor + 'T00:00:00Z').getUTCDay() + 6) % 7;
+  // clock off: only "Scheduled hours" applies (the saved choice is kept for when the clock is back on)
+  const clockOff = loc.time_clock === false;
+  const eff = clockOff ? 'schedule' : f.pay_method;
   // Weekly: only the start weekday matters, so keep the anchor on that weekday near today.
   const setStartDow = (d: number) => { const t = todayIso(); const td = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; setF({ ...f, pay_anchor: addDays(t, -((td - d + 7) % 7)) }); };
   const save = async () => {
@@ -292,25 +295,26 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           <span className="hint">{otText(f)}.</span>
           </div>
           <div className="ps-card ps-clock"><h3>How hours are paid</h3>
-          {loc.time_clock === false ? <p className="hint" style={{ margin: 0 }}>The time clock is off at {loc.name} (see Time clock above), so each worker's <b>scheduled shift hours</b> are paid. You can still edit anyone's hours on the payroll.</p> : <>
+          {clockOff && <p className="pm-off"><span aria-hidden="true">⏸</span><span>The time clock is <b>off</b> at {loc.name}, so only <b>Scheduled hours</b> can be used. Turn the clock on in the Time clock box above to pay by the clock; your last choice comes back.</span></p>}
+          <>
             <div className="cks-methods pm3">
               {([['actual', '1', 'By the clock', 'Pay from clock-in to clock-out, minute by minute. Late arrivals are paid less; staying late is paid.'],
                  ['schedule', '2', 'Scheduled hours', 'Pay each assigned shift as scheduled, whatever the clock says. The clock is kept as a record of who came and when.'],
                  ['grace', '3', 'Scheduled hours + grace period', 'Pay the shift as scheduled when they clock in within the grace period. Later than that, they get the late options.']] as const).map(([m, n, t, sub]) =>
-                <button key={m} type="button" className={`cks-method${f.pay_method === m ? ' on' : ''}`} aria-pressed={f.pay_method === m} onClick={() => setF({ ...f, pay_method: m })}>
-                  <span className="pm-n">{n}</span><b>{t}</b><small>{sub}</small></button>)}
+                <button key={m} type="button" className={`cks-method${eff === m ? ' on' : ''}${clockOff && m !== 'schedule' ? ' shadow' : ''}`} aria-pressed={eff === m} disabled={clockOff && m !== 'schedule'} onClick={() => setF({ ...f, pay_method: m })}>
+                  <span className="pm-n">{n}</span><b>{t}{clockOff && m !== 'schedule' && <span className="tag plain pm-need">Needs the time clock</span>}</b><small>{sub}</small></button>)}
             </div>
-            {f.pay_method === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
+            {eff === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
               <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${f.grace_minutes === m ? ' on' : ''}`} aria-pressed={f.grace_minutes === m} onClick={() => setF({ ...f, grace_minutes: m })}>{m} min</button>)}
                 <label className="cks-custom"><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Grace minutes" /> min</label></div>
               <span className="hint">Past {f.grace_minutes} minutes the worker chooses: just clock in (paid from the real time), give the time back with a time swap, or ask you to pay from the start.</span></div>}
-            {(() => { const g = f.pay_method === 'grace' ? f.grace_minutes : 10, inT = Math.max(1, Math.min(g, 5)), lateT = g + 15, hm = (m: number) => `7:${String(m).padStart(2, '0')}`;
-              return <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{f.pay_method === 'grace' ? `, grace ${g} min` : ''}</b>
-                <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{f.pay_method === 'actual' ? `Paid from ${hm(inT)}.` : f.pay_method === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace, counts as on time: paid from 7:00.'}</span></div>
-                <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{f.pay_method === 'actual' ? `Paid from ${hm(lateT)}.` : f.pay_method === 'schedule' ? 'Still paid 7:00 – 3:00; the late time is recorded.' : `Past grace: paid from ${hm(lateT)}, unless they pick a time swap or you approve paying from 7:00.`}</span></div>
-                <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{f.pay_method === 'schedule' ? 'Not paid extra.' : 'The 20 extra minutes are paid, unless they say “we sorted it out” with the coworker who came late.'}</span></div>
+            {!clockOff && (() => { const g = eff === 'grace' ? f.grace_minutes : 10, inT = Math.max(1, Math.min(g, 5)), lateT = g + 15, hm = (m: number) => `7:${String(m).padStart(2, '0')}`;
+              return <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{eff === 'grace' ? `, grace ${g} min` : ''}</b>
+                <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{eff === 'actual' ? `Paid from ${hm(inT)}.` : eff === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace, counts as on time: paid from 7:00.'}</span></div>
+                <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{eff === 'actual' ? `Paid from ${hm(lateT)}.` : eff === 'schedule' ? 'Still paid 7:00 – 3:00; the late time is recorded.' : `Past grace: paid from ${hm(lateT)}, unless they pick a time swap or you approve paying from 7:00.`}</span></div>
+                <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{eff === 'schedule' ? 'Not paid extra.' : 'The 20 extra minutes are paid, unless they say “we sorted it out” with the coworker who came late.'}</span></div>
               </div>; })()}
-          </>}
+          </>
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
           {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in the Swaps tab.</span>}
           </div>

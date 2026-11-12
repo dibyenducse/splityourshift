@@ -1441,3 +1441,8 @@ td.cell.mine-tap:hover .chip, .part.mine-tap:hover .chip { outline: 2px solid va
 .pm-n { position: absolute; left: 12px; top: 10px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
 .cks-method.on .pm-n { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pm-grace { margin: 4px 0 0 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 12px 12px 0; }
+
+.cks-method.shadow { opacity: .45; cursor: not-allowed; background: var(--surface-2); filter: grayscale(1); }
+.pm-need { margin-left: 6px; font-size: 11px; vertical-align: middle; }
+.pm-off { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); font-size: 13.5px; }
+.pm-off > span:first-child { font-size: 18px; }
