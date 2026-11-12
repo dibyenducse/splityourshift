@@ -29,6 +29,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
   const [tick, setTick] = useState(0);
   const [history, setHistory] = useState<{ line: PayLine; tab: 'hours' | 'pay' } | null>(null);
   const refresh = () => setTick((t) => t + 1);
+  const [pop, setPop] = useState<'freq' | 'payday' | null>(null);
   useEffect(() => { if (initialLoc) setLocId(initialLoc); }, [initialLoc]);
 
   useEffect(() => {
@@ -103,6 +104,12 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
     try { await markPaid(loc.id, row!.period_start); toast(`${loc.name} payroll for ${periodTitle(row!)} is marked paid. Reminders for it stop.`, 'ok', 'Paid'); refresh(); }
     catch (e) { toast(errText(e), 'error', "Couldn't mark paid"); }
   };
+  // payroll type and payday change right from the tiles
+  const quickSave = async (patch: Partial<PaySettings>) => {
+    const { error } = await supabase.from('locations').update(patch).eq('id', loc.id);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(`Saved. ${loc.name}: ${scheduleText({ ...(loc as unknown as PaySettings), ...patch })}.`, 'ok', 'Payroll settings'); setPop(null); setSel(null); reload(); refresh();
+  };
   const cell = { width: 84, minHeight: 32, border: '1px solid var(--line-strong)', borderRadius: 6, padding: '4px 6px', background: 'var(--surface)' } as const;
 
   return (
@@ -133,22 +140,37 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
       <section className="panel">
         <div className="panel-head"><h2>{loc.name} payroll</h2><span className="clock-tools">{row && <span className={`tag ${tagFor[status]}`}>{status === 'Paid' ? `Paid · ${dateShort(row.pay_date)}` : `${status} · pay ${dateShort(row.pay_date)}`}</span>}</span></div>
-        <div className="payctl">
-          {b.locs.length > 1 && <div className="field"><label htmlFor="pr-loc">Business</label>
-            <select id="pr-loc" value={loc.id} onChange={(e) => setLocId(e.target.value)}>{b.locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>}
-          <div className="period-bar">
-            <button className="btn icon" disabled={!row || rows.indexOf(row) >= rows.length - 1} onClick={() => setSel(rows[rows.indexOf(row!) + 1].period_start)} aria-label="Earlier pay period">‹</button>
-            {row && <div className="period-card"><small>Pay period</small><b>{periodTitle(row)}</b>
-              <span>Payday {dateShort(row.pay_date)} · <span className={`tag ${tagFor[status]}`}>{status}</span></span>
-              {weeksOf(row).length > 1 && <span className="period-weeks">{weeksOf(row).map((w, i) => <span key={w}>Week {i + 1}: {rangeTitle(w, addDays(w, 6)).replace(/, \d{4}$/, '')}</span>)}</span>}</div>}
-            <button className="btn icon" disabled={!row || rows.indexOf(row) <= 0} onClick={() => setSel(rows[rows.indexOf(row!) - 1].period_start)} aria-label="Later pay period">›</button>
-            <label className="period-all"><span>All periods</span><select id="pr-period" value={sel ?? ''} onChange={(e) => setSel(e.target.value)}>{rows.map((r) => <option key={r.period_start} value={r.period_start}>{periodTitle(r)} · pay {dateShort(r.pay_date)} · {statusOf(r, today)}</option>)}</select></label>
+        {b.locs.length > 1 && <div className="biz-chips" role="tablist" aria-label="Business">{b.locs.map((l) => (
+          <button key={l.id} role="tab" aria-selected={l.id === loc.id} className={`biz-chip${l.id === loc.id ? ' on' : ''}`} onClick={() => setLocId(l.id)}>
+            <span aria-hidden="true">{l.type === 'gas' ? '⛽' : l.type === 'shop' ? '🛒' : '🏨'}</span>{l.name}</button>))}</div>}
+        <div className="tiles pay-tiles" style={{ marginBottom: 14 }}>
+          <div className={`tile tile-edit${pop === 'freq' ? ' open' : ''}`}>
+            <button className="tile-btn" onClick={() => setPop(pop === 'freq' ? null : 'freq')} aria-expanded={pop === 'freq'}><div className="k">Payroll type <span className="tile-pen" aria-hidden="true">✎</span></div>
+              <div className="v" style={{ fontSize: 22 }}>{FREQ_LABEL[loc.pay_frequency ?? 'weekly']}</div><div className="s">{scheduleText(loc as unknown as PaySettings)}</div></button>
+            {pop === 'freq' && <div className="tile-pop">
+              <div className="tp-opts">{(['weekly', 'biweekly', 'monthly'] as PayFrequency[]).map((fq) => <button key={fq} className={`cks-pill${(loc.pay_frequency ?? 'weekly') === fq ? ' on' : ''}`} onClick={() => quickSave({ pay_frequency: fq })}>{FREQ_LABEL[fq]}</button>)}</div>
+              {(loc.pay_frequency ?? 'weekly') === 'weekly' && <label className="tp-field">Week starts on<select value={(new Date((loc.pay_anchor ?? todayIso()).slice(0, 10) + 'T00:00:00Z').getUTCDay() + 6) % 7}
+                onChange={(e) => { const d = +e.target.value, t0 = todayIso(), td = (new Date(t0 + 'T00:00:00Z').getUTCDay() + 6) % 7; quickSave({ pay_anchor: addDays(t0, -((td - d + 7) % 7)) }); }}>{DAY_LONG.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></label>}
+              {loc.pay_frequency === 'biweekly' && <label className="tp-field">A 2-week period starts on<input type="date" value={(loc.pay_anchor ?? todayIso()).slice(0, 10)} onChange={(e) => e.target.value && quickSave({ pay_anchor: e.target.value })} /></label>}
+              <small className="hint">Saved right away. Payrolls already marked paid don't change.</small></div>}
           </div>
-        </div>
-        <div className="tiles" style={{ marginBottom: 14 }}>
-          <div className="tile"><div className="k">Payroll type</div><div className="v" style={{ fontSize: 22 }}>{FREQ_LABEL[loc.pay_frequency ?? 'weekly']}</div><div className="s">{scheduleText(loc as unknown as PaySettings)}</div></div>
-          <div className="tile"><div className="k">Current pay period</div><div className="v" style={{ fontSize: 22 }}>{cur ? periodTitle(cur) : '—'}</div><div className="s">{cur ? `paid ${dateLong(cur.pay_date)}` : ''}</div></div>
-          <div className="tile"><div className="k">Upcoming payment date</div><div className="v" style={{ fontSize: 22 }}>{next ? dateShort(next.pay_date) : '—'}</div><div className="s">{next ? `for ${periodTitle(next)}` : ''}</div></div>
+          <div className="tile tile-period">
+            <div className="k">Pay period{row && cur && row.period_start !== cur.period_start && <button className="mini" onClick={() => setSel(cur.period_start)}>Back to current</button>}</div>
+            <div className="tp-move">
+              <button className="btn icon" disabled={!row || rows.indexOf(row) >= rows.length - 1} onClick={() => setSel(rows[rows.indexOf(row!) + 1].period_start)} aria-label="Earlier pay period">‹</button>
+              <div className="v" style={{ fontSize: 20 }}>{row ? periodTitle(row) : '—'}</div>
+              <button className="btn icon" disabled={!row || rows.indexOf(row) <= 0} onClick={() => setSel(rows[rows.indexOf(row!) - 1].period_start)} aria-label="Later pay period">›</button></div>
+            <div className="s">{row ? <>{cur && row.period_start === cur.period_start ? 'This period · ' : ''}<span className={`tag ${tagFor[status]}`}>{status}</span>{weeksOf(row).length > 1 ? ` · ${weeksOf(row).length} weeks` : ''}</> : ''}</div>
+          </div>
+          <div className={`tile tile-edit${pop === 'payday' ? ' open' : ''}`}>
+            <button className="tile-btn" onClick={() => setPop(pop === 'payday' ? null : 'payday')} aria-expanded={pop === 'payday'}><div className="k">{row && next && row.period_start !== next.period_start ? 'Payday for this period' : 'Upcoming payment date'} <span className="tile-pen" aria-hidden="true">✎</span></div>
+              <div className="v" style={{ fontSize: 22 }}>{row ? dateShort(row.pay_date) : next ? dateShort(next.pay_date) : '—'}</div><div className="s">{loc.pay_frequency === 'monthly' ? `Day ${loc.pay_month_day === 31 ? 'last' : loc.pay_month_day} of the ${loc.pay_month_offset ? 'next' : 'same'} month` : `The next ${DAY_LONG[loc.pay_weekday ?? 4]} after the period`}</div></button>
+            {pop === 'payday' && <div className="tile-pop">
+              {loc.pay_frequency !== 'monthly' ? <div className="tp-opts">{DAY_LONG.map((d, i) => <button key={d} className={`cks-pill${(loc.pay_weekday ?? 4) === i ? ' on' : ''}`} onClick={() => quickSave({ pay_weekday: i })}>{d.slice(0, 3)}</button>)}</div>
+                : <><label className="tp-field">Date of the month<select value={loc.pay_month_day ?? 31} onChange={(e) => quickSave({ pay_month_day: +e.target.value })}>{Array.from({ length: 30 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}<option value={31}>Last day</option></select></label>
+                  <label className="tp-field">Paid in<select value={loc.pay_month_offset ?? 1} onChange={(e) => quickSave({ pay_month_offset: +e.target.value })}><option value={0}>The same month</option><option value={1}>The next month</option></select></label></>}
+              <small className="hint">{loc.pay_frequency !== 'monthly' ? 'Payday is this weekday, right after the period ends. ' : ''}Saved right away.</small></div>}
+          </div>
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
@@ -219,7 +241,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
       </section>
 
       </div>
-      <aside className="pay-side"><PaySettingsPanel key={`${loc.id}-${loc.time_clock}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} /></aside>
+      <aside className="pay-side"><PaySettingsPanel key={`${loc.id}-${loc.time_clock}-${loc.pay_frequency}-${loc.pay_anchor}-${loc.pay_weekday}-${loc.pay_month_day}-${loc.pay_month_offset}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} /></aside>
       </div>
       {history && row && <WorkerHistory key={history.line.employee_id + history.tab} b={b} locId={loc.id} line={history.line} initialTab={history.tab} start={row.period_start} end={row.period_end} onClose={() => setHistory(null)} />}
 

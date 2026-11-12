@@ -1535,3 +1535,22 @@ table.data.sched-hours { min-width: 760px; }
 .name-acts { display: flex; gap: 4px; margin-top: 4px; }
 .name-acts .hist-btn { font: inherit; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface-2); color: var(--accent); cursor: pointer; white-space: nowrap; }
 .name-acts .hist-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* payroll: interactive tiles */
+.biz-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.biz-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 700; padding: 8px 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.biz-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 30%, transparent); }
+.pay-tiles .tile { position: relative; }
+.tile-edit { padding: 0; }
+.tile-btn { display: block; width: 100%; height: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: inherit; padding: 14px 16px; cursor: pointer; border-radius: inherit; }
+.tile-edit:hover, .tile-edit.open { border-color: var(--accent); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 15%, transparent); }
+.tile-pen { color: var(--accent); font-size: 13px; margin-left: 4px; }
+.tile-pop { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--accent); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
+.tp-opts { display: flex; flex-wrap: wrap; gap: 5px; }
+.tp-field { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.tp-field select, .tp-field input { min-height: 34px; }
+.tile-period .k { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.tp-move { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.tp-move .v { flex: 1; text-align: center; line-height: 1.1; }
+.tp-move .btn.icon { min-width: 32px; min-height: 32px; padding: 0; }
+.tile-period { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: linear-gradient(135deg, var(--accent-soft), var(--surface) 80%); }
