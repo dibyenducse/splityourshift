@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase, errText } from '../lib/supabase';
 import { DAY_SHORT, addDays, mmdd, rangeTitle, shiftLong, todayIso } from '../lib/time';
-import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, round2, slotById } from '../lib/rules';
+import { cellKey, empOf, entryHours, keysOf, locName, parseCell, slotLabel, slotOf, round2, slotById } from '../lib/rules';
 import type { Bundle, TimeEntry } from '../lib/types';
 import { ConfirmButton, Sheet, useToast } from '../components/ui';
 import { clockTime, shiftWindow } from '../components/Clock';
@@ -41,6 +41,16 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
     reload();
   };
   const total = round2(weekEntries.reduce((n, e) => n + entryHours(e), 0));
+  // scheduled hours this week, per worker (shown with the clock records, or alone where the clock is off)
+  const anyClock = b.locs.some((l) => l.time_clock !== false);
+  const [hv, setHv] = useState<'clock' | 'sched'>(anyClock ? 'clock' : 'sched');
+  const schedRows = b.emps.map((w) => {
+    const days = DAY_SHORT.map((_, i) => { const d = addDays(week, i); const ks = keysOf(b, w.id).filter((k) => parseCell(k).date === d); if (!ks.length) return null;
+      return { h: ks.reduce((n, k) => n + (slotOf(b, k)?.hours ?? 0), 0), label: ks.map((k) => slotLabel(b, k)).join(', ') }; });
+    const shifts = keysOf(b, w.id).filter((k) => parseCell(k).date >= week && parseCell(k).date < addDays(week, 7)).length;
+    return { id: w.id, name: w.name, days, shifts, hours: round2(days.reduce((n, d) => n + (d?.h ?? 0), 0)) };
+  }).filter((r) => r.shifts > 0).sort((x, y) => x.name.localeCompare(y.name));
+  const schedTotal = round2(schedRows.reduce((n, r) => n + r.hours, 0));
 
   return (
     <div className="layout">{tabs}
@@ -78,15 +88,27 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
           <div key={k} className="oncard"><span className="lamp" /><span className="main"><b>{empOf(b, b.assign[k])?.name}</b><span>{slotLabel(b, k)}</span></span>
             <button className="btn small" onClick={() => setEdit({ empId: b.assign[k], cell: k })}>Add hours</button></div>))}</div></section>}
 
-      <section className="panel"><div className="panel-head"><h2>Clocked hours · {rangeTitle(week, addDays(week, 6))}</h2>
-        <button className="btn small primary" onClick={() => setEdit({})}>+ Add hours</button></div>
-        <p className="hint">{total} hours this week. Edit any row if the times are wrong; every change shows in the worker's hours.</p>
+      <section className="panel hours-week"><div className="panel-head"><h2>Hours this week · {rangeTitle(week, addDays(week, 6))}</h2>
+        {hv === 'clock' && <button className="btn small primary" onClick={() => setEdit({})}>+ Add hours</button>}</div>
+        <div className="seg pf-tabs hv-tabs" role="tablist">
+          <button role="tab" aria-selected={hv === 'clock'} className={hv === 'clock' ? 'on' : ''} onClick={() => setHv('clock')} disabled={!anyClock}>⏱ Clock records{anyClock ? ` · ${total} h` : ' · not used'}</button>
+          <button role="tab" aria-selected={hv === 'sched'} className={hv === 'sched' ? 'on' : ''} onClick={() => setHv('sched')}>📅 Scheduled hours · {schedTotal} h</button></div>
+        {hv === 'sched' ? <>
+          <p className="hint">From the schedule: each worker's assigned shifts this week{anyClock ? ', whether or not they clocked in' : ' (the time clock is off, so payroll pays these hours)'}.</p>
+          <div className="table-wrap"><table className="data sched-hours"><thead><tr><th>Worker</th>{DAY_SHORT.map((d, i) => <th key={d} className="num">{d} {mmdd(addDays(week, i))}</th>)}<th className="num">Shifts</th><th className="num">Hours</th></tr></thead><tbody>
+            {schedRows.map((r) => <tr key={r.id}><td><b>{r.name}</b></td>{r.days.map((d, i) => <td key={i} className="num">{d ? <span className="sh-pill" title={d.label}>{d.h}h</span> : <span className="sh-off">·</span>}</td>)}
+              <td className="num">{r.shifts}</td><td className="num"><b>{r.hours} h</b></td></tr>)}
+            {!schedRows.length && <tr><td colSpan={10}>Nobody is scheduled this week.</td></tr>}</tbody>
+            {schedRows.length > 0 && <tfoot><tr><td><b>Total</b></td>{DAY_SHORT.map((d) => <td key={d} />)}<td className="num">{schedRows.reduce((n, r) => n + r.shifts, 0)}</td><td className="num"><b>{schedTotal} h</b></td></tr></tfoot>}</table></div>
+        </> : <>
+          <p className="hint">Real clock-in and clock-out times. Edit any row if the times are wrong; every change shows in the worker's hours.</p>
         <div className="table-wrap"><table className="data"><thead><tr><th>Worker</th><th>Shift</th><th>In</th><th>Out</th><th className="num">Hours</th><th>Source</th><th /></tr></thead><tbody>
           {weekEntries.map((e) => <tr key={e.id}><td>{empOf(b, e.employee_id)?.name ?? '?'}</td><td>{shiftOf(e)}{e.note && <div className="hint" style={{ margin: 0 }}>{e.note}</div>}</td><td>{clockTime(e.clock_in)}</td>
             <td>{e.clock_out ? clockTime(e.clock_out) : <span className="tag ok">On the clock</span>}</td><td className="num">{e.clock_out ? entryHours(e) : '—'}</td>
             <td>{e.source === 'clock' ? 'Phone' : e.source === 'owner' ? 'You' : 'Fix request'}</td>
             <td><button className="mini" onClick={() => setEdit({ entry: e })}>Edit</button></td></tr>)}
-          {!weekEntries.length && <tr><td colSpan={7}>No clocked hours this week yet.</td></tr>}</tbody></table></div></section>
+          {!weekEntries.length && <tr><td colSpan={7}>No clocked hours this week yet.</td></tr>}</tbody></table></div>
+        </>}</section>
 
       {edit && <EntrySheet b={b} week={week} edit={edit} onClose={() => setEdit(null)} reload={reload} />}
     </div>

@@ -27,7 +27,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
   const [sel, setSel] = useState<string | null>(null);
   const [lines, setLines] = useState<PayLine[] | null>(null);
   const [tick, setTick] = useState(0);
-  const [history, setHistory] = useState<PayLine | null>(null);
+  const [history, setHistory] = useState<{ line: PayLine; tab: 'hours' | 'pay' } | null>(null);
   const refresh = () => setTick((t) => t + 1);
   useEffect(() => { if (initialLoc) setLocId(initialLoc); }, [initialLoc]);
 
@@ -107,7 +107,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
   return (
     <div className="layout">{tabs}
-      <PaySettingsPanel key={`${loc.id}-${loc.time_clock}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} />
+      <div className="pay-grid"><div className="pay-main">
 
       <section className="panel">
         <div className="panel-head"><h2>Payroll dashboard · all businesses</h2><span className="tag plain">{dash.length} business{dash.length === 1 ? '' : 'es'}</span></div>
@@ -161,7 +161,9 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <th>Employee</th><th className="num">Hours</th><th>Hourly rate</th><th className="num">Regular pay</th><th className="num">Overtime pay</th><th>Bonus</th><th>Deduction</th><th className="num">Gross</th><th className="num">Net</th><th>Status</th><th>Payslip</th></tr></thead>
           <tbody>{(lines ?? []).map((l) => (
             <tr key={l.employee_id}>
-              <td><button className="name-link" onClick={() => setHistory(l)} title={`${l.name}: hours day by day and pay history`}>{l.name}<small>Hours &amp; pay history ›</small></button></td>
+              <td className="name-cell"><b>{l.name}</b>
+                <span className="name-acts"><button className="hist-btn" onClick={() => setHistory({ line: l, tab: 'hours' })} title={`${l.name}: hours day by day (scheduled and clocked)`}>⏱ Hours</button>
+                  <button className="hist-btn" onClick={() => setHistory({ line: l, tab: 'pay' })} title={`${l.name}: every payday`}>$ Pay</button></span></td>
               <td className="num">{!locked && l.method === 'schedule'
                 ? <span className="hrs-edit"><input type="number" min={0} max={744} step={0.25} defaultValue={l.hours} key={`${l.employee_id}-h-${l.hours}-${sel}`} aria-label={`${l.name} hours`} style={{ ...cell, width: 74 }}
                     onBlur={(e) => saveHours(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /> h</span>
@@ -180,8 +182,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
               <td>{locked ? <span className="tag ok">Paid</span> : <span className="tag warn">Pending</span>}</td>
               <td><div className="actions" style={{ margin: 0, flexWrap: 'nowrap' }}>
                 <button className="btn small" onClick={() => printReport(report()!, 'slips', l.employee_id)}>Print</button>
-                <button className="btn small" onClick={() => downloadPdf(report()!, 'slips', l.employee_id)}>PDF</button>
-                <button className="btn small" onClick={() => setHistory(l)} title={`${l.name}: hours and pay history`}>History</button></div></td>
+                <button className="btn small" onClick={() => downloadPdf(report()!, 'slips', l.employee_id)}>PDF</button></div></td>
             </tr>))}</tbody>
           <tfoot><tr><td><b>Total</b></td><td className="num"><b>{hrs(t.hours)} h</b></td><td /><td className="num">{money(t.reg)}</td><td className="num">{t.otPay ? money(t.otPay) : '—'}</td><td>{money(t.bonus)}</td><td>{money(t.ded)}</td><td className="num">{money(t.gross)}</td><td className="num"><b>{money(t.net)}</b></td><td /><td /></tr></tfoot></table></div>
 
@@ -217,7 +218,10 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
         </div>
       </section>
 
-      {history && row && <WorkerHistory b={b} locId={loc.id} line={history} start={row.period_start} end={row.period_end} onClose={() => setHistory(null)} />}
+      </div>
+      <aside className="pay-side"><PaySettingsPanel key={`${loc.id}-${loc.time_clock}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} /></aside>
+      </div>
+      {history && row && <WorkerHistory key={history.line.employee_id + history.tab} b={b} locId={loc.id} line={history.line} initialTab={history.tab} start={row.period_start} end={row.period_end} onClose={() => setHistory(null)} />}
 
     </div>
   );
@@ -359,12 +363,15 @@ function weeksOf(r: { period_start: string; period_end: string }) {
 
 interface HEntry { id: string; slot_id: string | null; work_date: string; clock_in: string; clock_out: string | null; source: string | null; note: string | null; location_id: string | null }
 
-/** One worker in one pay period: every day they worked (clock times or scheduled shifts), weekly totals, and every payday. */
-function WorkerHistory({ b, locId, line, start, end, onClose }: { b: Bundle; locId: string; line: PayLine; start: string; end: string; onClose: () => void }) {
-  const [tab, setTab] = useState<'hours' | 'pay'>('hours');
+/** One worker in one pay period: each day's scheduled shift and real clock times side by side, which one was paid, weekly totals, and every payday. */
+function WorkerHistory({ b, locId, line, initialTab, start, end, onClose }: { b: Bundle; locId: string; line: PayLine; initialTab: 'hours' | 'pay'; start: string; end: string; onClose: () => void }) {
+  const [tab, setTab] = useState<'hours' | 'pay'>(initialTab);
   const [entries, setEntries] = useState<HEntry[] | null>(null);
   const [shifts, setShifts] = useState<{ slot_id: string; work_date: string }[]>([]);
-  const bySched = line.method === 'schedule';
+  const loc = b.locs.find((l) => l.id === locId)!;
+  const clockOff = loc.time_clock === false;
+  const mode: 'clock' | 'schedule' | 'grace' = clockOff || line.method === 'schedule' || loc.pay_method === 'schedule' ? 'schedule' : loc.pay_method === 'grace' ? 'grace' : 'clock';
+  const grace = Number(loc.grace_minutes ?? 10);
   const tz = b.org.time_zone || 'America/Chicago';
   useEffect(() => {
     let alive = true;
@@ -375,46 +382,68 @@ function WorkerHistory({ b, locId, line, start, end, onClose }: { b: Bundle; loc
       ]);
       if (!alive) return;
       setEntries(((te ?? []) as HEntry[]).filter((e) => !e.location_id || e.location_id === locId));
-      setShifts(((as ?? []) as { slot_id: string; work_date: string }[]).filter((a) => slotById(b, a.slot_id)?.location_id === locId));
+      setShifts(((as ?? []) as { slot_id: string; work_date: string }[]).filter((x) => slotById(b, x.slot_id)?.location_id === locId));
     })();
     return () => { alive = false; };
   }, [line.employee_id, start, end, locId, b]);
   const t = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   const dayLabel = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'numeric', day: 'numeric' });
-  const shiftName = (slot: string | null) => { const sl = slot ? slotById(b, slot) : null; return sl ? shiftLong(sl.start_hour, sl.hours) : 'No scheduled shift'; };
-  type Row = { key: string; date: string; shift: string; inT?: string; outT?: string; h: number; src?: string; note?: string | null; open?: boolean };
-  const rowsAll: Row[] = bySched
-    ? shifts.map((a) => { const sl = slotById(b, a.slot_id)!; const en = (entries ?? []).find((e) => e.slot_id === a.slot_id && e.work_date === a.work_date);
-        return { key: a.slot_id + a.work_date, date: a.work_date, shift: shiftName(a.slot_id), inT: en ? t(en.clock_in) : undefined, outT: en?.clock_out ? t(en.clock_out) : undefined, h: sl.hours, src: 'schedule' }; })
-    : (entries ?? []).map((e) => ({ key: e.id, date: e.work_date, shift: shiftName(e.slot_id), inT: t(e.clock_in), outT: e.clock_out ? t(e.clock_out) : undefined, h: e.clock_out ? entryHours(e) : 0, src: e.source ?? 'clock', note: e.note, open: !e.clock_out }));
+  // minutes from the shift's start to the clock-in (local time of the business)
+  const lateMin = (date: string, startHour: number, iso: string) => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+    const dayDiff = Math.round((Date.parse(`${parts.year}-${parts.month}-${parts.day}T00:00:00Z`) - Date.parse(date + 'T00:00:00Z')) / 864e5);
+    return dayDiff * 1440 + Number(parts.hour) * 60 + Number(parts.minute) - startHour * 60;
+  };
+  type Row = { key: string; date: string; shift: string; schedH: number | null; inT?: string; outT?: string; clockH: number | null; open?: boolean; late?: number; src?: string | null; note?: string | null; paid: 'sched' | 'clock' | 'none' };
+  const rows: Row[] = [];
+  const used = new Set<string>();
+  for (const a of shifts) {
+    const sl = slotById(b, a.slot_id)!, en = (entries ?? []).find((e) => e.slot_id === a.slot_id && e.work_date === a.work_date);
+    if (en) used.add(en.id);
+    const late = en ? lateMin(a.work_date, sl.start_hour, en.clock_in) : undefined;
+    const paid: Row['paid'] = mode === 'schedule' ? 'sched' : !en ? 'none' : mode === 'grace' && (late ?? 0) <= grace ? 'sched' : 'clock';
+    rows.push({ key: a.slot_id + a.work_date, date: a.work_date, shift: shiftLong(sl.start_hour, sl.hours), schedH: sl.hours, inT: en ? t(en.clock_in) : undefined, outT: en?.clock_out ? t(en.clock_out) : undefined,
+      clockH: en?.clock_out ? entryHours(en) : null, open: !!en && !en.clock_out, late, src: en?.source, note: en?.note, paid });
+  }
+  for (const e of entries ?? []) if (!used.has(e.id)) {
+    const sl = e.slot_id ? slotById(b, e.slot_id) : null;
+    rows.push({ key: e.id, date: e.work_date, shift: sl ? shiftLong(sl.start_hour, sl.hours) : 'Not on the schedule', schedH: null, inT: t(e.clock_in), outT: e.clock_out ? t(e.clock_out) : undefined,
+      clockH: e.clock_out ? entryHours(e) : null, open: !e.clock_out, src: e.source, note: e.note, paid: mode === 'schedule' ? 'none' : 'clock' });
+  }
+  rows.sort((x, y) => x.date.localeCompare(y.date) || (x.inT ?? '').localeCompare(y.inT ?? ''));
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const sum = (rs: Row[], f: (r: Row) => number | null) => r2(rs.reduce((n, r) => n + (f(r) ?? 0), 0));
   const weeks = weeksOf({ period_start: start, period_end: end });
-  const total = Math.round(rowsAll.reduce((n, r) => n + r.h, 0) * 100) / 100;
-  const srcText = (s?: string) => s === 'owner' ? 'Edited by you' : s === 'fix' ? 'Fixed (approved)' : s === 'schedule' ? 'Scheduled' : 'Phone';
+  const srcText = (s?: string | null) => s === 'owner' ? 'edited by you' : s === 'fix' ? 'fix approved' : 'phone';
+  const modeText = mode === 'schedule' ? (clockOff ? 'Scheduled hours (time clock off)' : 'Scheduled hours (clock kept as a record)') : mode === 'grace' ? `Scheduled hours if clocked in within ${grace} min, otherwise clock time` : 'Clock time (clock-in to clock-out)';
   return (
     <Sheet eyebrow={`${rangeTitle(start, end)}`} title={line.name} onClose={onClose}>
       <div className="wh-sum">
-        <div><small>Hours this period</small><b>{hrs(line.hours)} h</b>{line.overtime_hours > 0 && <em>{hrs(line.regular_hours)} + {hrs(line.overtime_hours)} overtime</em>}</div>
-        <div><small>Pay</small><b>{money(line.net)}</b><em>{money(line.rate)}/h{line.bonus ? ` · +${money(line.bonus)} bonus` : ''}{line.deduction ? ` · −${money(line.deduction)}` : ''}</em></div>
-        <div><small>Counted from</small><b className="wh-src">{bySched ? 'Schedule' : 'Time clock'}</b><em>{bySched ? 'scheduled shift hours' : 'clock-in to clock-out'}</em></div>
+        <div><small>Paid hours</small><b>{hrs(line.hours)} h</b>{line.overtime_hours > 0 ? <em>{hrs(line.regular_hours)} + {hrs(line.overtime_hours)} overtime</em> : <em>{money(line.net)} pay</em>}</div>
+        <div className="wh-s"><small>📅 Scheduled</small><b>{entries ? `${sum(rows, (r) => r.schedH)} h` : '…'}</b><em>{rows.filter((r) => r.schedH !== null).length} shifts on the schedule</em></div>
+        <div className="wh-c"><small>⏱ Clocked</small><b>{clockOff ? 'Off' : entries ? `${sum(rows, (r) => r.clockH)} h` : '…'}</b><em>{clockOff ? 'time clock not used here' : `${rows.filter((r) => r.inT).length} clock-ins`}</em></div>
       </div>
+      <p className="wh-mode"><b>Paid by:</b> {modeText}. <span className="wh-key"><i className="k-s" /> scheduled <i className="k-c" /> clocked <i className="k-p" /> what was paid</span></p>
       <div className="seg pf-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'hours'} className={tab === 'hours' ? 'on' : ''} onClick={() => setTab('hours')}>Hours, day by day</button>
-        <button role="tab" aria-selected={tab === 'pay'} className={tab === 'pay' ? 'on' : ''} onClick={() => setTab('pay')}>Pay history</button></div>
+        <button role="tab" aria-selected={tab === 'hours'} className={tab === 'hours' ? 'on' : ''} onClick={() => setTab('hours')}>⏱ Hours, day by day</button>
+        <button role="tab" aria-selected={tab === 'pay'} className={tab === 'pay' ? 'on' : ''} onClick={() => setTab('pay')}>$ Pay history</button></div>
       {tab === 'hours' && (!entries ? <p className="hint">Loading…</p> : <>
-        {weeks.map((w, i) => { const rs = rowsAll.filter((r) => r.date >= w && r.date <= addDays(w, 6)).sort((x, y) => x.date.localeCompare(y.date)), wh = Math.round(rs.reduce((n, r) => n + r.h, 0) * 100) / 100;
+        {weeks.map((w, i) => { const rs = rows.filter((r) => r.date >= w && r.date <= addDays(w, 6));
           return (<div key={w} className="wh-week">
-            <div className="wh-week-h"><b>{weeks.length > 1 ? `Week ${i + 1} · ` : ''}{rangeTitle(w, addDays(w, 6))}</b><span className={`wh-wtot${wh > 40 ? ' ot' : ''}`}>{hrs(wh)} h{wh > 40 ? ` · ${hrs(wh - 40)} h over 40` : ''}</span></div>
-            {rs.length ? <div className="wh-rows">{rs.map((r) => (
-              <div key={r.key} className={`wh-row${r.open ? ' open' : ''}`}>
-                <span className="wh-day">{dayLabel(r.date)}</span>
-                <span className="wh-shift"><b>{r.shift}</b>{r.note && <small>{r.note}</small>}</span>
-                <span className="wh-times">{r.inT ? <>{r.inT} – {r.outT ?? <em>still on</em>}</> : <em>{bySched ? 'no clock record' : ''}</em>}</span>
-                <span className="wh-h">{r.open ? '—' : `${hrs(r.h)} h`}</span>
-                <span className={`wh-tag ${r.src}`}>{srcText(r.src)}</span>
-              </div>))}</div> : <p className="empty-note">No hours this week.</p>}
+            <div className="wh-week-h"><b>{weeks.length > 1 ? `Week ${i + 1} · ` : ''}{rangeTitle(w, addDays(w, 6))}</b>
+              <span className="wh-tots"><span className="wh-chip s">📅 {sum(rs, (r) => r.schedH)} h</span>{!clockOff && <span className="wh-chip c">⏱ {sum(rs, (r) => r.clockH)} h</span>}</span></div>
+            {rs.length ? <div className="wh-grid">
+              <div className="wh-gh"><span>Day</span><span>📅 Scheduled</span><span>⏱ Clocked</span></div>
+              {rs.map((r) => (
+                <div key={r.key} className={`wh-gr${r.open ? ' open' : ''}`}>
+                  <span className="wh-day">{dayLabel(r.date)}</span>
+                  <span className={`wh-cell s${r.paid === 'sched' ? ' paid' : ''}`}>{r.schedH !== null ? <><b>{r.shift}</b><small>{hrs(r.schedH)} h</small></> : <em>not scheduled</em>}</span>
+                  <span className={`wh-cell c${r.paid === 'clock' ? ' paid' : ''}`}>{clockOff ? <em>clock off</em> : r.inT ? <><b>{r.inT} – {r.outT ?? 'still on'}</b>
+                    <small>{r.open ? 'on the clock' : `${hrs(r.clockH ?? 0)} h`} · {srcText(r.src)}{r.late !== undefined && r.late > 0 ? ` · ${r.late} min late` : r.late !== undefined && r.late < -1 ? ` · ${-r.late} min early` : ''}</small>
+                    {r.note && <small className="wh-note">{r.note}</small>}</> : <em className="bad-t">no clock record</em>}</span>
+                </div>))}</div> : <p className="empty-note">No hours this week.</p>}
           </div>); })}
-        <div className="wh-total"><span>Total</span><b>{hrs(total)} h</b></div>
-        {Math.abs(total - line.hours) > 0.05 && <p className="hint">Payroll shows {hrs(line.hours)} h{line.edited_hours != null ? ' because you edited the hours' : ''}.</p>}
+        {Math.abs(line.hours - (mode === 'schedule' ? sum(rows, (r) => r.schedH) : line.hours)) > 0.05 && line.edited_hours != null && <p className="hint">Payroll shows {hrs(line.hours)} h because you edited the hours.</p>}
       </>)}
       {tab === 'pay' && <><p className="hint">Every payday {line.name} was paid, at every business. Print or download any payslip.</p>
         <PayslipList business={b.org.name} empId={line.employee_id} /></>}
