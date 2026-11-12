@@ -238,7 +238,7 @@ export default function OwnerApp() {
   const goTab = (t: Tab) => { setTab(t); window.scrollTo({ top: 0 }); };
   const tabs = <nav className="topnav" aria-label="Sections">{(['schedule', 'swaps', 'time', 'payroll', 'reports', 'tasks', 'messages'] as const).map((t) => (
     <button key={t} className={`tnav${tab === t ? ' on' : ''}`} aria-current={tab === t ? 'page' : undefined} onClick={() => goTab(t)}>
-    {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <><span className="full">Swaps &amp; time off</span><span className="short">Swaps</span>{swapWaiting + pending.length > 0 && <span className="badge">{swapWaiting + pending.length}</span>}</>
+    {t === 'schedule' ? 'Schedule' : t === 'swaps' ? <>Swaps{swapWaiting + pending.length > 0 && <span className="badge">{swapWaiting + pending.length}</span>}</>
       : t === 'time' ? <><span className="full">Time clock</span><span className="short">Clock</span>{onClock > 0 && <span className="sdot" />}{fixCount > 0 && <span className="badge">{fixCount}</span>}</>
       : t === 'payroll' ? <><span className="full">Payroll</span><span className="short">Pay</span></>
       : t === 'reports' ? <><span className="full">Shift reports</span><span className="short">Reports</span></> : t === 'tasks' ? 'Tasks'
@@ -247,7 +247,7 @@ export default function OwnerApp() {
   const swapsPage = (
     <div className="layout swaps-page">
       <section className="panel swaps-hero">
-        <div><h2>Swaps &amp; time off</h2><p className="hint" style={{ margin: 0 }}>Move a shift to someone else, answer time-off requests, and keep track of shifts owed. You can also tap any shift on the schedule, then “Swap or find cover”.</p></div>
+        <div><h2>Swaps</h2><p className="hint" style={{ margin: 0 }}>Move a shift to someone else, answer time-off requests, and keep track of shifts owed. You can also tap any shift on the schedule, then “Swap or find cover”.</p></div>
         <div className="swaps-stats">
           <span className="sw-stat"><b>{swapWaiting}</b><small>swaps waiting</small></span>
           <span className="sw-stat"><b>{pending.length}</b><small>time off asked</small></span>

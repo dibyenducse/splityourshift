@@ -50,7 +50,7 @@ export default function TimeClock({ b, week, tabs, reload }: { b: Bundle; week: 
             {hrs > 14 && <span className="tag bad">Forgot to clock out?</span>}
             <button className="btn small" onClick={() => clockOutNow(e)}>Clock out now</button></div>); })
           : <p className="empty-note">Nobody is clocked in right now.</p>}</div></section>
-      <p className="hint moved-note">Turn the time clock on or off, the grace period and how hours are paid: <b>Payroll → Payroll settings</b>. Shift swaps: the <b>Swaps</b> tab.</p>
+      <p className="hint moved-note">Turn the time clock on or off and choose how hours are paid on the <b>Payroll</b> page. Shift swaps: the <b>Swaps</b> tab.</p>
 
       {fixes.length > 0 && <section className="panel"><div className="panel-head"><h2>Hour fixes to approve<span className="badge">{fixes.length}</span></h2></div>
         <p className="hint">Workers send these when they forgot to clock in or out. Approved hours count for pay.</p>

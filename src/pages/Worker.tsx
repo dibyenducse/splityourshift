@@ -115,7 +115,7 @@ export default function WorkerApp({ preview, self }: { preview?: { orgId: string
           { label: 'Request time off', onClick: () => setSheet('request'), icon: 'timeoff' as const },
           { label: 'How-to videos', onClick: () => setHowto(true), icon: 'video' as const },
         ]} />}
-        nav={<nav className="topnav" aria-label="Sections">{([['schedule', 'My schedule', 'Mine'], ['team', 'Team schedule', 'Team'], ['pay', 'Pay & time off', 'Pay'], ['messages', 'Messages', 'Chat'], ['reports', 'Shift reports', 'Reports'], ['tasks', 'My tasks', 'Tasks']] as const).filter(([v]) => !(preview && v === 'messages')).map(([v, t, sh]) =>
+        nav={<nav className="topnav" aria-label="Sections">{([['schedule', 'My schedule', 'Mine'], ['team', 'Team schedule', 'Team'], ['pay', 'Pay', 'Pay'], ['messages', 'Messages', 'Chat'], ['reports', 'Shift reports', 'Reports'], ['tasks', 'My tasks', 'Tasks']] as const).filter(([v]) => !(preview && v === 'messages')).map(([v, t, sh]) =>
           <button key={v} className={`tnav${view === v ? ' on' : ''}`} aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>
             <span className="full">{t}</span><span className="short">{sh}</span>{v === 'messages' && unreadMsgs > 0 && <span className="badge">{unreadMsgs}</span>}</button>)}</nav>} />
       {view === 'reports' ? <div className="wrap"><div className="layout"><ShiftReportsBook b={b} empId={preview ? undefined : w.id} /></div></div>

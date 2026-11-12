@@ -106,7 +106,8 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
 
   return (
     <div className="layout">{tabs}
-      <PaySettingsPanel key={loc.id} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} />
+      <TimeClockSwitches b={b} onSaved={() => { reload(); refresh(); }} />
+      <PaySettingsPanel key={`${loc.id}-${loc.time_clock}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} />
 
       <section className="panel">
         <div className="panel-head"><h2>Payroll dashboard · all businesses</h2><span className="tag plain">{dash.length} business{dash.length === 1 ? '' : 'es'}</span></div>
@@ -238,7 +239,8 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
   const setStartDow = (d: number) => { const t = todayIso(); const td = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; setF({ ...f, pay_anchor: addDays(t, -((td - d + 7) % 7)) }); };
   const save = async () => {
     // one grace period: the late notice and (with paid grace) the scheduled hours paid use the same minutes
-    const { error } = await supabase.from('locations').update({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 }).eq('id', locId);
+    const { time_clock: _tc, ...rest } = f; void _tc; // the time clock switch saves on its own (box above)
+    const { error } = await supabase.from('locations').update({ ...rest, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 }).eq('id', locId);
     if (error) return toast(errText(error), 'error', 'Not saved');
     toast(`Saved. ${loc.name}: ${scheduleText(f)}. Paid payrolls stay as they were.`, 'ok', 'Payroll settings'); onSaved();
   };
@@ -289,22 +291,24 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
           </div>}
           <span className="hint">{otText(f)}.</span>
           </div>
-          <div className="ps-card ps-clock"><h3>Time clock and pay</h3>
-          <label className="switch"><input type="checkbox" role="switch" checked={f.time_clock} onChange={(e) => setF({ ...f, time_clock: e.target.checked })} /><span className="track" aria-hidden="true" /><span><b>Time clock {f.time_clock ? 'on' : 'off'}</b> at {loc.name}</span></label>
-          {!f.time_clock ? <span className="hint">Off: workers here see no time clock. Payroll pays each assigned shift and follows schedule changes; you can still edit anyone's hours. Nothing is deleted when you switch.</span> : <>
-            <div className="cks-row"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
+          <div className="ps-card ps-clock"><h3>How hours are paid</h3>
+          {loc.time_clock === false ? <p className="hint" style={{ margin: 0 }}>The time clock is off at {loc.name} (see Time clock above), so each worker's <b>scheduled shift hours</b> are paid. You can still edit anyone's hours on the payroll.</p> : <>
+            <div className="cks-methods pm3">
+              {([['actual', '1', 'By the clock', 'Pay from clock-in to clock-out, minute by minute. Late arrivals are paid less; staying late is paid.'],
+                 ['schedule', '2', 'Scheduled hours', 'Pay each assigned shift as scheduled, whatever the clock says. The clock is kept as a record of who came and when.'],
+                 ['grace', '3', 'Scheduled hours + grace period', 'Pay the shift as scheduled when they clock in within the grace period. Later than that, they get the late options.']] as const).map(([m, n, t, sub]) =>
+                <button key={m} type="button" className={`cks-method${f.pay_method === m ? ' on' : ''}`} aria-pressed={f.pay_method === m} onClick={() => setF({ ...f, pay_method: m })}>
+                  <span className="pm-n">{n}</span><b>{t}</b><small>{sub}</small></button>)}
+            </div>
+            {f.pay_method === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
               <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${f.grace_minutes === m ? ' on' : ''}`} aria-pressed={f.grace_minutes === m} onClick={() => setF({ ...f, grace_minutes: m })}>{m} min</button>)}
                 <label className="cks-custom"><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Grace minutes" /> min</label></div>
-              <span className="hint">Clocking in up to {f.grace_minutes} minutes late gets no late notice. Later than that, the worker is asked what to do: just clock in (nothing else), give the time back with a time swap{f.pay_method === 'schedule' ? '; pay still follows the schedule' : ', or ask you to pay from the start'}.</span></div>
-            <div className="cks-row"><span className="cks-l">How hours are paid</span>
-              <div className="cks-methods">{([['actual', 'Clocked time', 'Pay from clock-in to clock-out'], ['grace', 'Shift hours + grace', 'Pay the scheduled shift; a few late minutes are still paid'], ['schedule', 'By the schedule', 'Keep the clock for records; pay the assigned shifts']] as const).map(([m, t, sub]) =>
-                <button key={m} type="button" className={`cks-method${f.pay_method === m ? ' on' : ''}`} aria-pressed={f.pay_method === m} onClick={() => setF({ ...f, pay_method: m })}><b>{t}</b><small>{sub}</small></button>)}</div>
-              <span className="hint">{payMethodText({ ...f, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 })}.</span></div>
-            {(() => { const g = f.grace_minutes, inT = Math.max(1, Math.min(g, 5)), lateT = g + 15, hm = (m: number) => `7:${String(m).padStart(2, '0')}`;
-              return <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm, grace {g} min</b>
-                {g > 0 && <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>Within grace: no late notice. {f.pay_method === 'actual' ? `Paid from ${hm(inT)} (clock time).` : f.pay_method === 'grace' ? 'Counts as on time: paid from 7:00.' : 'Paid 7:00 – 3:00 as scheduled.'}</span></div>}
-                <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>Past grace: {f.pay_method === 'schedule' ? 'still paid 7:00 – 3:00 as scheduled; the late time is recorded.' : `paid from ${hm(lateT)} (clock time).`} The worker can just keep that{f.pay_method === 'schedule' ? ' or offer a time swap' : ', offer a time swap, or ask you to pay from 7:00'}.</span></div>
-                <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{f.pay_method === 'schedule' ? 'Not paid extra (pay follows the schedule).' : 'The 20 extra minutes are paid, unless the worker says “we sorted it out” with the coworker who came late.'}</span></div>
+              <span className="hint">Past {f.grace_minutes} minutes the worker chooses: just clock in (paid from the real time), give the time back with a time swap, or ask you to pay from the start.</span></div>}
+            {(() => { const g = f.pay_method === 'grace' ? f.grace_minutes : 10, inT = Math.max(1, Math.min(g, 5)), lateT = g + 15, hm = (m: number) => `7:${String(m).padStart(2, '0')}`;
+              return <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{f.pay_method === 'grace' ? `, grace ${g} min` : ''}</b>
+                <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{f.pay_method === 'actual' ? `Paid from ${hm(inT)}.` : f.pay_method === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace, counts as on time: paid from 7:00.'}</span></div>
+                <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{f.pay_method === 'actual' ? `Paid from ${hm(lateT)}.` : f.pay_method === 'schedule' ? 'Still paid 7:00 – 3:00; the late time is recorded.' : `Past grace: paid from ${hm(lateT)}, unless they pick a time swap or you approve paying from 7:00.`}</span></div>
+                <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{f.pay_method === 'schedule' ? 'Not paid extra.' : 'The 20 extra minutes are paid, unless they say “we sorted it out” with the coworker who came late.'}</span></div>
               </div>; })()}
           </>}
           <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
@@ -315,4 +319,29 @@ function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: str
       </details>
     </section>
   );
+}
+
+/** Time clock on or off for each location: its own switch, saved right away (separate from payroll settings). */
+function TimeClockSwitches({ b, onSaved }: { b: Bundle; onSaved: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState('');
+  const flip = async (l: Bundle['locs'][number], on: boolean) => {
+    setBusy(l.id);
+    const { error } = await supabase.from('locations').update({ time_clock: on }).eq('id', l.id);
+    setBusy('');
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(on ? `Time clock on at ${l.name}. Workers there clock in and out from their phone.` : `Time clock off at ${l.name}. Workers see no clock; scheduled hours are paid.`, 'ok', on ? 'Clock on' : 'Clock off');
+    onSaved();
+  };
+  return (
+    <section className="panel tc-switches">
+      <div className="panel-head"><h2>Time clock</h2></div>
+      <p className="hint">Do workers clock in and out at this location? Off: they see no clock, and payroll pays the scheduled hours. Nothing is deleted when you switch.</p>
+      <div className="tc-list">{b.locs.map((l) => { const on = l.time_clock !== false; return (
+        <label key={l.id} className={`tc-row${on ? ' on' : ''}`}>
+          <span className="tc-ico" aria-hidden="true">{l.type === 'gas' ? '⛽' : l.type === 'shop' ? '🛒' : '🏨'}</span>
+          <span className="tc-name"><b>{l.name}</b><small>{on ? 'Clock on' : 'Clock off · pays scheduled hours'}</small></span>
+          <span className="switch"><input type="checkbox" role="switch" checked={on} disabled={busy === l.id} onChange={(e) => flip(l, e.target.checked)} aria-label={`Time clock at ${l.name}`} /><span className="track" aria-hidden="true" /></span>
+        </label>); })}</div>
+    </section>);
 }
