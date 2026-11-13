@@ -386,10 +386,10 @@ function PayRules({ loc, pop, setPop, save }: { loc: Bundle['locs'][number]; pop
   const METHOD: Record<PaySettings['pay_method'], [string, string, string]> = {
     actual: ['1', 'By the clock', 'Pay from clock-in to clock-out, minute by minute.'],
     schedule: ['2', 'Scheduled hours', 'Pay each assigned shift as scheduled; the clock is kept as a record.'],
-    grace: ['3', 'Scheduled hours + grace period', 'Paid as scheduled when they clock in within the grace period; later than that, they get the late options.'],
+    grace: ['3', 'Scheduled hours + grace period', 'Clocking in or out a few minutes early or late (within the grace period) counts as the scheduled time. Outside it, the real time counts.'],
   };
   const tog = (p: Pop) => setPop(pop === p ? null : p);
-  const hm = (m: number) => `7:${String(m).padStart(2, '0')}`, inT = Math.max(1, Math.min(grace, 5)), lateT = grace + 15;
+  const hm = (m: number) => `7:${String(m).padStart(2, '0')}`, inT = Math.max(1, Math.min(grace, 5)), lateT = grace + 15, early = `6:${String(60 - Math.min(grace, 10)).padStart(2, '0')}`;
   return (
     <div className="pay-rules">
       <div className={`rule${pop === 'ot' ? ' open' : ''}`}>
@@ -415,12 +415,13 @@ function PayRules({ loc, pop, setPop, save }: { loc: Bundle['locs'][number]; pop
             <button key={m} type="button" className={`cks-method${method === m ? ' on' : ''}${clockOff && m !== 'schedule' ? ' shadow' : ''}`} aria-pressed={method === m} disabled={clockOff && m !== 'schedule'}
               onClick={() => save({ pay_method: m, pay_grace_minutes: m === 'grace' ? grace : 0 }, `hours paid: ${METHOD[m][1].toLowerCase()}`, true)}>
               <span className="pm-n">{METHOD[m][0]}</span><b>{METHOD[m][1]}{clockOff && m !== 'schedule' && <span className="tag plain pm-need">Needs the time clock</span>}</b><small>{METHOD[m][2]}</small></button>))}</div>
-          {method === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
+          {method === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">minutes before or after the start and end that still count as on time</small></span>
             <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${grace === m ? ' on' : ''}`} onClick={() => save({ grace_minutes: m, pay_grace_minutes: m }, `grace period ${m} minutes`, true)}>{m} min</button>)}</div></div>}
           {!clockOff && <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{method === 'grace' ? `, grace ${grace} min` : ''}</b>
+            {method === 'grace' && <div className="ge-row ok"><span className="ge-t">Clocks in {early}</span><span>A little early, within grace: paid from 7:00.</span></div>}
             <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{method === 'actual' ? `Paid from ${hm(inT)}.` : method === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace: paid from 7:00.'}</span></div>
             <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{method === 'actual' ? `Paid from ${hm(lateT)}.` : method === 'schedule' ? 'Still paid 7:00 – 3:00.' : `Past grace: paid from ${hm(lateT)}, unless a time swap or you approve 7:00.`}</span></div>
-            <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{method === 'schedule' ? 'Not paid extra.' : '20 extra minutes paid, unless they “sorted it out”.'}</span></div></div>}
+            <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{method === 'schedule' ? 'Not paid extra.' : method === 'grace' && grace >= 20 ? 'Within grace: paid until 3:00.' : '20 extra minutes paid, unless they “sorted it out”.'}</span></div></div>}
           <div className="actions" style={{ margin: 0 }}><button className="btn small" onClick={() => setPop(null)}>Done</button></div>
         </div>}
       </div>

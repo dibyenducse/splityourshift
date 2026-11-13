@@ -113,7 +113,7 @@ export function otText(s: Pick<PaySettings, 'overtime' | 'ot_after' | 'ot_mode' 
 export function payMethodText(s: Pick<PaySettings, 'pay_method' | 'pay_grace_minutes'>) {
   if (s.pay_method === 'schedule') return 'Paid by scheduled shift hours; clock-ins and clock-outs are kept as records only';
   return s.pay_method === 'grace' && Number(s.pay_grace_minutes) > 0
-    ? `Scheduled shift hours are paid when the clock-in and clock-out are within ${Number(s.pay_grace_minutes)} min of the shift; otherwise real clock times`
+    ? `Scheduled shift hours are paid when the clock-in and clock-out are within ${Number(s.pay_grace_minutes)} min (early or late) of the shift start and end; otherwise real clock times`
     : 'Paid by real clock-in and clock-out times';
 }
 export const totals = (lines: PayLine[]) => lines.reduce((t, l) => ({
