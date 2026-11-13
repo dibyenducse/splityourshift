@@ -373,7 +373,7 @@ function WorkerHistory({ b, locId, line, initialTab, start, end, onClose }: { b:
     </Sheet>);
 }
 
-type Pop = 'freq' | 'payday' | 'ot' | 'paid' | 'swap' | null;
+type Pop = 'freq' | 'payday' | 'ot' | 'paid' | null;
 
 /** The rest of the payroll settings, as three small buttons under the tiles; each opens a small panel. */
 function PayRules({ loc, pop, setPop, save }: { loc: Bundle['locs'][number]; pop: Pop; setPop: (p: Pop) => void; save: (patch: Partial<PaySettings>, msg?: string, keepOpen?: boolean) => void }) {
@@ -422,14 +422,6 @@ function PayRules({ loc, pop, setPop, save }: { loc: Bundle['locs'][number]; pop
             <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{method === 'actual' ? `Paid from ${hm(lateT)}.` : method === 'schedule' ? 'Still paid 7:00 – 3:00.' : `Past grace: paid from ${hm(lateT)}, unless a time swap or you approve 7:00.`}</span></div>
             <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{method === 'schedule' ? 'Not paid extra.' : '20 extra minutes paid, unless they “sorted it out”.'}</span></div></div>}
           <div className="actions" style={{ margin: 0 }}><button className="btn small" onClick={() => setPop(null)}>Done</button></div>
-        </div>}
-      </div>
-      <div className={`rule${pop === 'swap' ? ' open' : ''}`}>
-        <button className="rule-chip" onClick={() => tog('swap')} aria-expanded={pop === 'swap'}><span aria-hidden="true">⇄</span><span><small>Swaps ✎</small><b>{loc.mutual_approval === false ? 'Wait for my approval' : 'Final when both agree'}</b></span></button>
-        {pop === 'swap' && <div className="tile-pop rule-pop">
-          <div className="cks-methods pm3">
-            <button type="button" className={`cks-method${loc.mutual_approval !== false ? ' on' : ''}`} onClick={() => save({ mutual_approval: true }, 'swaps are final when both workers agree')}><b>Final when both agree</b><small>You're just told.</small></button>
-            <button type="button" className={`cks-method${loc.mutual_approval === false ? ' on' : ''}`} onClick={() => save({ mutual_approval: false }, 'swaps wait for your approval')}><b>Wait for my approval</b><small>After the coworker accepts, it waits in the Swaps tab.</small></button></div>
         </div>}
       </div>
     </div>);

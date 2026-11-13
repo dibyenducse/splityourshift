@@ -45,6 +45,27 @@ const UserIcon = () => (
 const statusTag = (r: Result) => r.errors.length ? <span className="tag bad">{r.errors[0].short}</span>
   : r.warnings.length ? <span className="tag warn">{r.warnings[0].short}</span> : <span className="tag ok">Works</span>;
 
+// How a swap becomes final, per location (saved right away)
+function SwapRule({ locs, reload }: { locs: Loc[]; reload: () => void }) {
+  const toast = useToast();
+  const set = async (l: Loc, mutual: boolean) => {
+    if ((l.mutual_approval !== false) === mutual) return;
+    const { error } = await supabase.from('locations').update({ mutual_approval: mutual }).eq('id', l.id);
+    if (error) return toast(errText(error), 'error', 'Not saved');
+    toast(mutual ? `${l.name}: a swap is final as soon as both workers agree.` : `${l.name}: swaps wait for your approval.`, 'ok', 'Saved'); reload();
+  };
+  return (
+    <section className="panel swaprule-panel">
+      <div className="panel-head"><h2>When is a swap final?</h2></div>
+      <p className="hint">After the coworker says yes. Saved right away{locs.length > 1 ? ', for each location' : ''}.</p>
+      <div className="stack">{locs.map((l) => { const mutual = l.mutual_approval !== false; return (
+        <div key={l.id} className="sr-row">{locs.length > 1 && <b className="sr-name">{l.name}</b>}
+          <div className="sr-opts" role="radiogroup" aria-label={`Swap approval at ${l.name}`}>
+            <button type="button" role="radio" aria-checked={mutual} className={`sr-opt${mutual ? ' on' : ''}`} onClick={() => set(l, true)}><b>✓ When both agree</b><small>You're just told</small></button>
+            <button type="button" role="radio" aria-checked={!mutual} className={`sr-opt${!mutual ? ' on' : ''}`} onClick={() => set(l, false)}><b>⏳ After I approve</b><small>It waits here for you</small></button></div></div>); })}</div>
+    </section>);
+}
+
 export default function OwnerApp() {
   const { me, signOut, refresh } = useAuth();
   const nav = useNavigate();
@@ -261,6 +282,7 @@ export default function OwnerApp() {
       <div className="swaps-grid">
         <div className="swaps-main"><AdjustmentsPanel b={b} owner /></div>
         <aside className="swaps-side">
+        <SwapRule locs={b.locs} reload={reload} />
         <section className="panel timeoff-panel">
           <div className="panel-head"><h2>Time-off requests{pending.length > 0 && <span className="badge">{pending.length}</span>}</h2></div>
           <p className="hint">Workers send these from their phone. You decide; they can cancel while it's pending.</p>
