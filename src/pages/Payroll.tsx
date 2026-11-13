@@ -29,7 +29,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
   const [tick, setTick] = useState(0);
   const [history, setHistory] = useState<{ line: PayLine; tab: 'hours' | 'pay' } | null>(null);
   const refresh = () => setTick((t) => t + 1);
-  const [pop, setPop] = useState<'freq' | 'payday' | null>(null);
+  const [pop, setPop] = useState<Pop>(null);
   useEffect(() => { if (initialLoc) setLocId(initialLoc); }, [initialLoc]);
 
   useEffect(() => {
@@ -105,16 +105,19 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
     catch (e) { toast(errText(e), 'error', "Couldn't mark paid"); }
   };
   // payroll type and payday change right from the tiles
-  const quickSave = async (patch: Partial<PaySettings>) => {
+  const quickSave = async (patch: Partial<PaySettings>, msg?: string, keepOpen?: boolean) => {
     const { error } = await supabase.from('locations').update(patch).eq('id', loc.id);
     if (error) return toast(errText(error), 'error', 'Not saved');
-    toast(`Saved. ${loc.name}: ${scheduleText({ ...(loc as unknown as PaySettings), ...patch })}.`, 'ok', 'Payroll settings'); setPop(null); setSel(null); reload(); refresh();
+    toast(`Saved. ${loc.name}: ${msg ?? scheduleText({ ...(loc as unknown as PaySettings), ...patch })}.`, 'ok', 'Payroll settings');
+    if (!keepOpen) setPop(null);
+    if ('pay_frequency' in patch || 'pay_anchor' in patch) setSel(null);
+    reload(); refresh();
   };
   const cell = { width: 84, minHeight: 32, border: '1px solid var(--line-strong)', borderRadius: 6, padding: '4px 6px', background: 'var(--surface)' } as const;
 
   return (
     <div className="layout">{tabs}
-      <div className="pay-grid"><div className="pay-main">
+      <div className="pay-grid one"><div className="pay-main">
 
       <section className="panel">
         <div className="panel-head"><h2>Payroll dashboard · all businesses</h2><span className="tag plain">{dash.length} business{dash.length === 1 ? '' : 'es'}</span></div>
@@ -174,6 +177,7 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
           <div className="tile"><div className="k">{locked ? 'Paid' : 'To pay'} this period</div><div className="v">{money(t.net)}</div><div className="s">{hrs(t.hours)} h · {hrs(t.ot)} h overtime · gross {money(t.gross)}</div></div>
         </div>
 
+        <PayRules loc={loc} pop={pop} setPop={setPop} save={quickSave} />
         {row && <p className="hint">{periodTitle(row)}, paid {dateLong(row.pay_date)}. {loc.time_clock === false || loc.pay_method === 'schedule' ? (loc.time_clock === false ? 'Time clock is off here:' : 'Paid by the schedule (the time clock is kept for records):') + ' Hours come from the assigned schedule and follow every change to it. You can type in different hours for anyone.' : <>Pay comes from clocked hours. {payMethodText(loc as unknown as PaySettings)}.</>} {otText(loc as unknown as PaySettings)}{loc.pay_frequency === 'monthly' ? '; a week that crosses into another month counts in two parts' : ''}. Taxes aren't included; add them as deductions if you take them out.</p>}
         {locked && <div className="banner"><p><b>Paid and locked.</b> Marked paid {new Date(row!.run!.paid_at).toLocaleString('en-US')}. These numbers won't change, even if rates or hours change later. To correct it, write to <a href="mailto:support@splityourshift.com">support@splityourshift.com</a>; support can reopen it, and that is logged.</p></div>}
         {!locked && open.length > 0 && <div className="banner warn"><p><b>{open.map((l) => l.name).join(', ')}</b> {open.length === 1 ? 'is' : 'are'} still clocked in for this period. Those hours count after they clock out (or after you fix them in Time clock).</p></div>}
@@ -241,113 +245,10 @@ export default function Payroll({ b, tabs, reload, initialLoc }: { b: Bundle; ta
       </section>
 
       </div>
-      <aside className="pay-side"><PaySettingsPanel key={`${loc.id}-${loc.time_clock}-${loc.pay_frequency}-${loc.pay_anchor}-${loc.pay_weekday}-${loc.pay_month_day}-${loc.pay_month_offset}`} b={b} locId={loc.id} onPick={setLocId} onSaved={() => { reload(); refresh(); }} /></aside>
       </div>
       {history && row && <WorkerHistory key={history.line.employee_id + history.tab} b={b} locId={loc.id} line={history.line} initialTab={history.tab} start={row.period_start} end={row.period_end} onClose={() => setHistory(null)} />}
 
     </div>
-  );
-}
-
-function PaySettingsPanel({ b, locId, onPick, onSaved }: { b: Bundle; locId: string; onPick: (id: string) => void; onSaved: () => void }) {
-  const toast = useToast();
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem('sys-payset') !== '0'; } catch { return true; } });
-  const loc = b.locs.find((l) => l.id === locId)!;
-  const [f, setF] = useState<PaySettings>({
-    pay_frequency: loc.pay_frequency ?? 'weekly', pay_anchor: (loc.pay_anchor ?? todayIso()).slice(0, 10), pay_weekday: loc.pay_weekday ?? 4,
-    pay_month_day: loc.pay_month_day ?? 31, pay_month_offset: loc.pay_month_offset ?? 1, overtime: loc.overtime ?? true,
-    ot_after: Number(loc.ot_after ?? 40), ot_mode: loc.ot_mode ?? 'multiplier', ot_multiplier: Number(loc.ot_multiplier ?? 1.5), ot_fixed_rate: Number(loc.ot_fixed_rate ?? 0),
-    grace_minutes: Number(loc.grace_minutes ?? 10), mutual_approval: loc.mutual_approval ?? true, pay_method: loc.pay_method ?? 'actual', pay_grace_minutes: Number(loc.pay_grace_minutes ?? 0),
-    time_clock: loc.time_clock ?? true,
-  });
-  const startDow = (new Date(f.pay_anchor + 'T00:00:00Z').getUTCDay() + 6) % 7;
-  // clock off: only "Scheduled hours" applies (the saved choice is kept for when the clock is back on)
-  const clockOff = loc.time_clock === false;
-  const eff = clockOff ? 'schedule' : f.pay_method;
-  // Weekly: only the start weekday matters, so keep the anchor on that weekday near today.
-  const setStartDow = (d: number) => { const t = todayIso(); const td = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; setF({ ...f, pay_anchor: addDays(t, -((td - d + 7) % 7)) }); };
-  const save = async () => {
-    // one grace period: the late notice and (with paid grace) the scheduled hours paid use the same minutes
-    const { time_clock: _tc, ...rest } = f; void _tc; // the time clock switch saves on its own (box above)
-    const { error } = await supabase.from('locations').update({ ...rest, pay_grace_minutes: f.pay_method === 'grace' ? f.grace_minutes : 0 }).eq('id', locId);
-    if (error) return toast(errText(error), 'error', 'Not saved');
-    toast(`Saved. ${loc.name}: ${scheduleText(f)}. Paid payrolls stay as they were.`, 'ok', 'Payroll settings'); onSaved();
-  };
-  const chev = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
-  return (
-    <section className="panel paysettings">
-      <details open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; setOpen(o); try { localStorage.setItem('sys-payset', o ? '1' : '0'); } catch { /* private mode */ } }}>
-        <summary aria-label={open ? 'Collapse payroll settings' : 'Expand payroll settings'}>
-          <span className="ps-title"><h2>Payroll settings · {loc.name}</h2>
-            <span className="ps-chips"><span className="tag plain">{FREQ_LABEL[f.pay_frequency]}</span><span className="tag plain">{f.overtime ? `OT after ${f.ot_after} h` : 'No overtime'}</span>
-              <span className={`tag ${f.time_clock ? 'ok' : 'warn'}`}>{f.time_clock ? (f.pay_method === 'schedule' ? 'Clock on · pay by schedule' : `Clock on · grace ${f.grace_minutes} min`) : 'Clock off · scheduled hours'}</span></span></span>
-          <span className="clock-tools"><HowToButton topic="payroll" /><span className="ps-chev">{chev}</span></span></summary>
-        {b.locs.length > 1 && <div className="bizpills" role="tablist" aria-label="Business">
-          {b.locs.map((l) => <button key={l.id} role="tab" aria-selected={l.id === locId} className={`bizpill${l.id === locId ? ' on' : ''}`} onClick={() => onPick(l.id)}>
-            <b>{l.name}</b><small>{FREQ_LABEL[l.pay_frequency ?? 'weekly']}{l.time_clock === false ? ' · clock off' : ''}</small></button>)}</div>}
-        <div className="ps-grid">
-          <div className="ps-card"><h3>Pay schedule</h3>
-            <div className="ps-fields">
-          <div className="field"><label htmlFor="ps-freq">How often you pay</label>
-            <select id="ps-freq" value={f.pay_frequency} onChange={(e) => setF({ ...f, pay_frequency: e.target.value as PayFrequency })}>
-              <option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks (biweekly)</option><option value="monthly">Monthly</option></select></div>
-          {f.pay_frequency === 'weekly' && <div className="field"><label htmlFor="ps-start">Pay week starts on</label>
-            <select id="ps-start" value={startDow} onChange={(e) => setStartDow(+e.target.value)}>{DAY_LONG.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></div>}
-          {f.pay_frequency === 'biweekly' && <div className="field"><label htmlFor="ps-anchor">A two-week pay period starts on</label>
-            <input type="date" id="ps-anchor" value={f.pay_anchor} onChange={(e) => e.target.value && setF({ ...f, pay_anchor: e.target.value })} />
-            <span className="hint">Any start date of a past or future period, e.g. Oct 12, 2026 for Oct 12 – 25.</span></div>}
-          {f.pay_frequency !== 'monthly' && <div className="field"><label htmlFor="ps-payday">Payday</label>
-            <select id="ps-payday" value={f.pay_weekday} onChange={(e) => setF({ ...f, pay_weekday: +e.target.value })}>{DAY_LONG.map((d, i) => <option key={d} value={i}>The next {d} after the period ends</option>)}</select></div>}
-          {f.pay_frequency === 'monthly' && <>
-            <div className="field"><label htmlFor="ps-mday">Payday (date of the month)</label>
-              <select id="ps-mday" value={f.pay_month_day} onChange={(e) => setF({ ...f, pay_month_day: +e.target.value })}>
-                {Array.from({ length: 30 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}{d > 28 ? ' (or the last day of a shorter month)' : ''}</option>)}<option value={31}>Last day of the month</option></select></div>
-            <div className="field"><label htmlFor="ps-moff">A month's pay is paid in</label>
-              <select id="ps-moff" value={f.pay_month_offset} onChange={(e) => setF({ ...f, pay_month_offset: +e.target.value })}><option value={0}>The same month</option><option value={1}>The next month</option></select></div>
-          </>}
-            </div>
-            <span className="hint">{scheduleText(f)}. Changing it never changes a payroll already marked paid.</span>
-          </div>
-          <div className="ps-card"><h3>Overtime</h3>
-          <label className="inline"><input type="checkbox" checked={f.overtime} onChange={(e) => setF({ ...f, overtime: e.target.checked })} /> Pay overtime</label>
-          {f.overtime && <div className="otrow">
-            <label>after <input type="number" min={1} max={168} step={0.5} value={f.ot_after} onChange={(e) => setF({ ...f, ot_after: +e.target.value || 40 })} aria-label="Overtime starts after hours" /> hours in a week, paid</label>
-            <select value={f.ot_mode} onChange={(e) => setF({ ...f, ot_mode: e.target.value as PaySettings['ot_mode'] })} aria-label="How overtime is paid">
-              <option value="multiplier">as a multiple of each worker's rate</option><option value="fixed">as a fixed amount per hour</option></select>
-            {f.ot_mode === 'multiplier'
-              ? <label><input type="number" min={1} max={5} step={0.05} value={f.ot_multiplier} onChange={(e) => setF({ ...f, ot_multiplier: +e.target.value || 1 })} aria-label="Overtime multiple" /> × the hourly rate</label>
-              : <label>$<input type="number" min={0} max={999} step={0.25} value={f.ot_fixed_rate} onChange={(e) => setF({ ...f, ot_fixed_rate: +e.target.value || 0 })} aria-label="Overtime dollars per hour" /> per overtime hour</label>}
-          </div>}
-          <span className="hint">{otText(f)}.</span>
-          </div>
-          <div className="ps-card ps-clock"><h3>How hours are paid</h3>
-          {clockOff && <p className="pm-off"><span aria-hidden="true">⏸</span><span>The time clock is <b>off</b> at {loc.name}, so only <b>Scheduled hours</b> can be used. Turn the clock on in the <b>Time clock</b> tab to pay by the clock; your last choice comes back.</span></p>}
-          <>
-            <div className="cks-methods pm3">
-              {([['actual', '1', 'By the clock', 'Pay from clock-in to clock-out, minute by minute. Late arrivals are paid less; staying late is paid.'],
-                 ['schedule', '2', 'Scheduled hours', 'Pay each assigned shift as scheduled, whatever the clock says. The clock is kept as a record of who came and when.'],
-                 ['grace', '3', 'Scheduled hours + grace period', 'Pay the shift as scheduled when they clock in within the grace period. Later than that, they get the late options.']] as const).map(([m, n, t, sub]) =>
-                <button key={m} type="button" className={`cks-method${eff === m ? ' on' : ''}${clockOff && m !== 'schedule' ? ' shadow' : ''}`} aria-pressed={eff === m} disabled={clockOff && m !== 'schedule'} onClick={() => setF({ ...f, pay_method: m })}>
-                  <span className="pm-n">{n}</span><b>{t}{clockOff && m !== 'schedule' && <span className="tag plain pm-need">Needs the time clock</span>}</b><small>{sub}</small></button>)}
-            </div>
-            {eff === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
-              <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${f.grace_minutes === m ? ' on' : ''}`} aria-pressed={f.grace_minutes === m} onClick={() => setF({ ...f, grace_minutes: m })}>{m} min</button>)}
-                <label className="cks-custom"><input type="number" min={0} max={120} value={f.grace_minutes} onChange={(e) => setF({ ...f, grace_minutes: Math.max(0, Math.min(120, +e.target.value || 0)) })} aria-label="Grace minutes" /> min</label></div>
-              <span className="hint">Past {f.grace_minutes} minutes the worker chooses: just clock in (paid from the real time), give the time back with a time swap, or ask you to pay from the start.</span></div>}
-            {!clockOff && (() => { const g = eff === 'grace' ? f.grace_minutes : 10, inT = Math.max(1, Math.min(g, 5)), lateT = g + 15, hm = (m: number) => `7:${String(m).padStart(2, '0')}`;
-              return <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{eff === 'grace' ? `, grace ${g} min` : ''}</b>
-                <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{eff === 'actual' ? `Paid from ${hm(inT)}.` : eff === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace, counts as on time: paid from 7:00.'}</span></div>
-                <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{eff === 'actual' ? `Paid from ${hm(lateT)}.` : eff === 'schedule' ? 'Still paid 7:00 – 3:00; the late time is recorded.' : `Past grace: paid from ${hm(lateT)}, unless they pick a time swap or you approve paying from 7:00.`}</span></div>
-                <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{eff === 'schedule' ? 'Not paid extra.' : 'The 20 extra minutes are paid, unless they say “we sorted it out” with the coworker who came late.'}</span></div>
-              </div>; })()}
-          </>
-          <label className="inline"><input type="checkbox" checked={f.mutual_approval} onChange={(e) => setF({ ...f, mutual_approval: e.target.checked })} /> When two workers agree on a swap, it's final (you're just told)</label>
-          {!f.mutual_approval && <span className="hint">Off: after the coworker accepts, the swap waits for your approval in the Swaps tab.</span>}
-          </div>
-        </div>
-        <div className="ps-foot"><span className="hint">Saved per business. Paid payrolls stay as they were.</span><button className="btn primary" onClick={save}>Save payroll settings</button></div>
-      </details>
-    </section>
   );
 }
 
@@ -470,4 +371,66 @@ function WorkerHistory({ b, locId, line, initialTab, start, end, onClose }: { b:
       {tab === 'pay' && <><p className="hint">Every payday {line.name} was paid, at every business. Print or download any payslip.</p>
         <PayslipList business={b.org.name} empId={line.employee_id} /></>}
     </Sheet>);
+}
+
+type Pop = 'freq' | 'payday' | 'ot' | 'paid' | 'swap' | null;
+
+/** The rest of the payroll settings, as three small buttons under the tiles; each opens a small panel. */
+function PayRules({ loc, pop, setPop, save }: { loc: Bundle['locs'][number]; pop: Pop; setPop: (p: Pop) => void; save: (patch: Partial<PaySettings>, msg?: string, keepOpen?: boolean) => void }) {
+  const s0 = loc as unknown as PaySettings;
+  const [ot, setOt] = useState({ overtime: s0.overtime ?? true, ot_after: Number(s0.ot_after ?? 40), ot_mode: s0.ot_mode ?? 'multiplier', ot_multiplier: Number(s0.ot_multiplier ?? 1.5), ot_fixed_rate: Number(s0.ot_fixed_rate ?? 0) });
+  useEffect(() => { setOt({ overtime: s0.overtime ?? true, ot_after: Number(s0.ot_after ?? 40), ot_mode: s0.ot_mode ?? 'multiplier', ot_multiplier: Number(s0.ot_multiplier ?? 1.5), ot_fixed_rate: Number(s0.ot_fixed_rate ?? 0) }); }, [pop]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clockOff = loc.time_clock === false;
+  const method = (clockOff ? 'schedule' : loc.pay_method ?? 'actual') as PaySettings['pay_method'];
+  const grace = Number(loc.grace_minutes ?? 10);
+  const METHOD: Record<PaySettings['pay_method'], [string, string, string]> = {
+    actual: ['1', 'By the clock', 'Pay from clock-in to clock-out, minute by minute.'],
+    schedule: ['2', 'Scheduled hours', 'Pay each assigned shift as scheduled; the clock is kept as a record.'],
+    grace: ['3', 'Scheduled hours + grace period', 'Paid as scheduled when they clock in within the grace period; later than that, they get the late options.'],
+  };
+  const tog = (p: Pop) => setPop(pop === p ? null : p);
+  const hm = (m: number) => `7:${String(m).padStart(2, '0')}`, inT = Math.max(1, Math.min(grace, 5)), lateT = grace + 15;
+  return (
+    <div className="pay-rules">
+      <div className={`rule${pop === 'ot' ? ' open' : ''}`}>
+        <button className="rule-chip" onClick={() => tog('ot')} aria-expanded={pop === 'ot'}><span aria-hidden="true">⏫</span><span><small>Overtime ✎</small><b>{loc.overtime === false ? 'No overtime' : otText(s0).replace(/^Overtime /, '')}</b></span></button>
+        {pop === 'ot' && <div className="tile-pop rule-pop">
+          <label className="inline"><input type="checkbox" checked={ot.overtime} onChange={(e) => setOt({ ...ot, overtime: e.target.checked })} /> Pay overtime</label>
+          {ot.overtime && <>
+            <label className="tp-field">After this many hours in a week<input type="number" min={1} max={80} value={ot.ot_after} onChange={(e) => setOt({ ...ot, ot_after: +e.target.value || 40 })} /></label>
+            <div className="tp-opts"><button className={`cks-pill${ot.ot_mode === 'multiplier' ? ' on' : ''}`} onClick={() => setOt({ ...ot, ot_mode: 'multiplier' })}>× the hourly rate</button>
+              <button className={`cks-pill${ot.ot_mode === 'fixed' ? ' on' : ''}`} onClick={() => setOt({ ...ot, ot_mode: 'fixed' })}>A fixed $ per hour</button></div>
+            {ot.ot_mode === 'multiplier' ? <label className="tp-field">Multiple<input type="number" min={1} max={5} step={0.05} value={ot.ot_multiplier} onChange={(e) => setOt({ ...ot, ot_multiplier: +e.target.value || 1 })} /></label>
+              : <label className="tp-field">Dollars per overtime hour<input type="number" min={0} max={999} step={0.25} value={ot.ot_fixed_rate} onChange={(e) => setOt({ ...ot, ot_fixed_rate: +e.target.value || 0 })} /></label>}
+          </>}
+          <small className="hint">{otText({ ...s0, ...ot })}.</small>
+          <div className="actions" style={{ margin: 0 }}><button className="btn primary small" onClick={() => save(ot, otText({ ...s0, ...ot }))}>Save overtime</button><button className="btn small" onClick={() => setPop(null)}>Cancel</button></div>
+        </div>}
+      </div>
+      <div className={`rule${pop === 'paid' ? ' open' : ''}`}>
+        <button className="rule-chip" onClick={() => tog('paid')} aria-expanded={pop === 'paid'}><span aria-hidden="true">⏱</span><span><small>How hours are paid ✎</small><b>{METHOD[method][1]}{method === 'grace' ? ` · ${grace} min` : ''}{clockOff ? ' (clock off)' : ''}</b></span></button>
+        {pop === 'paid' && <div className="tile-pop rule-pop wide">
+          {clockOff && <p className="pm-off"><span aria-hidden="true">⏸</span><span>The time clock is <b>off</b> at {loc.name}, so only <b>Scheduled hours</b> can be used. Turn it on in the <b>Time clock</b> tab; your last choice comes back.</span></p>}
+          <div className="cks-methods pm3">{(['actual', 'schedule', 'grace'] as const).map((m) => (
+            <button key={m} type="button" className={`cks-method${method === m ? ' on' : ''}${clockOff && m !== 'schedule' ? ' shadow' : ''}`} aria-pressed={method === m} disabled={clockOff && m !== 'schedule'}
+              onClick={() => save({ pay_method: m, pay_grace_minutes: m === 'grace' ? grace : 0 }, `hours paid: ${METHOD[m][1].toLowerCase()}`, true)}>
+              <span className="pm-n">{METHOD[m][0]}</span><b>{METHOD[m][1]}{clockOff && m !== 'schedule' && <span className="tag plain pm-need">Needs the time clock</span>}</b><small>{METHOD[m][2]}</small></button>))}</div>
+          {method === 'grace' && <div className="cks-row pm-grace"><span className="cks-l">Grace period <small className="cks-sub">how many minutes late still counts as on time</small></span>
+            <div className="cks-pills">{[5, 10, 15, 30].map((m) => <button key={m} type="button" className={`cks-pill${grace === m ? ' on' : ''}`} onClick={() => save({ grace_minutes: m, pay_grace_minutes: m }, `grace period ${m} minutes`, true)}>{m} min</button>)}</div></div>}
+          {!clockOff && <div className="grace-eg"><b>Example: shift 7:00 am – 3:00 pm{method === 'grace' ? `, grace ${grace} min` : ''}</b>
+            <div className="ge-row ok"><span className="ge-t">Clocks in {hm(inT)}</span><span>{method === 'actual' ? `Paid from ${hm(inT)}.` : method === 'schedule' ? 'Paid 7:00 – 3:00.' : 'Within grace: paid from 7:00.'}</span></div>
+            <div className="ge-row late"><span className="ge-t">Clocks in {hm(lateT)}</span><span>{method === 'actual' ? `Paid from ${hm(lateT)}.` : method === 'schedule' ? 'Still paid 7:00 – 3:00.' : `Past grace: paid from ${hm(lateT)}, unless a time swap or you approve 7:00.`}</span></div>
+            <div className="ge-row"><span className="ge-t">Stays until 3:20</span><span>{method === 'schedule' ? 'Not paid extra.' : '20 extra minutes paid, unless they “sorted it out”.'}</span></div></div>}
+          <div className="actions" style={{ margin: 0 }}><button className="btn small" onClick={() => setPop(null)}>Done</button></div>
+        </div>}
+      </div>
+      <div className={`rule${pop === 'swap' ? ' open' : ''}`}>
+        <button className="rule-chip" onClick={() => tog('swap')} aria-expanded={pop === 'swap'}><span aria-hidden="true">⇄</span><span><small>Swaps ✎</small><b>{loc.mutual_approval === false ? 'Wait for my approval' : 'Final when both agree'}</b></span></button>
+        {pop === 'swap' && <div className="tile-pop rule-pop">
+          <div className="cks-methods pm3">
+            <button type="button" className={`cks-method${loc.mutual_approval !== false ? ' on' : ''}`} onClick={() => save({ mutual_approval: true }, 'swaps are final when both workers agree')}><b>Final when both agree</b><small>You're just told.</small></button>
+            <button type="button" className={`cks-method${loc.mutual_approval === false ? ' on' : ''}`} onClick={() => save({ mutual_approval: false }, 'swaps wait for your approval')}><b>Wait for my approval</b><small>After the coworker accepts, it waits in the Swaps tab.</small></button></div>
+        </div>}
+      </div>
+    </div>);
 }

@@ -4,9 +4,9 @@ import { Sheet } from './ui';
 export type HowToTopic = 'payroll' | 'clockrules' | 'swapowner' | 'split' | 'swap' | 'clock';
 /** Short how-to videos recorded from the app (public/media/how-*.mp4). */
 export const HOWTOS: Record<HowToTopic, { title: string; tab: string; length: string; blurb: string }> = {
-  payroll: { title: 'How payroll works', tab: 'Payroll', length: '1:39', blurb: 'Pay schedule, overtime, how hours are paid, bonuses, edits and payday.' },
+  payroll: { title: 'How payroll works', tab: 'Payroll', length: '1:38', blurb: 'Pay schedule, overtime, how hours are paid, bonuses, edits and payday.' },
   clockrules: { title: 'Time clock rules and pay', tab: 'Clock rules', length: '1:36', blurb: 'Clock on or off, the three ways to pay, the grace period, and approving late clock-ins.' },
-  swapowner: { title: 'Shift swaps for owners', tab: 'Swaps', length: '1:09', blurb: 'Set up swaps for any worker, approve them, see every swap and track shifts owed.' },
+  swapowner: { title: 'Shift swaps for owners', tab: 'Swaps', length: '1:08', blurb: 'Set up swaps for any worker, approve them, see every swap and track shifts owed.' },
   split: { title: 'Split a shift for one day', tab: 'Split a shift', length: '1:01', blurb: 'Give part of a shift to someone else on one day, without changing your regular shifts.' },
   swap: { title: 'Shift swaps for workers', tab: 'Workers: swaps', length: '1:15', blurb: 'Ask a coworker to work your shift; they accept; the schedule updates.' },
   clock: { title: 'How to clock in and out', tab: 'Workers: clocking in', length: '1:20', blurb: 'One tap in and out, coming late, staying late, forgetting to clock out, and clocking in with no shift.' },
